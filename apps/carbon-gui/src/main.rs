@@ -36,6 +36,7 @@ struct CarbonApp {
     focus_handle: FocusHandle,
     _menus_sub: Subscription,
     _core_sub: Subscription,
+    _focus_lost_sub: Subscription,
 }
 
 impl CarbonApp {
@@ -64,6 +65,11 @@ impl CarbonApp {
         });
         // Close Folder is enabled only with a folder open.
         let _core_sub = cx.observe(&core, |this, _, cx| this.refresh_menus(cx));
+        // With nothing focused, actions start at the window root and miss the
+        // handlers below (closing a menu or dialog can leave focus empty).
+        let _focus_lost_sub = cx.on_focus_lost(window, |this, window, cx| {
+            this.focus_handle.focus(window, cx)
+        });
         let this = Self {
             title_bar,
             section_bar,
@@ -73,6 +79,7 @@ impl CarbonApp {
             workbench,
             focus_handle,
             _menus_sub,
+            _focus_lost_sub,
         };
         this.refresh_menus(cx);
         this

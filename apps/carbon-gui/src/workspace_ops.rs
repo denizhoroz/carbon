@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use carbon_core::Core;
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::{ActiveTheme, WindowExt, h_flex, v_flex};
 use gpui_kit::*;
 
@@ -84,9 +84,12 @@ pub fn open_create_dialog(core: Entity<Core>, window: &mut Window, cx: &mut App)
 
     window.open_dialog(cx, move |dialog, _, _| {
         let submit = form.clone();
+        let confirm = form.clone();
         dialog
             .title("Create Folder")
             .w(fixed::DIALOG_WIDTH)
+            // Enter is the dialog's Confirm; returning false keeps it open.
+            .on_ok(move |_, window, cx| confirm.update(cx, |form, cx| form.create(window, cx)))
             .child(form.clone())
             .footer(
                 h_flex()
@@ -102,19 +105,24 @@ pub fn open_create_dialog(core: Entity<Core>, window: &mut Window, cx: &mut App)
                             .primary()
                             .label("Create")
                             .on_click(move |_, window, cx| {
-                                submit.update(cx, |form, cx| form.create(window, cx))
+                                if submit.update(cx, |form, cx| form.create(window, cx)) {
+                                    window.close_dialog(cx);
+                                }
                             }),
                     ),
             )
     });
-    name_input.update(cx, |input, cx| input.focus(window, cx));
+    // Deferred: a click that opened the dialog (e.g. from a panel) may still
+    // move focus this frame.
+    window.defer(cx, move |window, cx| {
+        name_input.update(cx, |input, cx| input.focus(window, cx))
+    });
 }
 
 struct CreateFolderForm {
     core: Entity<Core>,
     name: Entity<InputState>,
     location: PathBuf,
-    _enter: Subscription,
 }
 
 impl CreateFolderForm {
@@ -125,16 +133,10 @@ impl CreateFolderForm {
         cx: &mut Context<Self>,
     ) -> Self {
         let name = cx.new(|cx| InputState::new(window, cx).placeholder("my-project"));
-        let _enter = cx.subscribe_in(&name, window, |this, _, event: &InputEvent, window, cx| {
-            if let InputEvent::PressEnter { .. } = event {
-                this.create(window, cx);
-            }
-        });
         Self {
             core,
             name,
             location,
-            _enter,
         }
     }
 
@@ -153,8 +155,9 @@ impl CreateFolderForm {
         .detach();
     }
 
-    /// Creates and opens the folder; on error keeps the dialog open and says why.
-    fn create(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// Creates and opens the folder. On error says why and returns false, so
+    /// the caller keeps the dialog open.
+    fn create(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let name = self.name.read(cx).value().to_string();
         let location = self.location.clone();
         let result = self.core.update(cx, |core, cx| {
@@ -162,10 +165,10 @@ impl CreateFolderForm {
             cx.notify();
             result
         });
-        match result {
-            Ok(()) => window.close_dialog(cx),
-            Err(err) => window.push_notification(format!("Cannot create folder: {err}"), cx),
+        if let Err(err) = &result {
+            window.push_notification(format!("Cannot create folder: {err}"), cx);
         }
+        result.is_ok()
     }
 }
 
@@ -184,7 +187,10 @@ impl Render for CreateFolderForm {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .truncate()
+                            // Paths: keep the end (the folder) visible.
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis_start()
                             .text_sm()
                             .text_color(cx.theme().muted_foreground)
                             .child(self.location.display().to_string()),

@@ -116,7 +116,10 @@ impl Render for ExplorerPanel {
             div()
                 .text_xs()
                 .text_color(muted)
-                .truncate()
+                // Paths: keep the end (the folder) visible.
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis_start()
                 .child(workspace.root().display().to_string()),
         )
         .child(
