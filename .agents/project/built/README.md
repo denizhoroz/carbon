@@ -4,7 +4,8 @@ One file per feature that exists in code. Each says what was built, where, how t
 
 | Feature | File | Code | Built | Checked by hand |
 |---|---|---|---|---|
-| carbon-core: workspace, file tree, buffers, terminals (PTY), agent session model | `carbon-core.md` | `apps/carbon-core/` | 2026-10-16 | n/a (library; 27 tests pass) |
+| Explorer file tree T1 + T2: lazy folders, live file watcher, keyboard, open file; new / rename / delete to Recycle Bin / copy path / reveal, context menu; Editor placeholder shows the opened file | `file-tree.md` (comparison + decisions + implementation) | core `file_tree.rs`, `watcher.rs`, `file_ops.rs`; gui `explorer_panel.rs` (+ `explorer_panel/file_ops.rs`), `editor_panel.rs` | 2026-10-17 | Click-tested (modifier shortcuts, mouse wheel untested) |
+| carbon-core: workspace, file tree, buffers, terminals (PTY), agent session model | `carbon-core.md` | `apps/carbon-core/` | 2026-10-16 | n/a (library; 38 tests pass + 1 ignored) |
 | Workspace folders: open / create / close (File menu, status bar button, Explorer empty state) + real Explorer panel shell | `workspace-folders.md` | `apps/carbon-gui/src/{workspace_ops,explorer_panel}.rs`, core `workspace.rs` | 2026-10-16 | Click-tested 2026-10-17 (Ctrl+K Ctrl+O untested) |
 | Status bar (workspace, git branch, jobs) + `carbon-gui <folder>` | `status-bar.md` | `apps/carbon-gui/src/status_bar.rs`, core `vcs.rs`, `jobs.rs` | 2026-10-16 | Screenshot only |
 | Custom title bar + menu bar | `title-bar-menu.md` | `apps/carbon-gui/src/{title_bar,menus}.rs` | 2026-10-16 | No (opens, no crash) |

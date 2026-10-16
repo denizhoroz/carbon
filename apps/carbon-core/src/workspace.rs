@@ -59,33 +59,6 @@ impl Workspace {
     }
 }
 
-/// Creates a new, empty folder `name` inside `parent` and returns its path.
-/// `name` must be a single plain folder name (no separators, not `.`/`..`,
-/// no characters Windows forbids) and must not exist yet.
-pub fn create_folder(parent: &Path, name: &str) -> Result<PathBuf> {
-    let name = name.trim();
-    const FORBIDDEN: &[char] = &['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
-    if name.is_empty()
-        || name == "."
-        || name == ".."
-        || name.ends_with('.')
-        || name
-            .chars()
-            .any(|c| FORBIDDEN.contains(&c) || c.is_control())
-    {
-        return Err(CoreError::InvalidName(name.to_string()));
-    }
-    if !parent.is_dir() {
-        return Err(CoreError::NotADirectory(parent.to_path_buf()));
-    }
-    let path = parent.join(name);
-    if path.exists() {
-        return Err(CoreError::AlreadyExists(path));
-    }
-    std::fs::create_dir(&path).map_err(|err| CoreError::io(&path, err))?;
-    Ok(path)
-}
-
 /// Removes `.` and resolves `..` lexically (no file system access).
 fn normalize(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();

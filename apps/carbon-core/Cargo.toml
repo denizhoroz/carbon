@@ -13,3 +13,5 @@ async-channel.workspace = true
 thiserror.workspace = true
 dunce.workspace = true
 tempfile.workspace = true
+notify.workspace = true
+trash.workspace = true

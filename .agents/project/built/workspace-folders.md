@@ -19,7 +19,7 @@ Built 2026-10-16. User request: create or load folders (workspaces) from the men
 | `CreateFolder` | Dialog: Name (Enter submits) + Location (default: parent of the open folder, else home) with Browse... (native picker) -> `Core::create_workspace` -> opens it; on error the dialog stays open and a notification says why |
 | `CloseFolder` | `Core::close_workspace`; open buffers/terminals/agent sessions stay |
 
-Name rules (core `create_folder`): trimmed; not empty, `.`, `..`, trailing `.`; no `/ \ : * ? " < > |` or control characters; must not exist yet (no overwrite or reuse).
+Name rules (core `file_ops::validate_name`, shared with Explorer new/rename): trimmed; not empty, `.`, `..`, trailing `.`; no `/ \ : * ? " < > |` or control characters; must not exist yet (no overwrite or reuse).
 
 After any change the `Core` entity is notified: Explorer, status bar (name, branch) and the File menu (Close Folder enabled) update.
 
@@ -28,12 +28,12 @@ After any change the `Core` entity is notified: Explorer, status bar (name, bran
 | File | Role |
 |---|---|
 | `apps/carbon-gui/src/workspace_ops.rs` | `open_folder`, `open_create_dialog` (+ `CreateFolderForm`), `close_folder`; `CurrentCore` global for registry-built panels |
-| `apps/carbon-gui/src/explorer_panel.rs` | First real panel: empty state with the two buttons; with a folder: name + path (file tree not built) |
+| `apps/carbon-gui/src/explorer_panel.rs` | First real panel: empty state with the two buttons; with a folder: the file tree (`file-tree.md`) |
 | `apps/carbon-gui/src/menus.rs` | `CreateFolder`, `CloseFolder` actions; File menu; Ctrl+K Ctrl+O |
 | `apps/carbon-gui/src/status_bar.rs` | Workspace item is a ghost button with `dropdown_menu_with_anchor(BottomLeft)` |
 | `apps/carbon-gui/src/main.rs` | Action handlers; sets `CurrentCore` before the workbench loads |
 | `apps/carbon-gui/src/workbench.rs` | Layout version 2 (Explorer became real); older saved layouts dropped, older named layouts refused with a notice |
-| `apps/carbon-core/src/workspace.rs` | `create_folder`; `Core::create_workspace`, `Core::close_workspace`; errors `InvalidName`, `AlreadyExists` |
+| `apps/carbon-core/src/file_ops.rs`, `lib.rs` | `create_folder` (moved from `workspace.rs` 2026-10-17); `Core::create_workspace`, `Core::close_workspace`; errors `InvalidName` ("invalid name"), `AlreadyExists` |
 
 ## Verified
 

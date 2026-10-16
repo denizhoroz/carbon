@@ -8,7 +8,7 @@ pub enum CoreError {
         #[source]
         source: std::io::Error,
     },
-    #[error("invalid folder name: {0}")]
+    #[error("invalid name: {0}")]
     InvalidName(String),
     #[error("already exists: {0}")]
     AlreadyExists(PathBuf),
@@ -30,6 +30,12 @@ pub enum CoreError {
     NotFound(&'static str),
     #[error("terminal: {0}")]
     Terminal(String),
+    #[error("cannot watch for file changes: {0}")]
+    Watch(String),
+    #[error("cannot move to trash: {0}")]
+    Trash(String),
+    #[error("cannot rename or delete the workspace folder itself")]
+    WorkspaceRoot,
 }
 
 impl CoreError {

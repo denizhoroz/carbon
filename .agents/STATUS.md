@@ -113,6 +113,14 @@ Template:
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
 
+### 2026-10-17 (file tree T2)
+- Done: core `file_ops` (create file/folder, rename with buffers following, move to Recycle Bin via `trash` 5.2.9 MIT), `Core` methods refuse the root and outside paths; Explorer inline name box (new/rename), delete dialog, copy path / relative path, reveal in File Explorer, right-click menu, header New File/Folder buttons, F2/Delete/Shift+Alt+C/R keys; Editor shows "(deleted)". 41 tests pass + 1 ignored (real Recycle Bin, run once). Click-tested; fixed missing header icons, long exists message, "1 lines".
+- Next: config folder for layouts (`%APPDATA%\Carbon`); recent folders; Explorer T3 or the editor; check modifier shortcuts and mouse wheel by hand.
+
+### 2026-10-17 (file tree T1)
+- Done: compared tree designs (kit Tree vs own rows, lazy vs scan, watcher vs poll); user picked own rows + lazy + watcher, T1. Core `FileTree` + `FsWatcher` (`notify`), GUI Explorer rows (`uniform_list`), keyboard, collapse all, Editor placeholder panel shows the opened file. 37 tests pass; click-tested; fixed ignored-folder children not dimmed.
+- Next: Explorer T2 (new / rename / delete / copy path / reveal); config folder for layouts (`%APPDATA%\Carbon`); check mouse-wheel scroll by hand.
+
 ### 2026-10-17 (format + click test)
 - Done: `cargo fmt` on the whole workspace (formatting only). Click-tested workspace folders by window messages: all entry points pass after 3 fixes (dialog closed on error; Explorer buttons dead after a menu closed; Name not focused from Explorer). Paths now ellipsize at the start. Clippy clean, 30 tests pass.
 - Next: kit menu shows only the first key of chords (Ctrl+K ...): decide single-key shortcut or accept; Ctrl+K Ctrl+O not tested (needs real keyboard); recent folders + reopen last.

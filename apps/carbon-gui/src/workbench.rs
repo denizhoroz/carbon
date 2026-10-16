@@ -40,7 +40,7 @@ const CENTER_AND_DOCKS: [DockPlacement; 4] = [
 ];
 
 /// A shared callback run with the window (dialog buttons and Enter share one).
-type WindowCallback = Rc<dyn Fn(&mut Window, &mut App)>;
+pub type WindowCallback = Rc<dyn Fn(&mut Window, &mut App)>;
 
 /// Section, saved layouts or auto-hide flags changed; the owner rebuilds the
 /// menus and updates the Section Bar.

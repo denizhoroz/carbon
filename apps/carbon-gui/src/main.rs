@@ -1,4 +1,5 @@
 mod app_assets;
+mod editor_panel;
 mod explorer_panel;
 mod layouts;
 mod menus;
@@ -12,7 +13,7 @@ mod workspace_ops;
 
 use std::path::PathBuf;
 
-use carbon_core::Core;
+use carbon_core::{Core, FsChanges};
 use gpui_kit::component::{ActiveTheme, TitleBar, h_flex, v_flex};
 use gpui_kit::*;
 use menus::{
@@ -37,6 +38,8 @@ struct CarbonApp {
     _menus_sub: Subscription,
     _core_sub: Subscription,
     _focus_lost_sub: Subscription,
+    /// The watcher channel being applied, and the task applying it.
+    watch: Option<(async_channel::Receiver<FsChanges>, Task<()>)>,
 }
 
 impl CarbonApp {
@@ -64,13 +67,16 @@ impl CarbonApp {
             this.refresh_menus(cx)
         });
         // Close Folder is enabled only with a folder open.
-        let _core_sub = cx.observe(&core, |this, _, cx| this.refresh_menus(cx));
+        let _core_sub = cx.observe(&core, |this, _, cx| {
+            this.refresh_menus(cx);
+            this.sync_watch(cx);
+        });
         // With nothing focused, actions start at the window root and miss the
         // handlers below (closing a menu or dialog can leave focus empty).
         let _focus_lost_sub = cx.on_focus_lost(window, |this, window, cx| {
             this.focus_handle.focus(window, cx)
         });
-        let this = Self {
+        let mut this = Self {
             title_bar,
             section_bar,
             status_bar,
@@ -80,8 +86,10 @@ impl CarbonApp {
             focus_handle,
             _menus_sub,
             _focus_lost_sub,
+            watch: None,
         };
         this.refresh_menus(cx);
+        this.sync_watch(cx);
         this
     }
 
@@ -93,6 +101,23 @@ impl CarbonApp {
         menus::refresh(&state, cx);
         self.title_bar
             .update(cx, |title_bar, cx| title_bar.reload_menus(cx));
+    }
+
+    /// Follows the core's watcher: a new workspace has a new channel.
+    fn sync_watch(&mut self, cx: &mut App) {
+        let changes = self.core.read(cx).fs_changes();
+        let current = self.watch.as_ref().map(|(changes, _)| changes);
+        let same = match (&changes, current) {
+            (Some(new), Some(old)) => new.same_channel(old),
+            (None, None) => true,
+            _ => false,
+        };
+        if !same {
+            self.watch = changes.map(|changes| {
+                let task = workspace_ops::apply_changes(&self.core, changes.clone(), cx);
+                (changes, task)
+            });
+        }
     }
 
     /// Wires an action to a `Workbench` method.
@@ -200,6 +225,7 @@ fn main() {
         menus::init(cx);
         test_panel::register(cx);
         explorer_panel::register(cx);
+        editor_panel::register(cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(style::fixed::WINDOW_SIZE, cx)),
             ..TitleBar::window_options()

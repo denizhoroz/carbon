@@ -42,3 +42,11 @@ pub const PANEL_GAP: Rems = rems(0.5);
 /// Keyboard resize step and the smallest size it shrinks a dock to.
 pub const DOCK_RESIZE_STEP: Pixels = px(24.);
 pub const DOCK_MIN_SIZE: Pixels = px(120.);
+
+/// Explorer file tree: row height (dense, like VS Code's 22 px), indent per
+/// level, icon size, side padding, and the gap between chevron, icon and name.
+pub const TREE_ROW_HEIGHT: Pixels = px(24.);
+pub const TREE_INDENT: Pixels = px(12.);
+pub const TREE_ICON_SIZE: Pixels = px(16.);
+pub const TREE_PADDING: Pixels = px(8.);
+pub const TREE_ITEM_GAP: Pixels = px(4.);

@@ -10,7 +10,8 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Command palette (every command, shortcut shown) | WB-01, `DESIGN.md` s4 | Menu item exists, no handler |
 | Status bar rest: dock toggles, diagnostics, agents, cost, job spinner + Stop, clickable items (`../built/status-bar.md` has workspace/branch/jobs) | `DESIGN.md` s4 | |
 | Recent folders list; reopen last folder on start; layout per folder | WB-03, WB-09 | Open/create/close built (`../built/workspace-folders.md`) |
-| Code Editor section contents: Explorer file tree (panel shell + empty state built), Editor, Chat, Terminal (placeholders), then problems/output | WB-03, WB-04, ED-01, TM-01, AG-01 | `test_panel.rs` placeholders; `../built/section-bar.md` |
+| Explorer T3: multi-select, drag-drop move, copy/paste files, undo file ops, filter-on-type, compact folders, file nesting, git/problems/agent markers; whole-project background index (go-to-file, search) | WB-03 | T1 + T2 built (`../built/file-tree.md`) |
+| Code Editor section contents: Editor (placeholder shows opened file), Chat, Terminal (placeholders), then problems/output | WB-03, WB-04, ED-01, TM-01, AG-01 | `test_panel.rs` placeholders; `../built/section-bar.md` |
 | More sections in the Section Bar (paradigm, agents) and its bottom group (settings) | `DESIGN.md` s4 | Presets Paradigm/Agents exist as layouts only |
 | Per-workspace layout (now one global file) | WB-09 | Needs workspace concept |
 | Settings UI, keymap, VS Code settings/keymap/theme import | ST-01, ST-04, ST-06 | |

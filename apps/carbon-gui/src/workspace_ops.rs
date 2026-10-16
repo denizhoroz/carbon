@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use carbon_core::Core;
+use carbon_core::{Core, FsChanges};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::{ActiveTheme, WindowExt, h_flex, v_flex};
@@ -54,6 +54,28 @@ pub fn open_folder(core: Entity<Core>, window: &mut Window, cx: &mut App) {
             });
         })
         .detach();
+}
+
+/// Applies the core's file system changes (the explorer tree re-lists the
+/// folders they name) until the channel closes with its watcher.
+pub fn apply_changes(
+    core: &Entity<Core>,
+    changes: async_channel::Receiver<FsChanges>,
+    cx: &mut App,
+) -> Task<()> {
+    let core = core.downgrade();
+    cx.spawn(async move |cx| {
+        while let Ok(batch) = changes.recv().await {
+            let applied = core.update(cx, |core, cx| match core.apply_fs_changes(&batch) {
+                Ok(true) => cx.notify(),
+                Ok(false) => {}
+                Err(err) => eprintln!("explorer refresh failed: {err}"),
+            });
+            if applied.is_err() {
+                break;
+            }
+        }
+    })
 }
 
 pub fn close_folder(core: &Entity<Core>, cx: &mut App) {

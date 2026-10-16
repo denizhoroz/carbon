@@ -5,6 +5,7 @@ use gpui_kit::component::dock::{DockAreaState, DockLayout, DockPlacement, panel_
 use gpui_kit::*;
 use serde::{Deserialize, Serialize};
 
+use crate::editor_panel::EditorPanel;
 use crate::explorer_panel::ExplorerPanel;
 use crate::style::fixed;
 use crate::test_panel::TestPanel;
@@ -121,6 +122,7 @@ fn tabs(titles: &[&str], cx: &mut App) -> DockLayout {
         // Real panels by title; everything else is still a placeholder.
         let panel = match *title {
             "Explorer" => panel_handle(ExplorerPanel::new(cx)),
+            "Editor" => panel_handle(EditorPanel::new(cx)),
             _ => panel_handle(TestPanel::new(*title, cx)),
         };
         layout.panel_view(panel, cx)

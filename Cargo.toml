@@ -19,6 +19,8 @@ async-channel = "2.5.0"
 thiserror = "2.0.21"
 dunce = "1.0.5"
 tempfile = "3.27.0"
+notify = "8.2.0"
+trash = "5.2.9"
 
 # Optimise GPUI, layout and text in dev builds so the window is usable.
 [profile.dev.package]

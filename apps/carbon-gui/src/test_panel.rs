@@ -6,6 +6,7 @@ use gpui_kit::component::dock::{
 use gpui_kit::component::{ActiveTheme, v_flex};
 use gpui_kit::*;
 
+use crate::editor_panel::EditorPanel;
 use crate::style::fixed;
 
 /// Persistence key in saved layouts. Never change it.
@@ -33,6 +34,10 @@ pub fn register(cx: &mut App) {
             PanelInfo::Panel(value) => value["title"].as_str().unwrap_or("Panel").to_string(),
             _ => "Panel".to_string(),
         };
+        // Layouts saved before the Editor became its own panel.
+        if title == "Editor" {
+            return panel_handle(EditorPanel::new(cx));
+        }
         panel_handle(TestPanel::new(title, cx))
     });
 }

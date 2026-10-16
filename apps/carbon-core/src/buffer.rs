@@ -220,6 +220,20 @@ impl BufferStore {
         self.buffers.get_mut(&id)
     }
 
+    /// After `old` was renamed to `new`: buffers of it, or of files under it,
+    /// follow the move.
+    pub fn moved(&mut self, old: &Path, new: &Path) {
+        for buffer in self.buffers.values_mut() {
+            if let Some(rest) = buffer.path().and_then(|path| path.strip_prefix(old).ok()) {
+                buffer.path = Some(if rest.as_os_str().is_empty() {
+                    new.to_path_buf()
+                } else {
+                    new.join(rest)
+                });
+            }
+        }
+    }
+
     pub fn ids(&self) -> impl Iterator<Item = BufferId> + '_ {
         self.buffers.keys().copied()
     }
