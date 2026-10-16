@@ -6,6 +6,7 @@ use gpui_kit::*;
 use serde::{Deserialize, Serialize};
 
 use crate::style::fixed;
+use crate::explorer_panel::ExplorerPanel;
 use crate::test_panel::TestPanel;
 
 const STORE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/carbon-gui");
@@ -103,7 +104,12 @@ impl Preset {
 
 fn tabs(titles: &[&str], cx: &mut App) -> DockLayout {
     titles.iter().fold(DockLayout::tabs(), |layout, title| {
-        layout.panel_view(panel_handle(TestPanel::new(*title, cx)), cx)
+        // Real panels by title; everything else is still a placeholder.
+        let panel = match *title {
+            "Explorer" => panel_handle(ExplorerPanel::new(cx)),
+            _ => panel_handle(TestPanel::new(*title, cx)),
+        };
+        layout.panel_view(panel, cx)
     })
 }
 

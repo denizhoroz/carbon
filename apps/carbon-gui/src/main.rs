@@ -1,4 +1,5 @@
 mod app_assets;
+mod explorer_panel;
 mod layouts;
 mod menus;
 mod section_bar;
@@ -7,6 +8,7 @@ mod style;
 mod test_panel;
 mod title_bar;
 mod workbench;
+mod workspace_ops;
 
 use std::path::PathBuf;
 
@@ -14,8 +16,8 @@ use carbon_core::Core;
 use gpui_kit::component::{ActiveTheme, TitleBar, h_flex, v_flex};
 use gpui_kit::*;
 use menus::{
-    ApplyLayout, ApplyPreset, DeleteLayout, MovePanel, ResetLayout, ResizeDock, SaveLayoutAs,
-    SwitchSection, ToggleAutoHide, ToggleDock,
+    ApplyLayout, ApplyPreset, CloseFolder, CreateFolder, DeleteLayout, MovePanel, OpenFolder,
+    ResetLayout, ResizeDock, SaveLayoutAs, SwitchSection, ToggleAutoHide, ToggleDock,
 };
 use section_bar::SectionBar;
 use status_bar::CarbonStatusBar;
@@ -29,9 +31,11 @@ struct CarbonApp {
     title_bar: Entity<AppTitleBar>,
     section_bar: Entity<SectionBar>,
     status_bar: Entity<CarbonStatusBar>,
+    core: Entity<Core>,
     workbench: Entity<Workbench>,
     focus_handle: FocusHandle,
     _menus_sub: Subscription,
+    _core_sub: Subscription,
 }
 
 impl CarbonApp {
@@ -46,7 +50,9 @@ impl CarbonApp {
             }
             core
         });
-        let status_bar = cx.new(|cx| CarbonStatusBar::new(core, cx));
+        // Panels built from saved layouts find the core here (before the workbench loads).
+        cx.set_global(workspace_ops::CurrentCore(core.clone()));
+        let status_bar = cx.new(|cx| CarbonStatusBar::new(core.clone(), cx));
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
         let title_bar = cx.new(|cx| AppTitleBar::new(cx));
@@ -56,10 +62,14 @@ impl CarbonApp {
         let _menus_sub = cx.subscribe(&workbench, |this, _, _: &MenusChanged, cx| {
             this.refresh_menus(cx)
         });
+        // Close Folder is enabled only with a folder open.
+        let _core_sub = cx.observe(&core, |this, _, cx| this.refresh_menus(cx));
         let this = Self {
             title_bar,
             section_bar,
             status_bar,
+            core,
+            _core_sub,
             workbench,
             focus_handle,
             _menus_sub,
@@ -69,7 +79,8 @@ impl CarbonApp {
     }
 
     fn refresh_menus(&self, cx: &mut App) {
-        let state = self.workbench.read(cx).menu_state();
+        let mut state = self.workbench.read(cx).menu_state();
+        state.has_workspace = self.core.read(cx).workspace().is_some();
         self.section_bar
             .update(cx, |bar, cx| bar.set_active(state.section, cx));
         menus::refresh(&state, cx);
@@ -104,6 +115,15 @@ impl Render for CarbonApp {
             .on_action(self.on(|w, _: &SaveLayoutAs, window, cx| w.open_save_dialog(window, cx), cx))
             .on_action(self.on(|w, a: &ApplyLayout, window, cx| w.apply_layout(a.index, window, cx), cx))
             .on_action(self.on(|w, a: &DeleteLayout, _, cx| w.delete_layout(a.index, cx), cx))
+            .on_action(cx.listener(|this, _: &OpenFolder, window, cx| {
+                workspace_ops::open_folder(this.core.clone(), window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &CreateFolder, window, cx| {
+                workspace_ops::open_create_dialog(this.core.clone(), window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &CloseFolder, _, cx| {
+                workspace_ops::close_folder(&this.core, cx)
+            }))
             // Auto-hide: after any click is handled, close auto-hide docks it landed outside of.
             .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, window, cx| {
                 let position = event.position;
@@ -136,6 +156,7 @@ fn main() {
         style::theme::init(cx);
         menus::init(cx);
         test_panel::register(cx);
+        explorer_panel::register(cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(style::fixed::WINDOW_SIZE, cx)),
             ..TitleBar::window_options()

@@ -32,6 +32,9 @@ pub const STATUS_BAR_PADDING: Rems = rems(0.75);
 pub const STATUS_ICON_SIZE: Pixels = px(14.);
 pub const STATUS_ITEM_GAP: Rems = rems(0.25);
 
+/// Width of small dialogs (Create Folder).
+pub const DIALOG_WIDTH: Pixels = px(480.);
+
 /// Inner padding of panel bodies (DESIGN.md s4: 16 px) and gap between their items.
 pub const PANEL_PADDING: Rems = rems(1.);
 pub const PANEL_GAP: Rems = rems(0.5);

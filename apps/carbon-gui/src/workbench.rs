@@ -24,7 +24,8 @@ use crate::section_bar::Section;
 use crate::style::fixed;
 
 /// Saved-layout schema version; bump when old layouts can no longer load.
-const LAYOUT_VERSION: usize = 1;
+/// 2: Explorer is a real panel (v1 layouts hold a placeholder "Explorer").
+const LAYOUT_VERSION: usize = 2;
 const LAYOUT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/carbon-gui");
 const LAYOUT_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/carbon-gui/layout.json");
 const SAVE_DELAY: Duration = Duration::from_millis(500);
@@ -101,6 +102,7 @@ impl Workbench {
     pub fn menu_state(&self) -> MenuState {
         MenuState {
             section: self.section,
+            has_workspace: false,
             saved: self.store.names(),
             auto_hide: self.store.auto_hide.clone(),
         }
@@ -308,6 +310,13 @@ impl Workbench {
         let Some(layout) = self.store.saved.get(index).cloned() else {
             return;
         };
+        if layout.dock.version != Some(LAYOUT_VERSION) {
+            window.push_notification(
+                format!("\"{}\" was saved by an older Carbon layout format; save it again.", layout.name),
+                cx,
+            );
+            return;
+        }
         let result = self
             .area
             .update(cx, |area, cx| area.load(layout.dock, window, cx));
@@ -422,6 +431,9 @@ impl Workbench {
             }
         };
         self.section = file.active.unwrap_or(Section::Code);
+        // Layouts from an older schema are dropped; sections fall back to defaults.
+        file.sections
+            .retain(|_, state| state.version == Some(LAYOUT_VERSION));
         let state = file.sections.remove(&self.section);
         self.section_layouts = file.sections;
         let Some(state) = state else {

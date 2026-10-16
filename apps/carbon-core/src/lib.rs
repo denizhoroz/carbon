@@ -24,7 +24,7 @@ pub use jobs::{Job, JobId, JobStatus, JobStore};
 pub use ropey::Rope;
 pub use terminal::{Terminal, TerminalEvent, TerminalId, TerminalSpec, TerminalStore};
 pub use vcs::{Branch, current_branch};
-pub use workspace::Workspace;
+pub use workspace::{Workspace, create_folder};
 
 /// Everything one window works on: the open folder and its sessions.
 #[derive(Default)]
@@ -44,6 +44,17 @@ impl Core {
     /// Opens a folder as the workspace, replacing any open one.
     pub fn open_workspace(&mut self, path: impl AsRef<Path>) -> Result<&Workspace> {
         Ok(self.workspace.insert(Workspace::open(path)?))
+    }
+
+    /// Creates folder `name` in `parent` and opens it as the workspace.
+    pub fn create_workspace(&mut self, parent: impl AsRef<Path>, name: &str) -> Result<&Workspace> {
+        let path = create_folder(parent.as_ref(), name)?;
+        self.open_workspace(path)
+    }
+
+    /// Closes the workspace. Buffers, terminals and agent sessions stay open.
+    pub fn close_workspace(&mut self) {
+        self.workspace = None;
     }
 
     pub fn workspace(&self) -> Option<&Workspace> {

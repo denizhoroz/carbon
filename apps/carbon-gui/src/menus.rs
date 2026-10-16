@@ -13,6 +13,8 @@ actions!(
     [
         NewFile,
         OpenFolder,
+        CreateFolder,
+        CloseFolder,
         Save,
         Undo,
         Redo,
@@ -92,6 +94,7 @@ pub struct DeleteLayout {
 /// What the dynamic part of the menus shows.
 pub struct MenuState {
     pub section: Section,
+    pub has_workspace: bool,
     pub saved: Vec<String>,
     pub auto_hide: Vec<Side>,
 }
@@ -100,6 +103,7 @@ impl Default for MenuState {
     fn default() -> Self {
         Self {
             section: Section::Code,
+            has_workspace: false,
             saved: Vec::new(),
             auto_hide: Vec::new(),
         }
@@ -148,8 +152,11 @@ fn app_menus(state: &MenuState) -> Vec<Menu> {
 
     vec![
         Menu::new("File").items([
-            MenuItem::action("New File", NewFile),
             MenuItem::action("Open Folder...", OpenFolder),
+            MenuItem::action("Create Folder...", CreateFolder),
+            MenuItem::action("Close Folder", CloseFolder).disabled(!state.has_workspace),
+            MenuItem::separator(),
+            MenuItem::action("New File", NewFile),
             MenuItem::action("Save", Save),
             MenuItem::separator(),
             MenuItem::action("Exit", Quit),
@@ -192,6 +199,8 @@ pub fn init(cx: &mut App) {
     // Resize follows JetBrains: Ctrl+Alt+Shift+arrows. Move: Ctrl+K then an arrow.
     let mut bindings = vec![
         KeyBinding::new("secondary-q", Quit, None),
+        // VS Code: Ctrl+K Ctrl+O opens a folder.
+        KeyBinding::new("secondary-k secondary-o", OpenFolder, None),
         KeyBinding::new("secondary-b", ToggleDock { side: Side::Left }, None),
         KeyBinding::new("secondary-alt-b", ToggleDock { side: Side::Right }, None),
         KeyBinding::new("secondary-j", ToggleDock { side: Side::Bottom }, None),

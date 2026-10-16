@@ -8,6 +8,10 @@ pub enum CoreError {
         #[source]
         source: std::io::Error,
     },
+    #[error("invalid folder name: {0}")]
+    InvalidName(String),
+    #[error("already exists: {0}")]
+    AlreadyExists(PathBuf),
     #[error("not a directory: {0}")]
     NotADirectory(PathBuf),
     #[error("path is outside the workspace: {0}")]
