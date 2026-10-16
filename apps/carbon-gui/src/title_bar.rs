@@ -41,10 +41,7 @@ fn logo(cx: &App) -> impl IntoElement {
 
 impl Render for AppTitleBar {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let row = h_flex()
-            .h_full()
-            .gap(fixed::TITLE_BAR_GAP)
-            .child(logo(cx));
+        let row = h_flex().h_full().gap(fixed::TITLE_BAR_GAP).child(logo(cx));
 
         // macOS uses the native menu bar (set in `menus::init`).
         #[cfg(not(target_os = "macos"))]

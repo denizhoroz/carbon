@@ -4,7 +4,11 @@ use carbon_core::{Core, Terminal, TerminalEvent, TerminalSpec};
 
 /// A shell that reads commands from input, plus the line break it expects.
 fn shell() -> (TerminalSpec, &'static str) {
-    let (program, newline) = if cfg!(windows) { ("cmd.exe", "\r\n") } else { ("sh", "\n") };
+    let (program, newline) = if cfg!(windows) {
+        ("cmd.exe", "\r\n")
+    } else {
+        ("sh", "\n")
+    };
     let spec = TerminalSpec {
         program: Some(program.into()),
         ..TerminalSpec::default()
@@ -30,7 +34,9 @@ fn run_until_exit(
     while Instant::now() < deadline && drain_until.is_none_or(|t| Instant::now() < t) {
         match events.try_recv() {
             Ok(TerminalEvent::Output(bytes)) => {
-                let requests = String::from_utf8_lossy(&bytes).matches(CURSOR_POSITION_REQUEST).count();
+                let requests = String::from_utf8_lossy(&bytes)
+                    .matches(CURSOR_POSITION_REQUEST)
+                    .count();
                 if let Some(terminal) = terminal.as_deref_mut() {
                     for _ in 0..requests {
                         terminal.write(b"[1;1R").unwrap();

@@ -27,7 +27,10 @@ use crate::style::fixed;
 /// 2: Explorer is a real panel (v1 layouts hold a placeholder "Explorer").
 const LAYOUT_VERSION: usize = 2;
 const LAYOUT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/carbon-gui");
-const LAYOUT_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/carbon-gui/layout.json");
+const LAYOUT_FILE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../target/carbon-gui/layout.json"
+);
 const SAVE_DELAY: Duration = Duration::from_millis(500);
 const CENTER_AND_DOCKS: [DockPlacement; 4] = [
     DockPlacement::Center,
@@ -112,7 +115,12 @@ impl Workbench {
 
     /// Keeps the current section's layout, then shows the target's last layout
     /// (or its default the first time).
-    pub fn switch_section(&mut self, section: Section, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn switch_section(
+        &mut self,
+        section: Section,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if section == self.section {
             return;
         }
@@ -245,8 +253,16 @@ impl Workbench {
         }
     }
 
-    pub fn resize_dock(&mut self, direction: Direction, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(side) = self.focused_panel(window, cx).and_then(|(_, p)| Side::of(p)) else {
+    pub fn resize_dock(
+        &mut self,
+        direction: Direction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(side) = self
+            .focused_panel(window, cx)
+            .and_then(|(_, p)| Side::of(p))
+        else {
             return;
         };
         let step = fixed::DOCK_RESIZE_STEP;
@@ -312,7 +328,10 @@ impl Workbench {
         };
         if layout.dock.version != Some(LAYOUT_VERSION) {
             window.push_notification(
-                format!("\"{}\" was saved by an older Carbon layout format; save it again.", layout.name),
+                format!(
+                    "\"{}\" was saved by an older Carbon layout format; save it again.",
+                    layout.name
+                ),
                 cx,
             );
             return;
@@ -355,11 +374,15 @@ impl Workbench {
         };
 
         let on_enter = submit.clone();
-        cx.subscribe_in(&input, window, move |_, _, event: &InputEvent, window, cx| {
-            if let InputEvent::PressEnter { .. } = event {
-                on_enter(window, cx);
-            }
-        })
+        cx.subscribe_in(
+            &input,
+            window,
+            move |_, _, event: &InputEvent, window, cx| {
+                if let InputEvent::PressEnter { .. } = event {
+                    on_enter(window, cx);
+                }
+            },
+        )
         .detach();
 
         let dialog_input = input.clone();
@@ -439,7 +462,10 @@ impl Workbench {
         let Some(state) = state else {
             return false;
         };
-        match self.area.update(cx, |area, cx| area.load(state, window, cx)) {
+        match self
+            .area
+            .update(cx, |area, cx| area.load(state, window, cx))
+        {
             Ok(()) => true,
             Err(err) => {
                 eprintln!("failed to load layout {LAYOUT_FILE}: {err}; using default");

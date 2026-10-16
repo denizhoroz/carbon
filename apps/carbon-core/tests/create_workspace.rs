@@ -13,9 +13,23 @@ fn creates_and_opens_a_new_folder() {
 #[test]
 fn rejects_bad_names() {
     let dir = tempfile::tempdir().unwrap();
-    for name in ["", "  ", ".", "..", "a/b", "a\\b", "c:", "what?", "trailing.", "tab\there"] {
+    for name in [
+        "",
+        "  ",
+        ".",
+        "..",
+        "a/b",
+        "a\\b",
+        "c:",
+        "what?",
+        "trailing.",
+        "tab\there",
+    ] {
         assert!(
-            matches!(create_folder(dir.path(), name), Err(CoreError::InvalidName(_))),
+            matches!(
+                create_folder(dir.path(), name),
+                Err(CoreError::InvalidName(_))
+            ),
             "{name:?} should be rejected"
         );
     }
@@ -28,8 +42,14 @@ fn refuses_existing_names_and_missing_parents() {
     std::fs::create_dir(dir.path().join("taken")).unwrap();
     std::fs::write(dir.path().join("file"), "").unwrap();
 
-    assert!(matches!(create_folder(dir.path(), "taken"), Err(CoreError::AlreadyExists(_))));
-    assert!(matches!(create_folder(dir.path(), "file"), Err(CoreError::AlreadyExists(_))));
+    assert!(matches!(
+        create_folder(dir.path(), "taken"),
+        Err(CoreError::AlreadyExists(_))
+    ));
+    assert!(matches!(
+        create_folder(dir.path(), "file"),
+        Err(CoreError::AlreadyExists(_))
+    ));
     assert!(matches!(
         create_folder(&dir.path().join("missing"), "x"),
         Err(CoreError::NotADirectory(_))

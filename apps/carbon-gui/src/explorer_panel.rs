@@ -34,7 +34,9 @@ impl ExplorerPanel {
 
 /// Lets saved layouts recreate the Explorer.
 pub fn register(cx: &mut App) {
-    register_panel(cx, PANEL_NAME, |_, _, cx| panel_handle(ExplorerPanel::new(cx)));
+    register_panel(cx, PANEL_NAME, |_, _, cx| {
+        panel_handle(ExplorerPanel::new(cx))
+    });
 }
 
 impl EventEmitter<PanelEvent> for ExplorerPanel {}
@@ -110,13 +112,18 @@ impl Render for ExplorerPanel {
                 .font_weight(FontWeight::SEMIBOLD)
                 .child(workspace.name().to_string()),
         )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(muted)
-                    .truncate()
-                    .child(workspace.root().display().to_string()),
-            )
-            .child(div().text_sm().text_color(muted).child("File tree is not built yet."))
+        .child(
+            div()
+                .text_xs()
+                .text_color(muted)
+                .truncate()
+                .child(workspace.root().display().to_string()),
+        )
+        .child(
+            div()
+                .text_sm()
+                .text_color(muted)
+                .child("File tree is not built yet."),
+        )
     }
 }

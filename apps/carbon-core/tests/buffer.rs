@@ -48,9 +48,18 @@ fn rejects_bad_offsets_without_changing_text() {
     let revision = buffer.revision();
 
     // Byte 2 is inside 'é' (2 bytes); 99 is past the end.
-    assert!(matches!(buffer.insert(2, "x"), Err(CoreError::InvalidOffset(2))));
-    assert!(matches!(buffer.remove(0..99), Err(CoreError::InvalidOffset(0))));
-    assert!(matches!(buffer.replace(1..2, "x"), Err(CoreError::InvalidOffset(1))));
+    assert!(matches!(
+        buffer.insert(2, "x"),
+        Err(CoreError::InvalidOffset(2))
+    ));
+    assert!(matches!(
+        buffer.remove(0..99),
+        Err(CoreError::InvalidOffset(0))
+    ));
+    assert!(matches!(
+        buffer.replace(1..2, "x"),
+        Err(CoreError::InvalidOffset(1))
+    ));
     assert_eq!(buffer.text(), "héllo");
     assert_eq!(buffer.revision(), revision);
 }
@@ -90,7 +99,10 @@ fn close_protects_unsaved_changes() {
     assert!(matches!(store.close(id, false), Err(CoreError::Dirty)));
     store.close(id, true).unwrap();
     assert!(store.get(id).is_none());
-    assert!(matches!(store.close(id, true), Err(CoreError::NotFound("buffer"))));
+    assert!(matches!(
+        store.close(id, true),
+        Err(CoreError::NotFound("buffer"))
+    ));
 }
 
 #[test]

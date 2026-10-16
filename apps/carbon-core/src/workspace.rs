@@ -69,7 +69,9 @@ pub fn create_folder(parent: &Path, name: &str) -> Result<PathBuf> {
         || name == "."
         || name == ".."
         || name.ends_with('.')
-        || name.chars().any(|c| FORBIDDEN.contains(&c) || c.is_control())
+        || name
+            .chars()
+            .any(|c| FORBIDDEN.contains(&c) || c.is_control())
     {
         return Err(CoreError::InvalidName(name.to_string()));
     }

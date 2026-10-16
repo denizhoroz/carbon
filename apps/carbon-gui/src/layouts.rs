@@ -5,12 +5,15 @@ use gpui_kit::component::dock::{DockAreaState, DockLayout, DockPlacement, panel_
 use gpui_kit::*;
 use serde::{Deserialize, Serialize};
 
-use crate::style::fixed;
 use crate::explorer_panel::ExplorerPanel;
+use crate::style::fixed;
 use crate::test_panel::TestPanel;
 
 const STORE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/carbon-gui");
-const STORE_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/carbon-gui/layouts.json");
+const STORE_FILE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../target/carbon-gui/layouts.json"
+);
 
 /// Named layouts map to Ctrl+Alt+1..9, so at most nine.
 pub const MAX_SAVED: usize = 9;
@@ -36,7 +39,9 @@ impl Side {
     }
 
     pub fn of(placement: DockPlacement) -> Option<Side> {
-        Side::ALL.into_iter().find(|side| side.placement() == placement)
+        Side::ALL
+            .into_iter()
+            .find(|side| side.placement() == placement)
     }
 
     pub fn label(self) -> &'static str {
@@ -69,7 +74,11 @@ impl Preset {
 
     /// Center layout plus each dock's panels, size and open state.
     pub fn build(self, cx: &mut App) -> (DockLayout, Vec<(Side, DockLayout, Pixels, bool)>) {
-        let (left, right, bottom) = (fixed::LEFT_DOCK_SIZE, fixed::RIGHT_DOCK_SIZE, fixed::BOTTOM_DOCK_SIZE);
+        let (left, right, bottom) = (
+            fixed::LEFT_DOCK_SIZE,
+            fixed::RIGHT_DOCK_SIZE,
+            fixed::BOTTOM_DOCK_SIZE,
+        );
         match self {
             // Also the Code Editor section's default layout.
             Preset::Code => (
@@ -95,7 +104,12 @@ impl Preset {
                 vec![
                     (Side::Left, tabs(&["Files"], cx), left, false),
                     (Side::Right, tabs(&["Diff Review"], cx), right, true),
-                    (Side::Bottom, tabs(&["Agent Logs", "Terminal"], cx), bottom, true),
+                    (
+                        Side::Bottom,
+                        tabs(&["Agent Logs", "Terminal"], cx),
+                        bottom,
+                        true,
+                    ),
                 ],
             ),
         }
@@ -152,7 +166,10 @@ impl LayoutStore {
     }
 
     pub fn names(&self) -> Vec<String> {
-        self.saved.iter().map(|layout| layout.name.clone()).collect()
+        self.saved
+            .iter()
+            .map(|layout| layout.name.clone())
+            .collect()
     }
 }
 

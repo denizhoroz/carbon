@@ -160,7 +160,8 @@ impl Buffer {
     /// crash never leaves a half-written file.
     fn write_to(&mut self, path: &Path) -> Result<()> {
         let dir = path.parent().unwrap_or(Path::new("."));
-        let mut temp = tempfile::NamedTempFile::new_in(dir).map_err(|err| CoreError::io(dir, err))?;
+        let mut temp =
+            tempfile::NamedTempFile::new_in(dir).map_err(|err| CoreError::io(dir, err))?;
         for chunk in self.rope.chunks() {
             temp.write_all(chunk.as_bytes())
                 .map_err(|err| CoreError::io(temp.path(), err))?;
@@ -192,7 +193,11 @@ impl BufferStore {
     pub fn open(&mut self, path: impl Into<PathBuf>) -> Result<BufferId> {
         let path = path.into();
         let path = dunce::canonicalize(&path).map_err(|err| CoreError::io(&path, err))?;
-        if let Some(buffer) = self.buffers.values().find(|b| b.path() == Some(path.as_path())) {
+        if let Some(buffer) = self
+            .buffers
+            .values()
+            .find(|b| b.path() == Some(path.as_path()))
+        {
             return Ok(buffer.id());
         }
         let id = self.next_id();

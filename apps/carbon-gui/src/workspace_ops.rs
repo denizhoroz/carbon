@@ -67,7 +67,11 @@ pub fn close_folder(core: &Entity<Core>, cx: &mut App) {
 fn default_location(core: &Core) -> PathBuf {
     core.workspace()
         .and_then(|w| w.root().parent().map(Path::to_path_buf))
-        .or_else(|| std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from))
+        .or_else(|| {
+            std::env::var_os("USERPROFILE")
+                .or_else(|| std::env::var_os("HOME"))
+                .map(PathBuf::from)
+        })
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_default()
 }
@@ -114,7 +118,12 @@ struct CreateFolderForm {
 }
 
 impl CreateFolderForm {
-    fn new(core: Entity<Core>, location: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(
+        core: Entity<Core>,
+        location: PathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let name = cx.new(|cx| InputState::new(window, cx).placeholder("my-project"));
         let _enter = cx.subscribe_in(&name, window, |this, _, event: &InputEvent, window, cx| {
             if let InputEvent::PressEnter { .. } = event {

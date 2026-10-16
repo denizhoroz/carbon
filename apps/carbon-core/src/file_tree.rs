@@ -46,7 +46,9 @@ pub fn list_dir(dir: &Path) -> Result<Vec<FileEntry>> {
         if ALWAYS_EXCLUDED.contains(&name.as_str()) {
             continue;
         }
-        let file_type = entry.file_type().map_err(|err| CoreError::io(entry.path(), err))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|err| CoreError::io(entry.path(), err))?;
         let kind = if file_type.is_symlink() {
             EntryKind::Symlink
         } else if file_type.is_dir() {

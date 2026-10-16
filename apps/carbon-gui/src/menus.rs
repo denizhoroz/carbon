@@ -118,8 +118,11 @@ fn app_menus(state: &MenuState) -> Vec<Menu> {
     let toggles = Side::ALL
         .map(|side| MenuItem::action(format!("Toggle {} Dock", side.label()), ToggleDock { side }));
     let auto_hide = Side::ALL.map(|side| {
-        MenuItem::action(format!("Auto-Hide {} Dock", side.label()), ToggleAutoHide { side })
-            .checked(state.auto_hide.contains(&side))
+        MenuItem::action(
+            format!("Auto-Hide {} Dock", side.label()),
+            ToggleAutoHide { side },
+        )
+        .checked(state.auto_hide.contains(&side))
     });
 
     let mut layout = vec![MenuItem::action("Save Layout As...", SaveLayoutAs)];
@@ -133,20 +136,42 @@ fn app_menus(state: &MenuState) -> Vec<Menu> {
                 }
             })
         };
-        layout.push(MenuItem::submenu(Menu::new("Apply Layout").items(items(false))));
-        layout.push(MenuItem::submenu(Menu::new("Delete Layout").items(items(true))));
+        layout.push(MenuItem::submenu(
+            Menu::new("Apply Layout").items(items(false)),
+        ));
+        layout.push(MenuItem::submenu(
+            Menu::new("Delete Layout").items(items(true)),
+        ));
     }
     layout.push(MenuItem::separator());
     layout.extend(Preset::ALL.map(|preset| {
-        MenuItem::action(format!("Preset: {}", preset.label()), ApplyPreset { preset })
+        MenuItem::action(
+            format!("Preset: {}", preset.label()),
+            ApplyPreset { preset },
+        )
     }));
     layout.push(MenuItem::separator());
     layout.push(MenuItem::action("Reset Layout", ResetLayout));
 
     let panel = [
-        MenuItem::action("Move to Left Dock", MovePanel { side: Some(Side::Left) }),
-        MenuItem::action("Move to Right Dock", MovePanel { side: Some(Side::Right) }),
-        MenuItem::action("Move to Bottom Dock", MovePanel { side: Some(Side::Bottom) }),
+        MenuItem::action(
+            "Move to Left Dock",
+            MovePanel {
+                side: Some(Side::Left),
+            },
+        ),
+        MenuItem::action(
+            "Move to Right Dock",
+            MovePanel {
+                side: Some(Side::Right),
+            },
+        ),
+        MenuItem::action(
+            "Move to Bottom Dock",
+            MovePanel {
+                side: Some(Side::Bottom),
+            },
+        ),
         MenuItem::action("Move to Center", MovePanel { side: None }),
     ];
 
@@ -178,13 +203,13 @@ fn app_menus(state: &MenuState) -> Vec<Menu> {
             ]
             .into_iter()
             .chain(toggles)
-                .chain([MenuItem::separator()])
-                .chain(auto_hide)
-                .chain([
-                    MenuItem::separator(),
-                    MenuItem::submenu(Menu::new("Layout").items(layout)),
-                    MenuItem::submenu(Menu::new("Panel").items(panel)),
-                ]),
+            .chain([MenuItem::separator()])
+            .chain(auto_hide)
+            .chain([
+                MenuItem::separator(),
+                MenuItem::submenu(Menu::new("Layout").items(layout)),
+                MenuItem::submenu(Menu::new("Panel").items(panel)),
+            ]),
         ),
         Menu::new("Help").items([MenuItem::action("About", About)]),
     ]
@@ -204,9 +229,27 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("secondary-b", ToggleDock { side: Side::Left }, None),
         KeyBinding::new("secondary-alt-b", ToggleDock { side: Side::Right }, None),
         KeyBinding::new("secondary-j", ToggleDock { side: Side::Bottom }, None),
-        KeyBinding::new("secondary-k left", MovePanel { side: Some(Side::Left) }, None),
-        KeyBinding::new("secondary-k right", MovePanel { side: Some(Side::Right) }, None),
-        KeyBinding::new("secondary-k down", MovePanel { side: Some(Side::Bottom) }, None),
+        KeyBinding::new(
+            "secondary-k left",
+            MovePanel {
+                side: Some(Side::Left),
+            },
+            None,
+        ),
+        KeyBinding::new(
+            "secondary-k right",
+            MovePanel {
+                side: Some(Side::Right),
+            },
+            None,
+        ),
+        KeyBinding::new(
+            "secondary-k down",
+            MovePanel {
+                side: Some(Side::Bottom),
+            },
+            None,
+        ),
         KeyBinding::new("secondary-k up", MovePanel { side: None }, None),
     ];
     for (key, direction) in [

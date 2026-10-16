@@ -51,9 +51,9 @@ fn load_settings() -> Settings {
 /// Call after `gpui_kit::init`.
 pub fn init(cx: &mut App) {
     let settings = load_settings();
-    if let Err(err) =
-        ThemeRegistry::watch_dir(PathBuf::from(THEMES_DIR), cx, move |cx| apply(&settings, cx))
-    {
+    if let Err(err) = ThemeRegistry::watch_dir(PathBuf::from(THEMES_DIR), cx, move |cx| {
+        apply(&settings, cx)
+    }) {
         eprintln!("failed to watch {THEMES_DIR}: {err}");
     }
 }
@@ -106,7 +106,15 @@ mod tests {
             }
         }
         let settings = load_settings();
-        assert!(names.contains(&settings.dark_theme), "{:?} missing", settings.dark_theme);
-        assert!(names.contains(&settings.light_theme), "{:?} missing", settings.light_theme);
+        assert!(
+            names.contains(&settings.dark_theme),
+            "{:?} missing",
+            settings.dark_theme
+        );
+        assert!(
+            names.contains(&settings.light_theme),
+            "{:?} missing",
+            settings.light_theme
+        );
     }
 }

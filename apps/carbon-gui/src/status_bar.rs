@@ -5,9 +5,9 @@ use std::time::Duration;
 
 use carbon_core::{Branch, Core};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::status_bar::StatusBar;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::menu::DropdownMenu;
+use gpui_kit::component::status_bar::StatusBar;
 use gpui_kit::component::{ActiveTheme, Icon, Sizable, Size, TITLE_BAR_HEIGHT, h_flex};
 use gpui_kit::*;
 

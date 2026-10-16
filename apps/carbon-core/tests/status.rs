@@ -38,7 +38,11 @@ fn finds_repo_from_subfolder_and_worktree_file() {
     let git_dir = dir.path().join(".git/worktrees/wt");
     std::fs::create_dir_all(&git_dir).unwrap();
     std::fs::write(git_dir.join("HEAD"), "ref: refs/heads/wt-branch\n").unwrap();
-    std::fs::write(worktree.path().join(".git"), format!("gitdir: {}\n", git_dir.display())).unwrap();
+    std::fs::write(
+        worktree.path().join(".git"),
+        format!("gitdir: {}\n", git_dir.display()),
+    )
+    .unwrap();
     assert_eq!(
         current_branch(worktree.path()),
         Some(Branch::Named("wt-branch".into()))

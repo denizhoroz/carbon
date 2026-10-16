@@ -105,16 +105,46 @@ impl Render for CarbonApp {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .track_focus(&self.focus_handle)
-            .on_action(self.on(|w, a: &ToggleDock, window, cx| w.toggle_dock(a.side, window, cx), cx))
-            .on_action(self.on(|w, a: &ToggleAutoHide, _, cx| w.toggle_auto_hide(a.side, cx), cx))
-            .on_action(self.on(|w, a: &MovePanel, window, cx| w.move_panel(a.side, window, cx), cx))
-            .on_action(self.on(|w, a: &ResizeDock, window, cx| w.resize_dock(a.direction, window, cx), cx))
-            .on_action(self.on(|w, a: &ApplyPreset, window, cx| w.apply_preset(a.preset, window, cx), cx))
-            .on_action(self.on(|w, _: &ResetLayout, window, cx| w.reset_layout(window, cx), cx))
-            .on_action(self.on(|w, a: &SwitchSection, window, cx| w.switch_section(a.section, window, cx), cx))
-            .on_action(self.on(|w, _: &SaveLayoutAs, window, cx| w.open_save_dialog(window, cx), cx))
-            .on_action(self.on(|w, a: &ApplyLayout, window, cx| w.apply_layout(a.index, window, cx), cx))
-            .on_action(self.on(|w, a: &DeleteLayout, _, cx| w.delete_layout(a.index, cx), cx))
+            .on_action(self.on(
+                |w, a: &ToggleDock, window, cx| w.toggle_dock(a.side, window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, a: &ToggleAutoHide, _, cx| w.toggle_auto_hide(a.side, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, a: &MovePanel, window, cx| w.move_panel(a.side, window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, a: &ResizeDock, window, cx| w.resize_dock(a.direction, window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, a: &ApplyPreset, window, cx| w.apply_preset(a.preset, window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, _: &ResetLayout, window, cx| w.reset_layout(window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, a: &SwitchSection, window, cx| w.switch_section(a.section, window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, _: &SaveLayoutAs, window, cx| w.open_save_dialog(window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, a: &ApplyLayout, window, cx| w.apply_layout(a.index, window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, a: &DeleteLayout, _, cx| w.delete_layout(a.index, cx),
+                cx,
+            ))
             .on_action(cx.listener(|this, _: &OpenFolder, window, cx| {
                 workspace_ops::open_folder(this.core.clone(), window, cx)
             }))
@@ -142,7 +172,13 @@ impl Render for CarbonApp {
                     .flex_1()
                     .min_h_0()
                     .child(self.section_bar.clone())
-                    .child(div().flex_1().min_w_0().h_full().child(self.workbench.clone())),
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .child(self.workbench.clone()),
+                    ),
             )
             .child(self.status_bar.clone())
     }
@@ -164,6 +200,6 @@ fn main() {
         open_window(options, cx, move |window, cx| {
             cx.new(|cx| CarbonApp::new(folder.clone(), window, cx))
         })
-            .expect("failed to open window");
+        .expect("failed to open window");
     });
 }

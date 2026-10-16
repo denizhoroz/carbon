@@ -16,7 +16,10 @@ fn folders_first_then_case_insensitive() {
     }
 
     let entries = list_dir(root).unwrap();
-    assert_eq!(names(&entries), ["Alpha", "zeta", "A.txt", "b.txt", "c.txt"]);
+    assert_eq!(
+        names(&entries),
+        ["Alpha", "zeta", "A.txt", "b.txt", "c.txt"]
+    );
     assert_eq!(entries[0].kind, EntryKind::Dir);
     assert_eq!(entries[2].kind, EntryKind::File);
 }
@@ -33,8 +36,15 @@ fn hides_vcs_folders_and_marks_ignored() {
     std::fs::write(root.join(".env"), "").unwrap();
 
     let entries = list_dir(root).unwrap();
-    assert_eq!(names(&entries), ["target", ".env", ".gitignore", "debug.log", "main.rs"]);
-    let ignored: Vec<&str> = entries.iter().filter(|e| e.ignored).map(|e| e.name.as_str()).collect();
+    assert_eq!(
+        names(&entries),
+        ["target", ".env", ".gitignore", "debug.log", "main.rs"]
+    );
+    let ignored: Vec<&str> = entries
+        .iter()
+        .filter(|e| e.ignored)
+        .map(|e| e.name.as_str())
+        .collect();
     // Dotfiles are shown normally; only .gitignore rules dim entries.
     assert_eq!(ignored, ["target", "debug.log"]);
 }
@@ -64,6 +74,12 @@ fn core_lists_only_inside_the_workspace() {
     let mut core = Core::new();
     core.open_workspace(dir.path()).unwrap();
     assert_eq!(names(&core.list_dir("src").unwrap()), ["lib.rs"]);
-    assert!(matches!(core.list_dir(".."), Err(CoreError::OutsideWorkspace(_))));
-    assert!(matches!(core.list_dir("src/lib.rs"), Err(CoreError::NotADirectory(_))));
+    assert!(matches!(
+        core.list_dir(".."),
+        Err(CoreError::OutsideWorkspace(_))
+    ));
+    assert!(matches!(
+        core.list_dir("src/lib.rs"),
+        Err(CoreError::NotADirectory(_))
+    ));
 }

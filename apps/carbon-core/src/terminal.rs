@@ -105,7 +105,10 @@ impl Terminal {
                     match reader.read(&mut buf) {
                         Ok(0) | Err(_) => break,
                         Ok(n) => {
-                            if output.send_blocking(TerminalEvent::Output(buf[..n].to_vec())).is_err() {
+                            if output
+                                .send_blocking(TerminalEvent::Output(buf[..n].to_vec()))
+                                .is_err()
+                            {
                                 break;
                             }
                         }
@@ -193,7 +196,10 @@ impl TerminalStore {
 
     /// Kills the process (if still running) and drops the session.
     pub fn close(&mut self, id: TerminalId) -> Result<()> {
-        let mut terminal = self.terminals.remove(&id).ok_or(CoreError::NotFound("terminal"))?;
+        let mut terminal = self
+            .terminals
+            .remove(&id)
+            .ok_or(CoreError::NotFound("terminal"))?;
         // Already exited is fine.
         let _ = terminal.kill();
         Ok(())
