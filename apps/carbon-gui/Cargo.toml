@@ -1,0 +1,9 @@
+[package]
+name = "carbon-gui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gpui-kit.workspace = true
+serde.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,206 @@
+//! Application menus: native menu bar on macOS, in-window `AppMenuBar` elsewhere.
+//! The View > Layout part changes with saved layouts, so menus are rebuilt by `refresh`.
+
+use gpui_kit::component::GlobalState;
+use gpui_kit::*;
+
+use crate::layouts::{MAX_SAVED, Preset, Side};
+
+// Placeholder actions have no handler yet.
+actions!(
+    carbon,
+    [
+        NewFile,
+        OpenFolder,
+        Save,
+        Undo,
+        Redo,
+        Cut,
+        Copy,
+        Paste,
+        CommandPalette,
+        About,
+        Quit,
+        ResetLayout,
+        SaveLayoutAs
+    ]
+);
+
+/// Show or hide a dock.
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = carbon, no_json)]
+pub struct ToggleDock {
+    pub side: Side,
+}
+
+/// Auto-hide: the dock closes on a click outside it and reopens with its toggle.
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = carbon, no_json)]
+pub struct ToggleAutoHide {
+    pub side: Side,
+}
+
+/// Move the focused panel to a dock, or to the center when `side` is `None`.
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = carbon, no_json)]
+pub struct MovePanel {
+    pub side: Option<Side>,
+}
+
+/// Move the focused dock's inner edge one step (JetBrains-style keyboard resize).
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = carbon, no_json)]
+pub struct ResizeDock {
+    pub direction: Direction,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = carbon, no_json)]
+pub struct ApplyPreset {
+    pub preset: Preset,
+}
+
+/// Apply or delete the saved layout at `index` (0-based; hotkey Ctrl+Alt+index+1).
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = carbon, no_json)]
+pub struct ApplyLayout {
+    pub index: usize,
+}
+
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = carbon, no_json)]
+pub struct DeleteLayout {
+    pub index: usize,
+}
+
+/// What the dynamic part of the menus shows.
+#[derive(Default)]
+pub struct MenuState {
+    pub saved: Vec<String>,
+    pub auto_hide: Vec<Side>,
+}
+
+fn app_menus(state: &MenuState) -> Vec<Menu> {
+    let toggles = Side::ALL
+        .map(|side| MenuItem::action(format!("Toggle {} Dock", side.label()), ToggleDock { side }));
+    let auto_hide = Side::ALL.map(|side| {
+        MenuItem::action(format!("Auto-Hide {} Dock", side.label()), ToggleAutoHide { side })
+            .checked(state.auto_hide.contains(&side))
+    });
+
+    let mut layout = vec![MenuItem::action("Save Layout As...", SaveLayoutAs)];
+    if !state.saved.is_empty() {
+        let items = |delete: bool| {
+            state.saved.iter().enumerate().map(move |(index, name)| {
+                if delete {
+                    MenuItem::action(name.clone(), DeleteLayout { index })
+                } else {
+                    MenuItem::action(name.clone(), ApplyLayout { index })
+                }
+            })
+        };
+        layout.push(MenuItem::submenu(Menu::new("Apply Layout").items(items(false))));
+        layout.push(MenuItem::submenu(Menu::new("Delete Layout").items(items(true))));
+    }
+    layout.push(MenuItem::separator());
+    layout.extend(Preset::ALL.map(|preset| {
+        MenuItem::action(format!("Preset: {}", preset.label()), ApplyPreset { preset })
+    }));
+    layout.push(MenuItem::separator());
+    layout.push(MenuItem::action("Reset Layout", ResetLayout));
+
+    let panel = [
+        MenuItem::action("Move to Left Dock", MovePanel { side: Some(Side::Left) }),
+        MenuItem::action("Move to Right Dock", MovePanel { side: Some(Side::Right) }),
+        MenuItem::action("Move to Bottom Dock", MovePanel { side: Some(Side::Bottom) }),
+        MenuItem::action("Move to Center", MovePanel { side: None }),
+    ];
+
+    vec![
+        Menu::new("File").items([
+            MenuItem::action("New File", NewFile),
+            MenuItem::action("Open Folder...", OpenFolder),
+            MenuItem::action("Save", Save),
+            MenuItem::separator(),
+            MenuItem::action("Exit", Quit),
+        ]),
+        Menu::new("Edit").items([
+            MenuItem::action("Undo", Undo),
+            MenuItem::action("Redo", Redo),
+            MenuItem::separator(),
+            MenuItem::action("Cut", Cut),
+            MenuItem::action("Copy", Copy),
+            MenuItem::action("Paste", Paste),
+        ]),
+        Menu::new("View").items(
+            [MenuItem::action("Command Palette", CommandPalette), MenuItem::separator()]
+                .into_iter()
+                .chain(toggles)
+                .chain([MenuItem::separator()])
+                .chain(auto_hide)
+                .chain([
+                    MenuItem::separator(),
+                    MenuItem::submenu(Menu::new("Layout").items(layout)),
+                    MenuItem::submenu(Menu::new("Panel").items(panel)),
+                ]),
+        ),
+        Menu::new("Help").items([MenuItem::action("About", About)]),
+    ]
+}
+
+/// Registers the quit action and all key bindings, and sets the initial menus.
+/// Call after `gpui_kit::init`.
+pub fn init(cx: &mut App) {
+    cx.on_action(|_: &Quit, cx| cx.quit());
+
+    // Dock toggles follow VS Code: Ctrl+B side bar, Ctrl+Alt+B secondary side bar, Ctrl+J panel.
+    // Resize follows JetBrains: Ctrl+Alt+Shift+arrows. Move: Ctrl+K then an arrow.
+    let mut bindings = vec![
+        KeyBinding::new("secondary-q", Quit, None),
+        KeyBinding::new("secondary-b", ToggleDock { side: Side::Left }, None),
+        KeyBinding::new("secondary-alt-b", ToggleDock { side: Side::Right }, None),
+        KeyBinding::new("secondary-j", ToggleDock { side: Side::Bottom }, None),
+        KeyBinding::new("secondary-k left", MovePanel { side: Some(Side::Left) }, None),
+        KeyBinding::new("secondary-k right", MovePanel { side: Some(Side::Right) }, None),
+        KeyBinding::new("secondary-k down", MovePanel { side: Some(Side::Bottom) }, None),
+        KeyBinding::new("secondary-k up", MovePanel { side: None }, None),
+    ];
+    for (key, direction) in [
+        ("left", Direction::Left),
+        ("right", Direction::Right),
+        ("up", Direction::Up),
+        ("down", Direction::Down),
+    ] {
+        bindings.push(KeyBinding::new(
+            &format!("ctrl-alt-shift-{key}"),
+            ResizeDock { direction },
+            None,
+        ));
+    }
+    for index in 0..MAX_SAVED {
+        bindings.push(KeyBinding::new(
+            &format!("secondary-alt-{}", index + 1),
+            ApplyLayout { index },
+            None,
+        ));
+    }
+    cx.bind_keys(bindings);
+
+    refresh(&MenuState::default(), cx);
+}
+
+/// Rebuilds both the native and the in-window menus. The in-window `AppMenuBar`
+/// must also be told to reload (`AppTitleBar::reload_menus`).
+pub fn refresh(state: &MenuState, cx: &mut App) {
+    cx.set_menus(app_menus(state));
+    GlobalState::global_mut(cx)
+        .set_app_menus(app_menus(state).into_iter().map(Menu::owned).collect());
+}
