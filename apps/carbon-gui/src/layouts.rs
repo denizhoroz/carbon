@@ -70,14 +70,13 @@ impl Preset {
     pub fn build(self, cx: &mut App) -> (DockLayout, Vec<(Side, DockLayout, Pixels, bool)>) {
         let (left, right, bottom) = (fixed::LEFT_DOCK_SIZE, fixed::RIGHT_DOCK_SIZE, fixed::BOTTOM_DOCK_SIZE);
         match self {
+            // Also the Code Editor section's default layout.
             Preset::Code => (
-                DockLayout::h_split()
-                    .child(tabs(&["Editor A", "Editor B"], cx), None)
-                    .child(tabs(&["Preview"], cx), None),
+                tabs(&["Editor"], cx),
                 vec![
-                    (Side::Left, tabs(&["Files", "Search"], cx), left, true),
-                    (Side::Right, tabs(&["Agent"], cx), right, true),
-                    (Side::Bottom, tabs(&["Terminal", "Problems", "Output"], cx), bottom, true),
+                    (Side::Left, tabs(&["Explorer"], cx), left, true),
+                    (Side::Right, tabs(&["Chat"], cx), right, true),
+                    (Side::Bottom, tabs(&["Terminal"], cx), bottom, true),
                 ],
             ),
             Preset::Paradigm => (

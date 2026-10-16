@@ -6,6 +6,8 @@ use gpui_kit::component::dock::{
 use gpui_kit::component::{ActiveTheme, v_flex};
 use gpui_kit::*;
 
+use crate::style::fixed;
+
 /// Persistence key in saved layouts. Never change it.
 const PANEL_NAME: &str = "TestPanel";
 
@@ -70,9 +72,11 @@ impl Render for TestPanel {
         v_flex()
             .track_focus(&self.focus_handle)
             .size_full()
+            .p(fixed::PANEL_PADDING)
             .items_center()
             .justify_center()
-            .gap_1()
+            .text_center()
+            .gap(fixed::PANEL_GAP)
             .child(self.title.clone())
             .child(
                 div()

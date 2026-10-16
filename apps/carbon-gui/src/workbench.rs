@@ -2,6 +2,7 @@
 //! persist) plus T2: named layouts, task presets, keyboard move/resize, auto-hide docks.
 //! Files live in the build dir for now; they move to the OS user dir later.
 
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,9 +16,11 @@ use gpui_kit::component::dock::{
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{WindowExt, h_flex};
 use gpui_kit::*;
+use serde::{Deserialize, Serialize};
 
 use crate::layouts::{LayoutStore, MAX_SAVED, Preset, SavedLayout, Side};
 use crate::menus::{Direction, MenuState};
+use crate::section_bar::Section;
 use crate::style::fixed;
 
 /// Saved-layout schema version; bump when old layouts can no longer load.
@@ -32,11 +35,30 @@ const CENTER_AND_DOCKS: [DockPlacement; 4] = [
     DockPlacement::Bottom,
 ];
 
-/// Saved layouts or auto-hide flags changed; the owner rebuilds the menus.
+/// Section, saved layouts or auto-hide flags changed; the owner rebuilds the
+/// menus and updates the Section Bar.
 pub struct MenusChanged;
+
+/// `layout.json`: the active section and each visited section's last layout.
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct LayoutFile {
+    active: Option<Section>,
+    sections: HashMap<Section, DockAreaState>,
+}
+
+/// The layout a section starts with (and resets to).
+fn section_preset(section: Section) -> Preset {
+    match section {
+        Section::Code => Preset::Code,
+    }
+}
 
 pub struct Workbench {
     area: Entity<DockArea>,
+    section: Section,
+    /// Layouts of sections other than the active one (the active one lives in `area`).
+    section_layouts: HashMap<Section, DockAreaState>,
     store: LayoutStore,
     _layout_sub: Subscription,
     _save_task: Task<()>,
@@ -57,12 +79,14 @@ impl Workbench {
 
         let mut this = Self {
             area,
+            section: Section::Code,
+            section_layouts: HashMap::new(),
             store: LayoutStore::load(),
             _layout_sub,
             _save_task: Task::ready(()),
         };
         if !this.restore(window, cx) {
-            this.apply_preset(Preset::Code, window, cx);
+            this.apply_preset(section_preset(this.section), window, cx);
         }
         // Auto-hide docks start hidden, like JetBrains unpinned tool windows.
         for side in this.store.auto_hide.clone() {
@@ -73,9 +97,37 @@ impl Workbench {
 
     pub fn menu_state(&self) -> MenuState {
         MenuState {
+            section: self.section,
             saved: self.store.names(),
             auto_hide: self.store.auto_hide.clone(),
         }
+    }
+
+    // ---- sections --------------------------------------------------------
+
+    /// Keeps the current section's layout, then shows the target's last layout
+    /// (or its default the first time).
+    pub fn switch_section(&mut self, section: Section, window: &mut Window, cx: &mut Context<Self>) {
+        if section == self.section {
+            return;
+        }
+        let current = self.area.read(cx).dump(cx);
+        self.section_layouts.insert(self.section, current);
+        self.section = section;
+        let loaded = self.section_layouts.remove(&section).is_some_and(|state| {
+            self.area
+                .update(cx, |area, cx| area.load(state, window, cx))
+                .is_ok()
+        });
+        if !loaded {
+            self.apply_preset(section_preset(section), window, cx);
+        }
+        self.schedule_save(cx);
+        cx.emit(MenusChanged);
+    }
+
+    pub fn reset_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.apply_preset(section_preset(self.section), window, cx);
     }
 
     // ---- docks -----------------------------------------------------------
@@ -334,8 +386,13 @@ impl Workbench {
     }
 
     fn save(&self, cx: &App) {
-        let state = self.area.read(cx).dump(cx);
-        let result = serde_json::to_string_pretty(&state)
+        let mut sections = self.section_layouts.clone();
+        sections.insert(self.section, self.area.read(cx).dump(cx));
+        let file = LayoutFile {
+            active: Some(self.section),
+            sections,
+        };
+        let result = serde_json::to_string_pretty(&file)
             .map_err(|err| err.to_string())
             .and_then(|json| {
                 std::fs::create_dir_all(LAYOUT_DIR)
@@ -347,17 +404,24 @@ impl Workbench {
         }
     }
 
-    /// Loads the saved layout; false (fall back to the Code preset) when missing or invalid.
+    /// Loads the saved sections and shows the active one; false (fall back to the
+    /// section default) when missing or invalid.
     fn restore(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Ok(text) = std::fs::read_to_string(LAYOUT_FILE) else {
             return false;
         };
-        let state: DockAreaState = match serde_json::from_str(&text) {
-            Ok(state) => state,
+        let mut file: LayoutFile = match serde_json::from_str(&text) {
+            Ok(file) => file,
             Err(err) => {
                 eprintln!("invalid layout {LAYOUT_FILE}: {err}; using default");
                 return false;
             }
+        };
+        self.section = file.active.unwrap_or(Section::Code);
+        let state = file.sections.remove(&self.section);
+        self.section_layouts = file.sections;
+        let Some(state) = state else {
+            return false;
         };
         match self.area.update(cx, |area, cx| area.load(state, window, cx)) {
             Ok(()) => true,

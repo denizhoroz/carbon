@@ -19,6 +19,18 @@ pub const LEFT_DOCK_SIZE: Pixels = px(240.);
 pub const RIGHT_DOCK_SIZE: Pixels = px(320.);
 pub const BOTTOM_DOCK_SIZE: Pixels = px(200.);
 
+/// Section Bar (left icon strip): width, padding at its top/bottom edge, spacing between icons.
+pub const SECTION_BAR_WIDTH: Pixels = px(52.);
+pub const SECTION_BAR_PADDING: Rems = rems(0.5);
+/// Section Bar button (square) and its icon; (52 - 36) / 2 = 8 px clear on each side.
+pub const SECTION_BUTTON_SIZE: Pixels = px(36.);
+pub const SECTION_ICON_SIZE: Pixels = px(20.);
+pub const SECTION_BAR_GAP: Rems = rems(0.25);
+
+/// Inner padding of panel bodies (DESIGN.md s4: 16 px) and gap between their items.
+pub const PANEL_PADDING: Rems = rems(1.);
+pub const PANEL_GAP: Rems = rems(0.5);
+
 /// Keyboard resize step and the smallest size it shrinks a dock to.
 pub const DOCK_RESIZE_STEP: Pixels = px(24.);
 pub const DOCK_MIN_SIZE: Pixels = px(120.);

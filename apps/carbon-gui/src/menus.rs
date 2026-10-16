@@ -5,6 +5,7 @@ use gpui_kit::component::GlobalState;
 use gpui_kit::*;
 
 use crate::layouts::{MAX_SAVED, Preset, Side};
+use crate::section_bar::Section;
 
 // Placeholder actions have no handler yet.
 actions!(
@@ -62,6 +63,13 @@ pub enum Direction {
     Down,
 }
 
+/// Switch the workbench to a section (Section Bar icon or View > Section).
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = carbon, no_json)]
+pub struct SwitchSection {
+    pub section: Section,
+}
+
 #[derive(Clone, PartialEq, Action)]
 #[action(namespace = carbon, no_json)]
 pub struct ApplyPreset {
@@ -82,13 +90,27 @@ pub struct DeleteLayout {
 }
 
 /// What the dynamic part of the menus shows.
-#[derive(Default)]
 pub struct MenuState {
+    pub section: Section,
     pub saved: Vec<String>,
     pub auto_hide: Vec<Side>,
 }
 
+impl Default for MenuState {
+    fn default() -> Self {
+        Self {
+            section: Section::Code,
+            saved: Vec::new(),
+            auto_hide: Vec::new(),
+        }
+    }
+}
+
 fn app_menus(state: &MenuState) -> Vec<Menu> {
+    let sections = Section::ALL.map(|section| {
+        MenuItem::action(section.label(), SwitchSection { section })
+            .checked(section == state.section)
+    });
     let toggles = Side::ALL
         .map(|side| MenuItem::action(format!("Toggle {} Dock", side.label()), ToggleDock { side }));
     let auto_hide = Side::ALL.map(|side| {
@@ -141,9 +163,14 @@ fn app_menus(state: &MenuState) -> Vec<Menu> {
             MenuItem::action("Paste", Paste),
         ]),
         Menu::new("View").items(
-            [MenuItem::action("Command Palette", CommandPalette), MenuItem::separator()]
-                .into_iter()
-                .chain(toggles)
+            [
+                MenuItem::action("Command Palette", CommandPalette),
+                MenuItem::separator(),
+                MenuItem::submenu(Menu::new("Section").items(sections)),
+                MenuItem::separator(),
+            ]
+            .into_iter()
+            .chain(toggles)
                 .chain([MenuItem::separator()])
                 .chain(auto_hide)
                 .chain([
