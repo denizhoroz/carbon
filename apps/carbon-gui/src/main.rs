@@ -2,11 +2,15 @@ mod app_assets;
 mod layouts;
 mod menus;
 mod section_bar;
+mod status_bar;
 mod style;
 mod test_panel;
 mod title_bar;
 mod workbench;
 
+use std::path::PathBuf;
+
+use carbon_core::Core;
 use gpui_kit::component::{ActiveTheme, TitleBar, h_flex, v_flex};
 use gpui_kit::*;
 use menus::{
@@ -14,21 +18,35 @@ use menus::{
     SwitchSection, ToggleAutoHide, ToggleDock,
 };
 use section_bar::SectionBar;
+use status_bar::CarbonStatusBar;
 use title_bar::AppTitleBar;
 use workbench::{MenusChanged, Workbench};
 
-/// Root view: title bar on top; Section Bar and dock workbench below. Holds the
-/// window's base focus so menu actions reach these handlers even before a panel is focused.
+/// Root view: title bar on top; Section Bar and dock workbench in the middle;
+/// status bar at the bottom. Holds the window's base focus so menu actions
+/// reach these handlers even before a panel is focused.
 struct CarbonApp {
     title_bar: Entity<AppTitleBar>,
     section_bar: Entity<SectionBar>,
+    status_bar: Entity<CarbonStatusBar>,
     workbench: Entity<Workbench>,
     focus_handle: FocusHandle,
     _menus_sub: Subscription,
 }
 
 impl CarbonApp {
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    /// `folder`: workspace to open (from the command line), if any.
+    fn new(folder: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let core = cx.new(|_| {
+            let mut core = Core::new();
+            if let Some(folder) = folder
+                && let Err(err) = core.open_workspace(&folder)
+            {
+                eprintln!("cannot open {}: {err}", folder.display());
+            }
+            core
+        });
+        let status_bar = cx.new(|cx| CarbonStatusBar::new(core, cx));
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
         let title_bar = cx.new(|cx| AppTitleBar::new(cx));
@@ -41,6 +59,7 @@ impl CarbonApp {
         let this = Self {
             title_bar,
             section_bar,
+            status_bar,
             workbench,
             focus_handle,
             _menus_sub,
@@ -105,10 +124,13 @@ impl Render for CarbonApp {
                     .child(self.section_bar.clone())
                     .child(div().flex_1().min_w_0().h_full().child(self.workbench.clone())),
             )
+            .child(self.status_bar.clone())
     }
 }
 
+/// Usage: `carbon-gui [folder]` opens `folder` as the workspace.
 fn main() {
+    let folder = std::env::args_os().nth(1).map(PathBuf::from);
     application().with_assets(app_assets::AppAssets).run(|cx| {
         init(cx);
         style::theme::init(cx);
@@ -118,7 +140,9 @@ fn main() {
             window_bounds: Some(WindowBounds::centered(style::fixed::WINDOW_SIZE, cx)),
             ..TitleBar::window_options()
         };
-        open_window(options, cx, |window, cx| cx.new(|cx| CarbonApp::new(window, cx)))
+        open_window(options, cx, move |window, cx| {
+            cx.new(|cx| CarbonApp::new(folder.clone(), window, cx))
+        })
             .expect("failed to open window");
     });
 }

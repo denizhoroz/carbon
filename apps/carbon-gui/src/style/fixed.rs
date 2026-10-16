@@ -27,6 +27,11 @@ pub const SECTION_BUTTON_SIZE: Pixels = px(36.);
 pub const SECTION_ICON_SIZE: Pixels = px(20.);
 pub const SECTION_BAR_GAP: Rems = rems(0.25);
 
+/// Status bar (bottom): side padding, icon size, icon-to-text gap.
+pub const STATUS_BAR_PADDING: Rems = rems(0.75);
+pub const STATUS_ICON_SIZE: Pixels = px(14.);
+pub const STATUS_ITEM_GAP: Rems = rems(0.25);
+
 /// Inner padding of panel bodies (DESIGN.md s4: 16 px) and gap between their items.
 pub const PANEL_PADDING: Rems = rems(1.);
 pub const PANEL_GAP: Rems = rems(0.5);

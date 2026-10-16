@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/carbon-gui"]
+members = ["apps/carbon-core", "apps/carbon-gui"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,14 @@ edition = "2024"
 gpui-kit = "=0.7.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+# carbon-core. ropey: same beta the kit uses, so core and editor share one rope type.
+ropey = "=2.0.0-beta.1"
+ignore = "0.4.33"
+portable-pty = "0.9"
+async-channel = "2.5.0"
+thiserror = "2.0.21"
+dunce = "1.0.5"
+tempfile = "3.27.0"
 
 # Optimise GPUI, layout and text in dev builds so the window is usable.
 [profile.dev.package]

@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use gpui_kit::assets::{Assets, icon_assets};
 use gpui_kit::{AssetSource, Result, SharedString};
 
-icon_assets!(ExtraIcons, [Code]);
+icon_assets!(ExtraIcons, [Code, GitBranch, ListChecks]);
 
 pub struct AppAssets;
 

@@ -1,0 +1,15 @@
+[package]
+name = "carbon-core"
+version.workspace = true
+edition.workspace = true
+
+# In-process core (PROJECT.md option a): workspace, file tree, buffers, terminals,
+# agent sessions as plain Rust with no UI dependency. May move behind a daemon later.
+[dependencies]
+ropey.workspace = true
+ignore.workspace = true
+portable-pty.workspace = true
+async-channel.workspace = true
+thiserror.workspace = true
+dunce.workspace = true
+tempfile.workspace = true

@@ -35,6 +35,9 @@ const CENTER_AND_DOCKS: [DockPlacement; 4] = [
     DockPlacement::Bottom,
 ];
 
+/// A shared callback run with the window (dialog buttons and Enter share one).
+type WindowCallback = Rc<dyn Fn(&mut Window, &mut App)>;
+
 /// Section, saved layouts or auto-hide flags changed; the owner rebuilds the
 /// menus and updates the Section Bar.
 pub struct MenusChanged;
@@ -137,10 +140,11 @@ impl Workbench {
         self.area
             .update(cx, |area, cx| area.toggle_dock(placement, window, cx));
         // An auto-hide dock takes focus when shown, so keyboard users land in it.
-        if self.store.auto_hide.contains(&side) && self.area.read(cx).is_dock_open(placement) {
-            if let Some(panel) = self.first_panel(placement, cx) {
-                panel.focus_handle(cx).focus(window, cx);
-            }
+        if self.store.auto_hide.contains(&side)
+            && self.area.read(cx).is_dock_open(placement)
+            && let Some(panel) = self.first_panel(placement, cx)
+        {
+            panel.focus_handle(cx).focus(window, cx);
         }
     }
 
@@ -329,7 +333,7 @@ impl Workbench {
         let input = cx.new(|cx| InputState::new(window, cx).placeholder("Layout name"));
         let this = cx.weak_entity();
 
-        let submit: Rc<dyn Fn(&mut Window, &mut App)> = {
+        let submit: WindowCallback = {
             let input = input.clone();
             Rc::new(move |window, cx| {
                 let name = input.read(cx).value().trim().to_string();
