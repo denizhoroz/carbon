@@ -1,0 +1,65 @@
+# Carbon
+
+## Overview
+
+Carbon is a multi-tool workspace for agents that improves user interactibility. It is a Rust project. Goal: an IDE-like workspace with VS Code feature parity (so users never need to return to VS Code) plus agent-focused differentiators, synthesized from prior products (VS Code, Zed, Cursor, Claude Code, Agent Zero, OpenHands, Odysseus and others).
+
+Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed and Sublime); neutral and secure-by-default over heterogeneous agents (open market gap).
+
+## Key decisions
+
+**Committed pillars (decided by the user):**
+1. Plain code editor (like VS Code or Zed).
+2. Paradigm editor: diagrams used as AI context; AI or user creates "paradigms" (diagrams); used for architecting systems.
+3. Agents tab: one or more agent chats in multiple windows/panes.
+4. Multi-platform: Windows, macOS, Linux.
+5. Lightweight (not first priority, but a design focus).
+6. Modular extension sections: e.g. SVG or 3D model viewers addable after build; modular compatibility in general.
+
+**Technical decisions** (recommended, from RESEARCH.md section 5; not yet validated by benchmarks):
+
+- **Architecture:** one static-musl Rust daemon owns workspace, buffers, terminals, LSP/DAP, agents, git; local = remote over loopback. UI is a swappable client.
+- **Do not fork VS Code.** Reuse open protocols and parts (LSP, DAP, MCP, ACP, TextMate/theme JSON, `AGENTS.md`/`SKILL.md`/`.mcp.json`).
+- **UI: native desktop GUI with GPUI + gpui-kit (gpui-component, renamed at v0.6; decided by the user, 2026-10-16); webview excluded.** Depend on `gpui-kit` with an exact version (0.7.3 read) on crates.io `gpui-pre` `=0.3.9`, Rust 1.92+; API breaks every minor. Usage notes: `project/ui/ui-framework.md`; alternatives and risks: `documents/gui-framework.md` (API churn, accessibility, editor build cost).
+- **Protocol:** AHP-like state-first protocol (snapshot, ordered actions, replay); ACP for external agents; MCP (+ MCP Apps) for tools.
+- **Buffer:** rope + anchors, per-actor undo, agents as attributed edit peers; CRDT deferred.
+- **Extensions:** no full `vscode` API parity. Declarative VSIX and LSP/DAP launchers first, WASM (WIT, capability grants) + MCP native, Open VSX + own gallery, no Microsoft-only dependencies.
+- **Safety defaults:** OS sandbox on, tiered approvals + classifier + hooks, side-effect-aware checkpoints, destructive-git guard.
+- **Defaults:** calm opt-out AI, telemetry off, live cost meter, VS Code settings/keymap/theme import, AccessKit from the first widget, write-ahead journal.
+- **Panel layout (user decision, 2026-10-16):** T1 (kit docking: drag/snap/split/resize/close/zoom/persist) + T2 (named layouts on hotkeys, task presets, keyboard move/resize, auto-hide) now; T3 (pop-out OS windows, top dock, guide diamond, float inside window) later. `project/built/panel-layout.md`.
+- **Section Bar (user decision, 2026-10-16):** left vertical bar of section icons; each section has its own layout; first section Code Editor (`< >` icon). `project/built/section-bar.md`.
+- **Core first, in-process (user decision, 2026-10-16, option a):** `apps/carbon-core` holds workspace, file tree, buffers, terminals, agent sessions as plain Rust; the GUI calls it directly; daemon split later keeps the same API. `project/built/carbon-core.md`.
+- **Sequencing:** daemon -> native UI shell + importers -> extensions -> decide on Node host.
+
+## Open questions
+
+- Paradigm editor (pillar 2) is unresearched: run a short follow-up on diagram/architecture tools (Excalidraw, tldraw, draw.io, Mermaid, PlantUML, Structurizr/C4, Lucidchart, Miro AI, Cursor/Claude canvases, VS Code Canvases): file format, AI integration, code round-trip, licences.
+- GPUI + gpui-component is chosen; prototype to confirm: editor latency and large files, accessibility (Narrator, VoiceOver, Orca), terminal embed, docking, RAM on all three OSes (published numbers conflict 2x-15x).
+- CRDT choice (Zed-style, Diamond Types, Loro) and whether multi-user is needed early.
+- How much of the PIM/agent-hub scope (email, calendar, notes, shared canvas) is in v1 vs IDE parity.
+- AHP/ACP wire-format maturity and licences; MCP Apps client support.
+- Licence stance for bundled components (AGPL: PyMuPDF, SearXNG, Firecrawl; ELv2: Phoenix).
+- Full list of unverified items and benchmarks to run: RESEARCH.md section 8.
+
+## Status
+
+Research phase complete (Oct 2026); no product code yet beyond the Rust project scaffold (`Cargo.toml`, `src/`). Adoption scores, priorities and verdicts are analyst inference, not user data. Live progress, decisions log and error/solution log: `STATUS.md`.
+
+## Docs map (`.agents/`)
+Routing for agents (which file for which task): `README.md`.
+
+| File | Contents | Use it for |
+|---|---|---|
+| `PROJECT.md` | Overview, decisions, open questions | Start here |
+| `STATUS.md` | Progress tracker, decision log, error and solution log, session notes | What is done, what is next, known problems |
+| `DESIGN.md` | UI and interaction rulebook for Carbon (tokens, shell, pillar surfaces, components, agent UX, accessibility, budgets) | Before any UI build or fix |
+| `documents/gui-framework.md` | GUI framework comparison (native candidates only; comparison tables: basics, IDE fit, platform, scores, exclusions, risks) | Choosing the UI technology |
+| `project/built/panel-layout.md` | Panel layout comparison (VS Code, Visual Studio, JetBrains, Eclipse, Zed, Sublime, Neovim, Blender, Dear ImGui, GPUI Kit): move/snap, detach, size, saved layouts; Carbon tiers | Building docks and layouts |
+| `project/built/` | One file per built feature + index (title bar/menu, theming, panel layout) | What exists in code |
+| `project/not_built/` | Index of committed features not built yet (FEATURE.md IDs) | Picking the next feature |
+| `project/ui/ui-framework.md` | GPUI Kit knowledge base: versions, setup, components, theming, docking, editor, accessibility, gotchas | Building UI with GPUI Kit |
+| `knowledge/` | Read-only knowledge from previous projects (design, architecture, security, experience, Rust/Dioxus/CSS/HTML/Python/uv/shell) | Reuse proven rules and avoid known problems; never edit |
+| `RESEARCH.md` | Landscape, common stack, VS Code reference, comparison and synthesis, sentiment, gaps, evidence caveats, key source URLs | Why a decision was made; checking evidence strength |
+| `FEATURE.md` | Part 1 Carbon features (pillars, sub-features, coverage check); Part 2 catalog of features from other products with adoption scores 1-5 and unique flags; Part 3 market gaps | Scoping and prioritizing work |
+
+Conventions: evidence labels (M/V/A/S/doc) and (?) for unverified; update RESEARCH.md when decisions change evidence, FEATURE.md when scope changes.
