@@ -1,5 +1,6 @@
-//! Explorer T2: new file / folder and rename (inline name box), delete to the
-//! Recycle Bin / Trash (confirmed), copy path, reveal in the OS file manager.
+//! Explorer file operations: new file / folder and rename (inline name box),
+//! delete to the Recycle Bin / Trash (confirmed), copy / cut / paste, drag
+//! and drop, undo, copy path, reveal in the OS file manager.
 
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -11,8 +12,8 @@ use gpui_kit::component::{ActiveTheme, WindowExt, h_flex, v_flex};
 use gpui_kit::*;
 
 use super::{
-    CancelEdit, CopyPath, CopyRelativePath, Delete, ExplorerPanel, NewFile, NewFolder, Rename,
-    RevealInOs,
+    CopyFiles, CopyPath, CopyRelativePath, CutFiles, Delete, ExplorerPanel, NewFile, NewFolder,
+    PasteFiles, Rename, RevealInOs, UndoFileOp,
 };
 use crate::style::fixed;
 use crate::workbench::WindowCallback;
@@ -51,9 +52,27 @@ pub struct Edit {
     _events: Subscription,
 }
 
+/// Explorer copy / cut, kept inside the app (not the OS clipboard).
+pub struct FileClipboard {
+    pub paths: Vec<PathBuf>,
+    /// Cut: Paste moves (and the rows show faded until then).
+    pub cut: bool,
+}
+
+/// "'name'" for one path, "N items" for more.
+fn describe(paths: &[PathBuf]) -> String {
+    match paths {
+        [one] => format!(
+            "'{}'",
+            one.file_name().unwrap_or_default().to_string_lossy()
+        ),
+        many => format!("{} items", many.len()),
+    }
+}
+
 impl ExplorerPanel {
-    /// The folder new entries go in: the selected folder, the selected file's
-    /// folder, or the workspace root.
+    /// The folder new entries and pastes go in: the cursor folder, the cursor
+    /// file's folder, or the workspace root.
     fn target_dir(&self, cx: &App) -> Option<PathBuf> {
         let root = self.core.read(cx).tree()?.root().to_path_buf();
         let Some(row) = self.selected_ix().map(|ix| &self.rows[ix]) else {
@@ -172,11 +191,7 @@ impl ExplorerPanel {
         match result {
             Ok(path) => {
                 self.end_edit(window, cx);
-                self.selected = Some(path.clone());
-                self.rebuild_rows(cx);
-                if let Some(ix) = self.selected_ix() {
-                    self.select(ix, cx);
-                }
+                self.select_paths(vec![path.clone()], cx);
                 if matches!(kind, EditKind::New { folder: false, .. }) {
                     self.open_file(&path, window, cx);
                 }
@@ -202,42 +217,32 @@ impl ExplorerPanel {
 
     /// Closes the name box (its subscription goes with it) and gives focus back
     /// to the tree.
-    fn end_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn end_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.edit = None;
         window.focus(&self.focus_handle, cx);
         cx.notify();
     }
 
-    pub(super) fn cancel_edit(
-        &mut self,
-        _: &CancelEdit,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.edit.is_some() {
-            self.end_edit(window, cx);
-        } else {
-            cx.propagate();
-        }
-    }
-
-    /// Asks first, then moves the selected entry to the Recycle Bin / Trash.
+    /// Asks first, then moves the selected entries to the Recycle Bin / Trash.
     pub(super) fn delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(ix) = self.selected_ix() else {
+        if self.edit.is_some() {
+            return;
+        }
+        let paths = self.selection();
+        let Some(first) = paths.first() else {
             return;
         };
-        let entry = &self.rows[ix].entry;
-        let (path, name) = (entry.path.clone(), entry.name.clone());
-        let what = if entry.kind == EntryKind::Dir {
-            format!("Delete folder '{name}' and its contents?")
-        } else {
-            format!("Delete '{name}'?")
+        let question = match paths.as_slice() {
+            [_] if first.is_dir() => {
+                format!("Delete folder {} and its contents?", describe(&paths))
+            }
+            _ => format!("Delete {}?", describe(&paths)),
         };
         let core = self.core.clone();
         // Enter (the dialog's Confirm) and the button both run this.
         let confirm: WindowCallback = Rc::new(move |window, cx| {
             let result = core.update(cx, |core, cx| {
-                let result = core.trash(&path);
+                let result = paths.iter().try_for_each(|path| core.trash(path));
                 cx.notify();
                 result
             });
@@ -256,12 +261,15 @@ impl ExplorerPanel {
                     true
                 })
                 .child(
-                    v_flex().gap(fixed::PANEL_GAP).child(what.clone()).child(
-                        div()
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(format!("You can restore it from the {TRASH_LABEL}.")),
-                    ),
+                    v_flex()
+                        .gap(fixed::PANEL_GAP)
+                        .child(question.clone())
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("You can restore from the {TRASH_LABEL}.")),
+                        ),
                 )
                 .footer(
                     h_flex()
@@ -285,16 +293,140 @@ impl ExplorerPanel {
         });
     }
 
-    /// Selected entry, or the workspace root when nothing is selected.
-    fn selected_or_root(&self, cx: &App) -> Option<PathBuf> {
-        self.selected
-            .clone()
-            .or_else(|| Some(self.core.read(cx).tree()?.root().to_path_buf()))
+    pub(super) fn copy_files(&mut self, _: &CopyFiles, _: &mut Window, cx: &mut Context<Self>) {
+        self.set_clipboard(false, cx);
     }
 
+    pub(super) fn cut_files(&mut self, _: &CutFiles, _: &mut Window, cx: &mut Context<Self>) {
+        self.set_clipboard(true, cx);
+    }
+
+    fn set_clipboard(&mut self, cut: bool, cx: &mut Context<Self>) {
+        let paths = self.selection();
+        if self.edit.is_none() && !paths.is_empty() {
+            self.clipboard = Some(FileClipboard { paths, cut });
+            cx.notify();
+        }
+    }
+
+    /// Paste into the target folder: copies stay on the clipboard (paste again
+    /// for another copy), a cut is used up.
+    pub(super) fn paste_files(
+        &mut self,
+        _: &PasteFiles,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.edit.is_some() {
+            return;
+        }
+        let (Some(clipboard), Some(dir)) = (&self.clipboard, self.target_dir(cx)) else {
+            return;
+        };
+        let (paths, cut) = (clipboard.paths.clone(), clipboard.cut);
+        if cut {
+            self.clipboard = None;
+        }
+        self.transfer(dir, paths, !cut, window, cx);
+    }
+
+    /// Drop of Explorer rows or OS files on a folder (`None`: the root). Rows
+    /// move, or copy with Ctrl held (Option on macOS); OS files always copy.
+    pub(super) fn drop_on(
+        &mut self,
+        dir: Option<PathBuf>,
+        paths: Vec<PathBuf>,
+        external: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(dir) = dir.or_else(|| Some(self.core.read(cx).tree()?.root().to_path_buf()))
+        else {
+            return;
+        };
+        let modifiers = window.modifiers();
+        let copy_key = if cfg!(target_os = "macos") {
+            modifiers.alt
+        } else {
+            modifiers.control
+        };
+        self.transfer(dir, paths, external || copy_key, window, cx);
+    }
+
+    fn transfer(
+        &mut self,
+        dir: PathBuf,
+        paths: Vec<PathBuf>,
+        copy: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let result = self.core.update(cx, |core, cx| {
+            let result = if copy {
+                core.copy_entries(&paths, &dir)
+            } else {
+                core.move_entries(&paths, &dir)
+            };
+            cx.notify();
+            result
+        });
+        match result {
+            Ok(new_paths) => self.select_paths(new_paths, cx),
+            Err(err) => {
+                let what = if copy { "copy" } else { "move" };
+                let reason = match err {
+                    CoreError::AlreadyExists(path) => format!(
+                        "'{}' already exists there",
+                        path.file_name().unwrap_or_default().to_string_lossy()
+                    ),
+                    err => err.to_string(),
+                };
+                window
+                    .push_notification(format!("Cannot {what} {}: {reason}", describe(&paths)), cx);
+            }
+        }
+    }
+
+    /// Ctrl+Z: reverses the newest create / rename / move / copy.
+    pub(super) fn undo(&mut self, _: &UndoFileOp, window: &mut Window, cx: &mut Context<Self>) {
+        if self.edit.is_some() {
+            return;
+        }
+        let result = self.core.update(cx, |core, cx| {
+            let result = core.undo_file_op();
+            cx.notify();
+            result
+        });
+        match result {
+            Ok(op) => window.push_notification(format!("Undid {}", op.label()), cx),
+            Err(CoreError::NothingToUndo) => {}
+            Err(err) => window.push_notification(err.to_string(), cx),
+        }
+    }
+
+    /// Selected entries, or the workspace root when nothing is selected.
+    fn selected_or_root(&self, cx: &App) -> Vec<PathBuf> {
+        let selection = self.selection();
+        if selection.is_empty() {
+            self.core
+                .read(cx)
+                .tree()
+                .map(|tree| vec![tree.root().to_path_buf()])
+                .unwrap_or_default()
+        } else {
+            selection
+        }
+    }
+
+    /// One path per line (several when several rows are selected).
     pub(super) fn copy_path(&mut self, _: &CopyPath, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(path) = self.selected_or_root(cx) {
-            cx.write_to_clipboard(ClipboardItem::new_string(path.display().to_string()));
+        let paths = self.selected_or_root(cx);
+        if !paths.is_empty() {
+            let text: Vec<String> = paths
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect();
+            cx.write_to_clipboard(ClipboardItem::new_string(text.join("\n")));
         }
     }
 
@@ -304,29 +436,38 @@ impl ExplorerPanel {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(path) = self.selected_or_root(cx) else {
+        let paths = self.selected_or_root(cx);
+        let core = self.core.read(cx);
+        let Some(workspace) = core.workspace() else {
             return;
         };
-        let relative = self
-            .core
-            .read(cx)
-            .workspace()
-            .and_then(|workspace| workspace.relative(&path))
-            .map(|relative| relative.display().to_string())
-            .unwrap_or_default();
-        // The root itself is "." (an empty string would look like nothing was copied).
-        let text = if relative.is_empty() {
-            ".".into()
-        } else {
-            relative
-        };
-        cx.write_to_clipboard(ClipboardItem::new_string(text));
+        let text: Vec<String> = paths
+            .iter()
+            .map(|path| {
+                let relative = workspace
+                    .relative(path)
+                    .map(|relative| relative.display().to_string())
+                    .unwrap_or_default();
+                // The root itself is "." (an empty string would look like nothing was copied).
+                if relative.is_empty() {
+                    ".".into()
+                } else {
+                    relative
+                }
+            })
+            .collect();
+        cx.write_to_clipboard(ClipboardItem::new_string(text.join("\n")));
     }
 
     pub(super) fn reveal(&mut self, _: &RevealInOs, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(path) = self.selected_or_root(cx)
-            && let Err(err) = reveal_in_os(&path)
-        {
+        let Some(path) = self
+            .selected
+            .clone()
+            .or_else(|| self.selected_or_root(cx).pop())
+        else {
+            return;
+        };
+        if let Err(err) = reveal_in_os(&path) {
             window.push_notification(format!("Cannot reveal {}: {err}", path.display()), cx);
         }
     }

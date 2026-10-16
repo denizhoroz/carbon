@@ -50,3 +50,6 @@ pub const TREE_INDENT: Pixels = px(12.);
 pub const TREE_ICON_SIZE: Pixels = px(16.);
 pub const TREE_PADDING: Pixels = px(8.);
 pub const TREE_ITEM_GAP: Pixels = px(4.);
+/// Explorer markers: agent-edit icon and the dot a folder shows for what is inside.
+pub const TREE_MARK_ICON_SIZE: Pixels = px(12.);
+pub const TREE_DOT_SIZE: Pixels = px(6.);

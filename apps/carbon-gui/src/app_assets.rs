@@ -16,7 +16,8 @@ icon_assets!(
         FileSymlink,
         ChevronsDownUp,
         FilePlus,
-        FolderPlus
+        FolderPlus,
+        Bot
     ]
 );
 

@@ -3,8 +3,9 @@
 //! the `OpenFolder` / `CreateFolder` / `CloseFolder` actions).
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
-use carbon_core::{Core, FsChanges};
+use carbon_core::{Core, FsChanges, git_status};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::{ActiveTheme, WindowExt, h_flex, v_flex};
@@ -56,26 +57,110 @@ pub fn open_folder(core: Entity<Core>, window: &mut Window, cx: &mut App) {
         .detach();
 }
 
+/// Least time between two git status runs: a build writing thousands of
+/// files must not keep a status run going all the time.
+const GIT_STATUS_INTERVAL: Duration = Duration::from_secs(1);
+
 /// Applies the core's file system changes (the explorer tree re-lists the
-/// folders they name) until the channel closes with its watcher.
+/// folders they name) and keeps the git status current, until the channel
+/// closes with its watcher. Git status runs off the UI thread: once at the
+/// start, then after changes that may affect it, at most once per interval.
 pub fn apply_changes(
     core: &Entity<Core>,
     changes: async_channel::Receiver<FsChanges>,
     cx: &mut App,
 ) -> Task<()> {
+    let root = core.read(cx).workspace().map(|w| w.root().to_path_buf());
     let core = core.downgrade();
     cx.spawn(async move |cx| {
+        let Some(root) = root else {
+            return;
+        };
+        if !refresh_git(&core, &root, cx).await {
+            return;
+        }
+        let mut last_git = Instant::now();
         while let Ok(batch) = changes.recv().await {
-            let applied = core.update(cx, |core, cx| match core.apply_fs_changes(&batch) {
-                Ok(true) => cx.notify(),
-                Ok(false) => {}
-                Err(err) => eprintln!("explorer refresh failed: {err}"),
+            let mut git = batch.git;
+            let mut batches = vec![batch];
+            if git {
+                // Wait out the interval, gathering what arrives meanwhile.
+                let wait = GIT_STATUS_INTERVAL.saturating_sub(last_git.elapsed());
+                if !wait.is_zero() {
+                    cx.background_executor().timer(wait).await;
+                }
+            }
+            while let Ok(more) = changes.try_recv() {
+                git |= more.git;
+                batches.push(more);
+            }
+            let applied = core.update(cx, |core, cx| {
+                let mut changed = false;
+                for batch in &batches {
+                    match core.apply_fs_changes(batch) {
+                        Ok(true) => changed = true,
+                        Ok(false) => {}
+                        Err(err) => eprintln!("explorer refresh failed: {err}"),
+                    }
+                }
+                if changed {
+                    cx.notify();
+                }
             });
             if applied.is_err() {
                 break;
             }
+            if git {
+                if !refresh_git(&core, &root, cx).await {
+                    break;
+                }
+                last_git = Instant::now();
+            }
         }
     })
+}
+
+/// Runs `git_status` in the background and stores it; false once the core is gone.
+async fn refresh_git(core: &WeakEntity<Core>, root: &Path, cx: &mut AsyncApp) -> bool {
+    let dir = root.to_path_buf();
+    let status = cx
+        .background_executor()
+        .spawn(async move { git_status(&dir) })
+        .await;
+    let status = status.unwrap_or_else(|err| {
+        eprintln!("git status failed: {err}");
+        None
+    });
+    core.update(cx, |core, cx| {
+        if core.git() != status.as_ref() {
+            core.set_git(status);
+            cx.notify();
+        }
+    })
+    .is_ok()
+}
+
+/// Test hook (debug builds): `CARBON_TEST_MARKS="src/main.rs:2:1:agent;docs:0:3"`
+/// gives files problem counts (errors:warnings) and an agent mark, so the
+/// Explorer markers can be seen before diagnostics and agents exist.
+#[cfg(debug_assertions)]
+pub fn seed_test_marks(core: &mut Core) {
+    let Ok(spec) = std::env::var("CARBON_TEST_MARKS") else {
+        return;
+    };
+    let Some(root) = core.workspace().map(|w| w.root().to_path_buf()) else {
+        return;
+    };
+    for item in spec.split(';').filter(|item| !item.is_empty()) {
+        let mut parts = item.split(':');
+        let path = root.join(parts.next().unwrap_or_default());
+        let errors = parts.next().and_then(|n| n.parse().ok()).unwrap_or(0);
+        let warnings = parts.next().and_then(|n| n.parse().ok()).unwrap_or(0);
+        core.marks.set_problems(&path, errors, warnings);
+        if parts.next() == Some("agent") {
+            core.marks.set_agent_edited(&path, true);
+        }
+    }
 }
 
 pub fn close_folder(core: &Entity<Core>, cx: &mut App) {

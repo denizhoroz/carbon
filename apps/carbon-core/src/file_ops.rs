@@ -86,3 +86,104 @@ fn same_entry(a: &Path, b: &Path) -> bool {
         _ => false,
     }
 }
+
+/// Moves each of `paths` into folder `dir`, keeping names, and returns the
+/// (old, new) pairs. Checks everything first: no folder into itself or below
+/// it, no existing names, so a refusal changes nothing. Paths already in
+/// `dir` are skipped.
+pub fn move_into(paths: &[PathBuf], dir: &Path) -> Result<Vec<(PathBuf, PathBuf)>> {
+    if !dir.is_dir() {
+        return Err(CoreError::NotADirectory(dir.to_path_buf()));
+    }
+    let mut moves = Vec::new();
+    for path in paths {
+        if path.parent() == Some(dir) {
+            continue;
+        }
+        if dir.starts_with(path) {
+            return Err(CoreError::IntoItself(path.clone()));
+        }
+        let name = path
+            .file_name()
+            .ok_or_else(|| CoreError::InvalidName(path.display().to_string()))?;
+        let target = dir.join(name);
+        if target.symlink_metadata().is_ok() {
+            return Err(CoreError::AlreadyExists(target));
+        }
+        moves.push((path.clone(), target));
+    }
+    for (from, to) in &moves {
+        std::fs::rename(from, to).map_err(|err| CoreError::io(from, err))?;
+    }
+    Ok(moves)
+}
+
+/// Copies each of `paths` (files or whole folders) into folder `dir` and
+/// returns the new paths. A taken name gets " copy", then " copy 2", ...
+/// before the extension, as in VS Code.
+pub fn copy_into(paths: &[PathBuf], dir: &Path) -> Result<Vec<PathBuf>> {
+    if !dir.is_dir() {
+        return Err(CoreError::NotADirectory(dir.to_path_buf()));
+    }
+    if let Some(path) = paths
+        .iter()
+        .find(|path| path.is_dir() && dir.starts_with(path))
+    {
+        return Err(CoreError::IntoItself(path.clone()));
+    }
+    let mut copies = Vec::new();
+    for path in paths {
+        let target = free_name(dir, path)?;
+        copy_recursive(path, &target)?;
+        copies.push(target);
+    }
+    Ok(copies)
+}
+
+/// `dir/name`, or `dir/name copy[ N].ext` when that is taken.
+fn free_name(dir: &Path, path: &Path) -> Result<PathBuf> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| CoreError::InvalidName(path.display().to_string()))?
+        .to_string_lossy()
+        .into_owned();
+    let plain = dir.join(&name);
+    if plain.symlink_metadata().is_err() {
+        return Ok(plain);
+    }
+    // Folders and dotfiles keep the whole name as the stem.
+    let (stem, ext) = match name.rfind('.') {
+        Some(dot) if dot > 0 && !path.is_dir() => (&name[..dot], &name[dot..]),
+        _ => (name.as_str(), ""),
+    };
+    for n in 1.. {
+        let suffix = if n == 1 {
+            " copy".to_string()
+        } else {
+            format!(" copy {n}")
+        };
+        let candidate = dir.join(format!("{stem}{suffix}{ext}"));
+        if candidate.symlink_metadata().is_err() {
+            return Ok(candidate);
+        }
+    }
+    unreachable!("an unused name exists")
+}
+
+/// Real folders are copied entry by entry; links are not followed into
+/// folders (no loops), a link to a file copies the file's content.
+fn copy_recursive(from: &Path, to: &Path) -> Result<()> {
+    let meta = from
+        .symlink_metadata()
+        .map_err(|err| CoreError::io(from, err))?;
+    if meta.is_dir() {
+        std::fs::create_dir(to).map_err(|err| CoreError::io(to, err))?;
+        for entry in std::fs::read_dir(from).map_err(|err| CoreError::io(from, err))? {
+            let entry = entry.map_err(|err| CoreError::io(from, err))?;
+            copy_recursive(&entry.path(), &to.join(entry.file_name()))?;
+        }
+    } else {
+        std::fs::copy(from, to).map_err(|err| CoreError::io(from, err))?;
+    }
+    Ok(())
+}

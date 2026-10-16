@@ -52,6 +52,8 @@ impl CarbonApp {
             {
                 eprintln!("cannot open {}: {err}", folder.display());
             }
+            #[cfg(debug_assertions)]
+            workspace_ops::seed_test_marks(&mut core);
             core
         });
         // Panels built from saved layouts find the core here (before the workbench loads).

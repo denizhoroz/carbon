@@ -21,6 +21,8 @@ dunce = "1.0.5"
 tempfile = "3.27.0"
 notify = "8.2.0"
 trash = "5.2.9"
+# Git status for explorer markers (FEATURE SC-06: gitoxide reads). No network, merge, blame.
+gix = { version = "0.89.0", default-features = false, features = ["status", "sha1", "parallel"] }
 
 # Optimise GPUI, layout and text in dev builds so the window is usable.
 [profile.dev.package]

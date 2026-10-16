@@ -22,6 +22,9 @@ pub struct FsChanges {
     pub dirs: Vec<PathBuf>,
     /// Events were lost (the OS buffer overflowed); every loaded folder needs a refresh.
     pub rescan: bool,
+    /// Something changed that git status may see: file content, or `.git`
+    /// itself (index, refs, `HEAD`).
+    pub git: bool,
 }
 
 /// Watches a folder recursively until dropped.
@@ -65,22 +68,22 @@ fn debounce(
 ) {
     // Blocks until the first event of a batch, then collects until it goes quiet.
     while let Ok(first) = raw.recv() {
-        let mut dirs = HashSet::new();
-        let mut rescan = false;
-        collect(first, &mut dirs, &mut rescan);
+        let mut batch = Batch::default();
+        batch.collect(first);
         loop {
             match raw.recv_timeout(DEBOUNCE) {
-                Ok(event) => collect(event, &mut dirs, &mut rescan),
+                Ok(event) => batch.collect(event),
                 Err(mpsc::RecvTimeoutError::Timeout) => break,
                 Err(mpsc::RecvTimeoutError::Disconnected) => return,
             }
         }
-        if dirs.is_empty() && !rescan {
+        if batch.dirs.is_empty() && !batch.rescan && !batch.git {
             continue;
         }
         let batch = FsChanges {
-            dirs: dirs.into_iter().collect(),
-            rescan,
+            dirs: batch.dirs.into_iter().collect(),
+            rescan: batch.rescan,
+            git: batch.git,
         };
         if sender.send_blocking(batch).is_err() {
             return;
@@ -88,34 +91,51 @@ fn debounce(
     }
 }
 
-fn collect(event: notify::Result<notify::Event>, dirs: &mut HashSet<PathBuf>, rescan: &mut bool) {
-    let event = match event {
-        Ok(event) => event,
-        Err(_) => {
-            *rescan = true;
+#[derive(Default)]
+struct Batch {
+    dirs: HashSet<PathBuf>,
+    rescan: bool,
+    git: bool,
+}
+
+impl Batch {
+    fn collect(&mut self, event: notify::Result<notify::Event>) {
+        let event = match event {
+            Ok(event) => event,
+            Err(_) => {
+                self.rescan = true;
+                self.git = true;
+                return;
+            }
+        };
+        if event.need_rescan() {
+            self.rescan = true;
+            self.git = true;
             return;
         }
-    };
-    if event.need_rescan() {
-        *rescan = true;
-        return;
-    }
-    // Content edits do not change a listing; Windows reports them as `Modify(Any)`.
-    let listing_changed = match event.kind {
-        EventKind::Create(_) | EventKind::Remove(_) => true,
-        EventKind::Modify(ModifyKind::Name(_)) => true,
-        EventKind::Any | EventKind::Other => true,
-        EventKind::Modify(_) | EventKind::Access(_) => false,
-    };
-    if !listing_changed {
-        return;
-    }
-    for path in event.paths {
-        if path.components().any(|part| part.as_os_str() == ".git") {
-            continue;
+        if matches!(event.kind, EventKind::Access(_)) {
+            return;
         }
-        if let Some(parent) = path.parent() {
-            dirs.insert(parent.to_path_buf());
+        // Content edits do not change a listing; Windows reports them as `Modify(Any)`.
+        let listing_changed = match event.kind {
+            EventKind::Create(_) | EventKind::Remove(_) => true,
+            EventKind::Modify(ModifyKind::Name(_)) => true,
+            EventKind::Any | EventKind::Other => true,
+            EventKind::Modify(_) | EventKind::Access(_) => false,
+        };
+        for path in event.paths {
+            let mut parts = path.components().map(|part| part.as_os_str());
+            if parts.any(|part| part == ".git") {
+                // Object writes alone change nothing git status shows.
+                if parts.next().is_some_and(|next| next != "objects") {
+                    self.git = true;
+                }
+                continue;
+            }
+            self.git = true;
+            if listing_changed && let Some(parent) = path.parent() {
+                self.dirs.insert(parent.to_path_buf());
+            }
         }
     }
 }

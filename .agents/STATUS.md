@@ -51,6 +51,7 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-17 | Git reads with gitoxide (`gix` 0.89, status only) for Explorer markers; problem/agent markers as API first; Explorer T3 extras: copy/cut/paste + undo, no file nesting | user decision | `project/built/file-tree.md`, FEATURE SC-06 |
 | 2026-10-16 | In-process `carbon-core` crate before real panels (option a); daemon later | keep panel state out of views; cheap now | `project/built/carbon-core.md`, `PROJECT.md` |
 | 2026-10-16 | Section Bar: left vertical bar switching sections, each with own layout; first section Code Editor | user decision | `project/built/section-bar.md`, `DESIGN.md` s4 |
 | 2026-10-16 | Panel layout scope: T1 + T2 now, T3 (pop-out windows, top dock, guide diamond) later | user decision after comparison | `project/built/panel-layout.md` s7 |
@@ -112,6 +113,10 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-17 (file tree T3)
+- Done: core `git_status` (gitoxide), `marks`, `history` + `move_entries` / `copy_entries` / `undo_file_op`, compact folders in `FileTree`, watcher flags git-relevant changes; GUI split into `explorer_panel/{rows,filter,file_ops}.rs`: multi-select, drag and drop (rows + OS files), copy/cut/paste, undo, type to filter, markers; background git status (max 1/s). 48 tests pass + 2 ignored (Recycle Bin, run once). Click-tested except multi-select and modifier keys; fixed list-wide drop highlight.
+- Next: check multi-select / Ctrl shortcuts / OS drops / mouse wheel by hand; commit T1-T3; config folder for layouts; then the editor (real Editor panel) or Source Control.
 
 ### 2026-10-17 (file tree T2)
 - Done: core `file_ops` (create file/folder, rename with buffers following, move to Recycle Bin via `trash` 5.2.9 MIT), `Core` methods refuse the root and outside paths; Explorer inline name box (new/rename), delete dialog, copy path / relative path, reveal in File Explorer, right-click menu, header New File/Folder buttons, F2/Delete/Shift+Alt+C/R keys; Editor shows "(deleted)". 41 tests pass + 1 ignored (real Recycle Bin, run once). Click-tested; fixed missing header icons, long exists message, "1 lines".

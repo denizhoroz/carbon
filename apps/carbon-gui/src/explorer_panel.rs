@@ -2,9 +2,14 @@
 //! "no workspace = Open and Create buttons"). With a folder open: the file
 //! tree, a flat virtualized row list over `carbon_core::FileTree` (folders load
 //! when they expand; the core's watcher keeps loaded folders current).
-//! File operations (new, rename, delete, copy path, reveal) are in `file_ops`.
+//!
+//! Submodules: `rows` (row drawing, markers, drag and drop), `filter`
+//! (type to filter), `file_ops` (new, rename, delete, copy / cut / paste,
+//! undo, copy path, reveal).
 
 mod file_ops;
+mod filter;
+mod rows;
 
 use std::path::{Path, PathBuf};
 
@@ -15,15 +20,15 @@ use gpui_kit::component::dock::{BasePanel, Panel, PanelEvent, panel_handle, regi
 use gpui_kit::component::input::Input;
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
 use gpui_kit::component::{
-    ActiveTheme, Icon, Sizable, Size, WindowExt, h_flex, scroll::ScrollableElement, v_flex,
+    ActiveTheme, Sizable, WindowExt, h_flex, scroll::ScrollableElement, v_flex,
 };
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 use crate::menus::{CreateFolder, OpenFolder};
 use crate::style::fixed;
 use crate::workspace_ops::current_core;
-use file_ops::{Edit, EditKind, REVEAL_LABEL};
+use file_ops::{Edit, EditKind, FileClipboard, REVEAL_LABEL};
+use filter::Filter;
 
 /// Persistence key in saved layouts. Never change it.
 const PANEL_NAME: &str = "Explorer";
@@ -34,6 +39,9 @@ actions!(
     [
         SelectPrev,
         SelectNext,
+        ExtendPrev,
+        ExtendNext,
+        SelectAll,
         ExpandOrNext,
         CollapseOrParent,
         OpenSelected,
@@ -42,6 +50,10 @@ actions!(
         NewFolder,
         Rename,
         Delete,
+        CopyFiles,
+        CutFiles,
+        PasteFiles,
+        UndoFileOp,
         CopyPath,
         CopyRelativePath,
         RevealInOs,
@@ -52,15 +64,24 @@ actions!(
 pub struct ExplorerPanel {
     core: Entity<Core>,
     focus_handle: FocusHandle,
-    /// Visible rows, rebuilt when the core changes (not on every frame).
+    /// Visible rows (after the filter), rebuilt when the core or filter changes.
     rows: Vec<Row>,
-    /// Kept by path, so it survives rows moving after a refresh.
+    /// The cursor row: keyboard focus, rename target. Kept by path, so it
+    /// survives rows moving after a refresh.
     selected: Option<PathBuf>,
+    /// Selected rows (multi-select); operations act on these.
+    marked: Vec<PathBuf>,
+    /// Where a Shift range starts.
+    anchor: Option<PathBuf>,
     scroll: UniformListScrollHandle,
     /// The inline name box (new entry or rename), if open.
     edit: Option<Edit>,
     /// Set by a row's right-click so the list's handler keeps that selection.
     row_right_clicked: bool,
+    /// Files copied or cut in the Explorer, waiting for Paste.
+    clipboard: Option<FileClipboard>,
+    /// Type-to-filter box, if open.
+    filter: Option<Filter>,
     _core_sub: Subscription,
 }
 
@@ -77,9 +98,13 @@ impl ExplorerPanel {
                 focus_handle: cx.focus_handle(),
                 rows: Vec::new(),
                 selected: None,
+                marked: Vec::new(),
+                anchor: None,
                 scroll: UniformListScrollHandle::new(),
                 edit: None,
                 row_right_clicked: false,
+                clipboard: None,
+                filter: None,
                 _core_sub,
             };
             this.rebuild_rows(cx);
@@ -88,34 +113,123 @@ impl ExplorerPanel {
     }
 
     fn rebuild_rows(&mut self, cx: &App) {
-        self.rows = self
+        let rows = self
             .core
             .read(cx)
             .tree()
             .map(|tree| tree.visible_rows())
             .unwrap_or_default();
-        if let Some(selected) = &self.selected
-            && !self.rows.iter().any(|row| &row.entry.path == selected)
-        {
+        self.rows = match self.filter.as_ref().map(|filter| filter.query(cx)) {
+            Some(query) if !query.is_empty() => filter::filter_rows(rows, &query),
+            _ => rows,
+        };
+        let shown = |path: &PathBuf| self.rows.iter().any(|row| &row.entry.path == path);
+        if self.selected.as_ref().is_some_and(|path| !shown(path)) {
             self.selected = None;
         }
+        if self.anchor.as_ref().is_some_and(|path| !shown(path)) {
+            self.anchor = None;
+        }
+        let marked = std::mem::take(&mut self.marked);
+        self.marked = marked.into_iter().filter(|path| shown(path)).collect();
+    }
+
+    fn row_ix(&self, path: &Path) -> Option<usize> {
+        self.rows.iter().position(|row| row.entry.path == path)
     }
 
     fn selected_ix(&self) -> Option<usize> {
-        let selected = self.selected.as_ref()?;
-        self.rows.iter().position(|row| &row.entry.path == selected)
+        self.row_ix(self.selected.as_deref()?)
     }
 
+    fn is_marked(&self, path: &Path) -> bool {
+        self.marked.iter().any(|marked| marked == path)
+    }
+
+    /// The selected paths in row order (the cursor row if nothing is marked).
+    fn selection(&self) -> Vec<PathBuf> {
+        let marked: Vec<PathBuf> = self
+            .rows
+            .iter()
+            .filter(|row| self.is_marked(&row.entry.path))
+            .map(|row| row.entry.path.clone())
+            .collect();
+        if marked.is_empty() {
+            self.selected.iter().cloned().collect()
+        } else {
+            marked
+        }
+    }
+
+    /// Plain selection of one row (click, arrow keys).
     fn select(&mut self, ix: usize, cx: &mut Context<Self>) {
         if let Some(row) = self.rows.get(ix) {
-            self.selected = Some(row.entry.path.clone());
-            let list_ix = match self.new_slot(cx) {
-                Some((slot, _)) if ix >= slot => ix + 1,
-                _ => ix,
-            };
-            self.scroll.scroll_to_item(list_ix, ScrollStrategy::Nearest);
+            let path = row.entry.path.clone();
+            self.marked = vec![path.clone()];
+            self.anchor = Some(path.clone());
+            self.move_cursor(path, ix, cx);
+        }
+    }
+
+    /// Selects the given paths (after a paste, drop or create).
+    fn select_paths(&mut self, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
+        self.rebuild_rows(cx);
+        let Some(first) = paths.first().cloned() else {
+            return;
+        };
+        self.marked = paths;
+        self.anchor = Some(first.clone());
+        if let Some(ix) = self.row_ix(&first) {
+            self.move_cursor(first, ix, cx);
+        } else {
+            self.selected = Some(first);
             cx.notify();
         }
+    }
+
+    fn move_cursor(&mut self, path: PathBuf, ix: usize, cx: &mut Context<Self>) {
+        self.selected = Some(path);
+        let list_ix = match self.new_slot(cx) {
+            Some((slot, _)) if ix >= slot => ix + 1,
+            _ => ix,
+        };
+        self.scroll.scroll_to_item(list_ix, ScrollStrategy::Nearest);
+        cx.notify();
+    }
+
+    /// Ctrl+click (Cmd on macOS): add or remove one row.
+    fn toggle_mark(&mut self, ix: usize, cx: &mut Context<Self>) {
+        let Some(path) = self.rows.get(ix).map(|row| row.entry.path.clone()) else {
+            return;
+        };
+        if self.is_marked(&path) {
+            self.marked.retain(|marked| *marked != path);
+        } else {
+            self.marked.push(path.clone());
+        }
+        self.anchor = Some(path.clone());
+        self.move_cursor(path, ix, cx);
+    }
+
+    /// Shift+click / Shift+arrow: everything from the anchor to `ix`.
+    fn select_range(&mut self, ix: usize, cx: &mut Context<Self>) {
+        let Some(path) = self.rows.get(ix).map(|row| row.entry.path.clone()) else {
+            return;
+        };
+        let anchor = self
+            .anchor
+            .as_deref()
+            .and_then(|anchor| self.row_ix(anchor))
+            .unwrap_or(ix);
+        let (from, to) = (anchor.min(ix), anchor.max(ix));
+        self.marked = self.rows[from..=to]
+            .iter()
+            .map(|row| row.entry.path.clone())
+            .collect();
+        if self.anchor.is_none() {
+            self.anchor = Some(path.clone());
+        }
+        self.move_cursor(path, ix, cx);
     }
 
     /// Runs `f` on the core's tree; the core notifies, which rebuilds the rows.
@@ -150,36 +264,70 @@ impl ExplorerPanel {
         }
     }
 
-    /// Click: folders toggle, files open (no preview tabs yet).
-    fn click_row(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    /// Click: folders toggle, files open (no preview tabs yet). With Ctrl
+    /// (Cmd) or Shift it only changes the selection.
+    fn click_row(
+        &mut self,
+        ix: usize,
+        modifiers: Modifiers,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        window.focus(&self.focus_handle, cx);
+        if modifiers.secondary() {
+            return self.toggle_mark(ix, cx);
+        }
+        if modifiers.shift {
+            return self.select_range(ix, cx);
+        }
         let Some(row) = self.rows.get(ix) else {
             return;
         };
         let (path, kind) = (row.entry.path.clone(), row.entry.kind);
         self.select(ix, cx);
-        window.focus(&self.focus_handle, cx);
         match kind {
             EntryKind::Dir => self.toggle(path, window, cx),
             EntryKind::File | EntryKind::Symlink => self.open_file(&path, window, cx),
         }
     }
 
-    fn select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
-        if self.edit.is_some() {
-            return;
+    fn step(&self, delta: isize) -> usize {
+        let last = self.rows.len().saturating_sub(1);
+        match self.selected_ix() {
+            Some(ix) => ix.saturating_add_signed(delta).min(last),
+            None => 0,
         }
-        let ix = self.selected_ix().map_or(0, |ix| ix.saturating_sub(1));
-        self.select(ix, cx);
+    }
+
+    fn select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
+        if self.edit.is_none() {
+            self.select(self.step(-1), cx);
+        }
     }
 
     fn select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
-        if self.edit.is_some() {
-            return;
+        if self.edit.is_none() {
+            self.select(self.step(1), cx);
         }
-        let ix = self
-            .selected_ix()
-            .map_or(0, |ix| (ix + 1).min(self.rows.len().saturating_sub(1)));
-        self.select(ix, cx);
+    }
+
+    fn extend_prev(&mut self, _: &ExtendPrev, _: &mut Window, cx: &mut Context<Self>) {
+        if self.edit.is_none() {
+            self.select_range(self.step(-1), cx);
+        }
+    }
+
+    fn extend_next(&mut self, _: &ExtendNext, _: &mut Window, cx: &mut Context<Self>) {
+        if self.edit.is_none() {
+            self.select_range(self.step(1), cx);
+        }
+    }
+
+    fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
+        if self.edit.is_none() {
+            self.marked = self.rows.iter().map(|row| row.entry.path.clone()).collect();
+            cx.notify();
+        }
     }
 
     /// Right: open a closed folder, else step into it (or down).
@@ -199,7 +347,8 @@ impl ExplorerPanel {
         }
     }
 
-    /// Left: close an open folder, else jump to the parent folder.
+    /// Left: close an open folder, else jump to the nearest folder row above it
+    /// (with compact folders the direct parent may share that row).
     fn collapse_or_parent(
         &mut self,
         _: &CollapseOrParent,
@@ -219,19 +368,21 @@ impl ExplorerPanel {
                 tree.collapse(&dir);
                 Ok(())
             });
-        } else if let Some(parent) = entry.path.parent()
-            && let Some(parent_ix) = self.rows.iter().position(|row| row.entry.path == parent)
+        } else if let Some(parent_ix) = entry
+            .path
+            .ancestors()
+            .skip(1)
+            .find_map(|ancestor| self.row_ix(ancestor).filter(|parent| *parent != ix))
         {
             self.select(parent_ix, cx);
         }
     }
 
     fn open_selected(&mut self, _: &OpenSelected, window: &mut Window, cx: &mut Context<Self>) {
-        if self.edit.is_some() {
-            return;
-        }
-        if let Some(ix) = self.selected_ix() {
-            self.click_row(ix, window, cx);
+        if self.edit.is_none()
+            && let Some(ix) = self.selected_ix()
+        {
+            self.click_row(ix, Modifiers::default(), window, cx);
         }
     }
 
@@ -240,6 +391,35 @@ impl ExplorerPanel {
             tree.collapse_all();
             Ok(())
         });
+    }
+
+    /// Escape: closes, in order, the name box, the filter, a pending cut, a
+    /// multi-selection; otherwise passes on.
+    fn cancel(&mut self, _: &CancelEdit, window: &mut Window, cx: &mut Context<Self>) {
+        if self.edit.is_some() {
+            self.end_edit(window, cx);
+        } else if self.filter.is_some() {
+            self.close_filter(window, cx);
+        } else if self
+            .clipboard
+            .as_ref()
+            .is_some_and(|clipboard| clipboard.cut)
+        {
+            self.clipboard = None;
+            cx.notify();
+        } else if self.marked.len() > 1 {
+            self.marked = self.selected.iter().cloned().collect();
+            cx.notify();
+        } else {
+            cx.propagate();
+        }
+    }
+
+    fn is_expanded(&self, dir: &Path, cx: &App) -> bool {
+        self.core
+            .read(cx)
+            .tree()
+            .is_some_and(|tree| tree.is_expanded(dir))
     }
 
     /// Where the new-entry name box goes: (list index, depth). It is the first
@@ -251,170 +431,58 @@ impl ExplorerPanel {
         if self.core.read(cx).tree()?.root() == dir.as_path() {
             return Some((0, 0));
         }
-        let ix = self.rows.iter().position(|row| &row.entry.path == dir)?;
+        let ix = self.row_ix(dir)?;
         Some((ix + 1, self.rows[ix].depth + 1))
     }
 
-    fn is_expanded(&self, dir: &Path, cx: &App) -> bool {
-        self.core
-            .read(cx)
-            .tree()
-            .is_some_and(|tree| tree.is_expanded(dir))
-    }
-
-    fn render_row(&self, ix: usize, window: &Window, cx: &mut Context<Self>) -> Stateful<Div> {
-        let row = &self.rows[ix];
-        let theme = cx.theme();
-        let entry = &row.entry;
-        let expanded = entry.kind == EntryKind::Dir && self.is_expanded(&entry.path, cx);
-        let selected = self.selected.as_ref() == Some(&entry.path);
-        let focused = self.focus_handle.contains_focused(window, cx);
-        let (icon, chevron) = match entry.kind {
-            EntryKind::Dir if expanded => (IconName::FolderOpen, Some(IconName::ChevronDown)),
-            EntryKind::Dir => (IconName::Folder, Some(IconName::ChevronRight)),
-            EntryKind::File => (IconName::File, None),
-            EntryKind::Symlink => (IconName::FileSymlink, None),
-        };
-        let text = if entry.ignored {
-            theme.muted_foreground
-        } else {
-            theme.foreground
-        };
-        let icon_size = Size::Size(fixed::TREE_ICON_SIZE);
-
-        h_flex()
-            .id(ix)
-            .h(fixed::TREE_ROW_HEIGHT)
-            .w_full()
-            .pl(fixed::TREE_PADDING + fixed::TREE_INDENT * row.depth as f32)
-            .pr(fixed::TREE_PADDING)
-            .gap(fixed::TREE_ITEM_GAP)
-            .text_sm()
-            .text_color(text)
-            .when(selected, |this| {
-                this.bg(theme.list_active).when(focused, |this| {
-                    this.border_1().border_color(theme.list_active_border)
-                })
-            })
-            .when(!selected, |this| {
-                this.hover(|style| style.bg(theme.list_hover))
-            })
-            .child(div().flex_none().size(fixed::TREE_ICON_SIZE).when_some(
-                chevron,
-                |this, chevron| {
-                    this.child(
-                        Icon::new(chevron)
-                            .with_size(icon_size)
-                            .text_color(theme.muted_foreground),
-                    )
-                },
-            ))
-            .child(
-                Icon::new(icon)
-                    .with_size(icon_size)
-                    .flex_none()
-                    .text_color(theme.muted_foreground),
-            )
-            .map(|this| match &self.edit {
-                Some(edit) if matches!(&edit.kind, EditKind::Rename { path } if *path == entry.path) => {
-                    this.child(Input::new(&edit.input).xsmall().flex_1())
-                }
-                _ => this.child(div().min_w_0().truncate().child(entry.name.clone())),
-            })
-            .on_click(cx.listener(move |this, _, window, cx| this.click_row(ix, window, cx)))
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |this, _, window, cx| {
-                    this.row_right_clicked = true;
-                    this.select(ix, cx);
-                    window.focus(&this.focus_handle, cx);
-                }),
-            )
-    }
-
-    /// The name box row for a new entry, indented like the entries it joins.
-    fn render_new_row(&self, depth: usize, cx: &mut Context<Self>) -> Stateful<Div> {
-        let folder = matches!(
-            self.edit.as_ref().map(|edit| &edit.kind),
-            Some(EditKind::New { folder: true, .. })
-        );
-        let icon = if folder {
-            IconName::Folder
-        } else {
-            IconName::File
-        };
-        let mut row = h_flex()
-            .id("explorer-new-entry")
-            .h(fixed::TREE_ROW_HEIGHT)
-            .w_full()
-            .pl(fixed::TREE_PADDING + fixed::TREE_INDENT * depth as f32)
-            .pr(fixed::TREE_PADDING)
-            .gap(fixed::TREE_ITEM_GAP)
-            .text_sm()
-            .child(div().flex_none().size(fixed::TREE_ICON_SIZE))
-            .child(
-                Icon::new(icon)
-                    .with_size(Size::Size(fixed::TREE_ICON_SIZE))
-                    .flex_none()
-                    .text_color(cx.theme().muted_foreground),
-            );
-        if let Some(edit) = &self.edit {
-            row = row.child(Input::new(&edit.input).xsmall().flex_1());
-        }
-        row
-    }
-
     fn render_tree(&self, name: SharedString, cx: &mut Context<Self>) -> impl IntoElement {
-        let header =
+        let header = h_flex()
+            .flex_none()
+            .h(fixed::TREE_ROW_HEIGHT)
+            .px(fixed::TREE_PADDING)
+            .justify_between()
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .text_xs()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(name),
+            )
+            // Buttons call methods directly: a dispatched action would start
+            // at the focused element, which may be outside the Explorer.
+            .child(
+                h_flex()
+                    .flex_none()
+                    .child(header_button(
+                        "explorer-new-file",
+                        IconName::FilePlus,
+                        "New File...",
+                        cx.listener(|this, _, window, cx| this.start_new(false, window, cx)),
+                    ))
+                    .child(header_button(
+                        "explorer-new-folder",
+                        IconName::FolderPlus,
+                        "New Folder...",
+                        cx.listener(|this, _, window, cx| this.start_new(true, window, cx)),
+                    ))
+                    .child(header_button(
+                        "explorer-collapse-all",
+                        IconName::ChevronsDownUp,
+                        "Collapse Folders",
+                        cx.listener(|this, _, window, cx| {
+                            this.collapse_all(&CollapseAll, window, cx)
+                        }),
+                    )),
+            );
+
+        let filter_bar = self.filter.as_ref().map(|filter| {
             h_flex()
                 .flex_none()
                 .h(fixed::TREE_ROW_HEIGHT)
                 .px(fixed::TREE_PADDING)
-                .justify_between()
-                .child(
-                    div()
-                        .min_w_0()
-                        .truncate()
-                        .text_xs()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(name),
-                )
-                .child(
-                    h_flex()
-                        .flex_none()
-                        .child(
-                            Button::new("explorer-new-file")
-                                .ghost()
-                                .xsmall()
-                                .icon(IconName::FilePlus)
-                                .tooltip("New File...")
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.start_new(false, window, cx)
-                                })),
-                        )
-                        .child(
-                            Button::new("explorer-new-folder")
-                                .ghost()
-                                .xsmall()
-                                .icon(IconName::FolderPlus)
-                                .tooltip("New Folder...")
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.start_new(true, window, cx)
-                                })),
-                        )
-                        // Called directly: a dispatched action would start at the
-                        // focused element, which may be outside the Explorer.
-                        .child(
-                            Button::new("explorer-collapse-all")
-                                .ghost()
-                                .xsmall()
-                                .icon(IconName::ChevronsDownUp)
-                                .tooltip("Collapse Folders")
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.collapse_all(&CollapseAll, window, cx)
-                                })),
-                        ),
-                );
+                .child(Input::new(&filter.input).xsmall().flex_1())
+        });
 
         let slot = self.new_slot(cx);
         let count = self.rows.len() + usize::from(slot.is_some());
@@ -435,32 +503,66 @@ impl ExplorerPanel {
         .size_full();
 
         let explorer = cx.entity().downgrade();
-        v_flex().size_full().child(header).child(
-            div()
-                .id("explorer-list")
-                .flex_1()
-                .min_h_0()
-                .child(list)
-                .vertical_scrollbar(&self.scroll)
-                // Right-click on empty space: the menu acts on the workspace root.
-                .on_mouse_down(
-                    MouseButton::Right,
-                    cx.listener(|this, _, window, cx| {
-                        if !std::mem::take(&mut this.row_right_clicked) {
-                            this.selected = None;
-                            cx.notify();
-                        }
-                        window.focus(&this.focus_handle, cx);
+        v_flex()
+            .size_full()
+            .child(header)
+            .children(filter_bar)
+            .child(
+                div()
+                    .id("explorer-list")
+                    .flex_1()
+                    .min_h_0()
+                    .child(list)
+                    .vertical_scrollbar(&self.scroll)
+                    // Dropping on empty space moves (or copies) into the root. No
+                    // highlight here: it would light up the whole list under a row.
+                    .on_drop(
+                        cx.listener(|this, drag: &rows::DraggedEntries, window, cx| {
+                            this.drop_on(None, drag.paths.clone(), false, window, cx)
+                        }),
+                    )
+                    .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
+                        this.drop_on(None, paths.paths().to_vec(), true, window, cx)
+                    }))
+                    // Right-click on empty space: the menu acts on the workspace root.
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(|this, _, window, cx| {
+                            if !std::mem::take(&mut this.row_right_clicked) {
+                                this.selected = None;
+                                this.marked.clear();
+                                cx.notify();
+                            }
+                            window.focus(&this.focus_handle, cx);
+                        }),
+                    )
+                    .context_menu(move |menu, _, cx| {
+                        let state = explorer.upgrade().map(|explorer| {
+                            let explorer = explorer.read(cx);
+                            MenuState {
+                                selected: explorer.selection().len(),
+                                can_paste: explorer.clipboard.is_some(),
+                                can_undo: explorer.core.read(cx).can_undo_file_op(),
+                            }
+                        });
+                        context_menu(menu, state.unwrap_or_default())
                     }),
-                )
-                .context_menu(move |menu, _, cx| {
-                    let has_entry = explorer
-                        .upgrade()
-                        .is_some_and(|explorer| explorer.read(cx).selected.is_some());
-                    context_menu(menu, has_entry)
-                }),
-        )
+            )
     }
+}
+
+fn header_button(
+    id: &'static str,
+    icon: IconName,
+    tooltip: &'static str,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> Button {
+    Button::new(id)
+        .ghost()
+        .xsmall()
+        .icon(icon)
+        .tooltip(tooltip)
+        .on_click(on_click)
 }
 
 /// Lets saved layouts recreate the Explorer; binds its keys.
@@ -468,12 +570,19 @@ pub fn register(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("up", SelectPrev, Some(KEY_CONTEXT)),
         KeyBinding::new("down", SelectNext, Some(KEY_CONTEXT)),
+        KeyBinding::new("shift-up", ExtendPrev, Some(KEY_CONTEXT)),
+        KeyBinding::new("shift-down", ExtendNext, Some(KEY_CONTEXT)),
+        KeyBinding::new("secondary-a", SelectAll, Some(KEY_CONTEXT)),
         KeyBinding::new("right", ExpandOrNext, Some(KEY_CONTEXT)),
         KeyBinding::new("left", CollapseOrParent, Some(KEY_CONTEXT)),
         KeyBinding::new("enter", OpenSelected, Some(KEY_CONTEXT)),
         KeyBinding::new("escape", CancelEdit, Some(KEY_CONTEXT)),
         KeyBinding::new("f2", Rename, Some(KEY_CONTEXT)),
         KeyBinding::new("delete", Delete, Some(KEY_CONTEXT)),
+        KeyBinding::new("secondary-c", CopyFiles, Some(KEY_CONTEXT)),
+        KeyBinding::new("secondary-x", CutFiles, Some(KEY_CONTEXT)),
+        KeyBinding::new("secondary-v", PasteFiles, Some(KEY_CONTEXT)),
+        KeyBinding::new("secondary-z", UndoFileOp, Some(KEY_CONTEXT)),
         // VS Code's keys for these.
         KeyBinding::new("shift-alt-c", CopyPath, Some(KEY_CONTEXT)),
         KeyBinding::new("secondary-shift-alt-c", CopyRelativePath, Some(KEY_CONTEXT)),
@@ -484,13 +593,33 @@ pub fn register(cx: &mut App) {
     });
 }
 
-/// Right-click menu; `has_entry` is false on empty space (acts on the root).
-fn context_menu(menu: PopupMenu, has_entry: bool) -> PopupMenu {
+/// What the right-click menu can offer.
+#[derive(Clone, Copy, Default)]
+struct MenuState {
+    /// Selected entries (0 on empty space: the menu acts on the root).
+    selected: usize,
+    can_paste: bool,
+    can_undo: bool,
+}
+
+fn context_menu(menu: PopupMenu, state: MenuState) -> PopupMenu {
+    let none = state.selected == 0;
+    let many = state.selected > 1;
+    let delete = if many {
+        format!("Delete {} Items", state.selected)
+    } else {
+        "Delete".to_string()
+    };
     menu.menu("New File...", Box::new(NewFile))
         .menu("New Folder...", Box::new(NewFolder))
         .separator()
-        .menu_with_disabled("Rename", Box::new(Rename), !has_entry)
-        .menu_with_disabled("Delete", Box::new(Delete), !has_entry)
+        .menu_with_disabled("Cut", Box::new(CutFiles), none)
+        .menu_with_disabled("Copy", Box::new(CopyFiles), none)
+        .menu_with_disabled("Paste", Box::new(PasteFiles), !state.can_paste)
+        .separator()
+        .menu_with_disabled("Rename", Box::new(Rename), none || many)
+        .menu_with_disabled(delete, Box::new(Delete), none)
+        .menu_with_disabled("Undo", Box::new(UndoFileOp), !state.can_undo)
         .separator()
         .menu("Copy Path", Box::new(CopyPath))
         .menu("Copy Relative Path", Box::new(CopyRelativePath))
@@ -528,20 +657,28 @@ impl Render for ExplorerPanel {
         let body = v_flex()
             .track_focus(&self.focus_handle)
             .key_context(KEY_CONTEXT)
+            .on_key_down(cx.listener(Self::type_to_filter))
             .on_action(cx.listener(Self::select_prev))
             .on_action(cx.listener(Self::select_next))
+            .on_action(cx.listener(Self::extend_prev))
+            .on_action(cx.listener(Self::extend_next))
+            .on_action(cx.listener(Self::select_all))
             .on_action(cx.listener(Self::expand_or_next))
             .on_action(cx.listener(Self::collapse_or_parent))
             .on_action(cx.listener(Self::open_selected))
             .on_action(cx.listener(Self::collapse_all))
+            .on_action(cx.listener(Self::cancel))
             .on_action(cx.listener(Self::new_file))
             .on_action(cx.listener(Self::new_folder))
             .on_action(cx.listener(Self::rename))
             .on_action(cx.listener(Self::delete))
+            .on_action(cx.listener(Self::copy_files))
+            .on_action(cx.listener(Self::cut_files))
+            .on_action(cx.listener(Self::paste_files))
+            .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::copy_path))
             .on_action(cx.listener(Self::copy_relative_path))
             .on_action(cx.listener(Self::reveal))
-            .on_action(cx.listener(Self::cancel_edit))
             .size_full();
 
         let Some(workspace) = self.core.read(cx).workspace() else {

@@ -77,8 +77,11 @@ pub fn list_dir(dir: &Path) -> Result<Vec<FileEntry>> {
 /// One visible line of the explorer: an entry and how deep it is (root children = 0).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Row {
+    /// The entry the row stands for (for a compact chain, the deepest folder).
     pub entry: FileEntry,
     pub depth: usize,
+    /// Shown name: the entry's name, or `a/b/c` for a compact folder chain.
+    pub label: String,
 }
 
 /// The explorer's tree: folders load when they expand (lazy), and the visible
@@ -86,11 +89,16 @@ pub struct Row {
 ///
 /// Loaded folders are the root plus every folder in `expanded`. Collapsing a
 /// folder keeps its expanded descendants, so they open again with it.
+///
+/// Compact folders (on by default, like VS Code): an open folder whose only
+/// entry is a folder shares one row with it (`src/main/java`), and opening a
+/// folder opens such a chain all the way down.
 #[derive(Debug)]
 pub struct FileTree {
     root: PathBuf,
     expanded: HashSet<PathBuf>,
     children: HashMap<PathBuf, Vec<FileEntry>>,
+    compact: bool,
 }
 
 impl FileTree {
@@ -104,7 +112,12 @@ impl FileTree {
             root,
             expanded: HashSet::new(),
             children,
+            compact: true,
         })
+    }
+
+    pub fn set_compact(&mut self, compact: bool) {
+        self.compact = compact;
     }
 
     pub fn root(&self) -> &Path {
@@ -134,7 +147,20 @@ impl FileTree {
             self.children.insert(dir.to_path_buf(), listing);
         }
         self.expanded.insert(dir.to_path_buf());
+        if self.compact
+            && let Some(only) = self.only_subfolder(dir)
+        {
+            return self.expand(&only);
+        }
         Ok(())
+    }
+
+    /// The single entry of a loaded folder, if that entry is a folder.
+    fn only_subfolder(&self, dir: &Path) -> Option<PathBuf> {
+        match self.children.get(dir)?.as_slice() {
+            [only] if only.kind == EntryKind::Dir => Some(only.path.clone()),
+            _ => None,
+        }
     }
 
     pub fn collapse(&mut self, dir: &Path) {
@@ -214,9 +240,23 @@ impl FileTree {
             return;
         };
         for entry in entries {
+            let mut entry = entry;
+            let mut label = entry.name.clone();
+            // Compact chain: while this folder is open and holds only a folder,
+            // that folder joins the row.
+            while self.compact
+                && entry.kind == EntryKind::Dir
+                && self.expanded.contains(&entry.path)
+                && let Some([only]) = self.children.get(&entry.path).map(Vec::as_slice)
+                && only.kind == EntryKind::Dir
+            {
+                label = format!("{label}/{}", only.name);
+                entry = only;
+            }
             rows.push(Row {
                 entry: entry.clone(),
                 depth,
+                label,
             });
             if entry.kind == EntryKind::Dir && self.expanded.contains(&entry.path) {
                 self.push_rows(&entry.path, depth + 1, rows);

@@ -9,8 +9,11 @@ mod buffer;
 mod error;
 mod file_ops;
 mod file_tree;
+mod git_status;
+mod history;
 mod id;
 mod jobs;
+mod marks;
 mod terminal;
 mod vcs;
 mod watcher;
@@ -21,9 +24,14 @@ use std::path::{Path, PathBuf};
 pub use agent::{AgentSession, AgentSessionId, AgentStatus, AgentStore, Message, Role};
 pub use buffer::{Buffer, BufferId, BufferStore, LineEnding};
 pub use error::{CoreError, Result};
-pub use file_ops::{create_file, create_folder, move_to_trash, rename, validate_name};
+pub use file_ops::{
+    copy_into, create_file, create_folder, move_into, move_to_trash, rename, validate_name,
+};
 pub use file_tree::{EntryKind, FileEntry, FileTree, Row, list_dir};
+pub use git_status::{GitStatus, GitStatusMap, git_status};
+pub use history::{FileOp, HISTORY_LIMIT};
 pub use jobs::{Job, JobId, JobStatus, JobStore};
+pub use marks::{Mark, Marks};
 pub use ropey::Rope;
 pub use terminal::{Terminal, TerminalEvent, TerminalId, TerminalSpec, TerminalStore};
 pub use vcs::{Branch, current_branch};
@@ -40,6 +48,13 @@ pub struct Core {
     watch_error: Option<String>,
     /// The buffer the user opened last (the editor shows it).
     active_buffer: Option<BufferId>,
+    /// Git state of changed files (explorer colors and letters); set from a
+    /// background `git_status` run.
+    git: Option<GitStatusMap>,
+    /// Problem and agent-edit markers (explorer badges).
+    pub marks: Marks,
+    /// Undo stack of file operations, newest last.
+    history: Vec<FileOp>,
     pub buffers: BufferStore,
     pub terminals: TerminalStore,
     pub agents: AgentStore,
@@ -60,6 +75,9 @@ impl Core {
             Ok(watcher) => (Some(watcher), None),
             Err(err) => (None, Some(err.to_string())),
         };
+        self.git = None;
+        self.marks.clear();
+        self.history.clear();
         Ok(self.workspace.insert(workspace))
     }
 
@@ -75,6 +93,9 @@ impl Core {
         self.tree = None;
         self.watcher = None;
         self.watch_error = None;
+        self.git = None;
+        self.marks.clear();
+        self.history.clear();
     }
 
     pub fn workspace(&self) -> Option<&Workspace> {
@@ -137,6 +158,7 @@ impl Core {
     pub fn create_file(&mut self, dir: impl AsRef<Path>, name: &str) -> Result<PathBuf> {
         let dir = self.resolve(dir)?;
         let path = create_file(&dir, name)?;
+        self.record(FileOp::Created(path.clone()));
         self.show_in_tree(&dir)?;
         Ok(path)
     }
@@ -145,6 +167,7 @@ impl Core {
     pub fn create_dir(&mut self, dir: impl AsRef<Path>, name: &str) -> Result<PathBuf> {
         let dir = self.resolve(dir)?;
         let path = create_folder(&dir, name)?;
+        self.record(FileOp::Created(path.clone()));
         self.show_in_tree(&dir)?;
         Ok(path)
     }
@@ -153,9 +176,122 @@ impl Core {
     pub fn rename(&mut self, path: impl AsRef<Path>, new_name: &str) -> Result<PathBuf> {
         let path = self.resolve_entry(path)?;
         let new_path = rename(&path, new_name)?;
-        self.buffers.moved(&path, &new_path);
+        self.moved(&path, &new_path);
+        if new_path != path {
+            self.record(FileOp::Renamed {
+                from: path.clone(),
+                to: new_path.clone(),
+            });
+        }
         self.refresh_parent(&path)?;
         Ok(new_path)
+    }
+
+    /// Moves entries into workspace folder `dir` (drag and drop, cut + paste);
+    /// returns the new paths. Open buffers and markers follow.
+    pub fn move_entries(
+        &mut self,
+        paths: &[PathBuf],
+        dir: impl AsRef<Path>,
+    ) -> Result<Vec<PathBuf>> {
+        let dir = self.resolve(dir)?;
+        let paths = paths
+            .iter()
+            .map(|path| self.resolve_entry(path))
+            .collect::<Result<Vec<_>>>()?;
+        let moves = move_into(&paths, &dir)?;
+        for (from, to) in &moves {
+            self.moved(from, to);
+            self.refresh_parent(from)?;
+        }
+        self.show_in_tree(&dir)?;
+        let new_paths = moves.iter().map(|(_, to)| to.clone()).collect();
+        if !moves.is_empty() {
+            self.record(FileOp::Moved(moves));
+        }
+        Ok(new_paths)
+    }
+
+    /// Copies entries (from the workspace, or from outside it: files dropped
+    /// from the OS) into workspace folder `dir`; returns the new paths.
+    pub fn copy_entries(
+        &mut self,
+        paths: &[PathBuf],
+        dir: impl AsRef<Path>,
+    ) -> Result<Vec<PathBuf>> {
+        let dir = self.resolve(dir)?;
+        let copies = copy_into(paths, &dir)?;
+        self.show_in_tree(&dir)?;
+        if !copies.is_empty() {
+            self.record(FileOp::Copied(copies.clone()));
+        }
+        Ok(copies)
+    }
+
+    /// Reverses the newest recorded file operation and returns what it was.
+    /// Created entries and copies go to the Recycle Bin / Trash (nothing is
+    /// lost); renames and moves go back where they came from.
+    pub fn undo_file_op(&mut self) -> Result<FileOp> {
+        let op = self.history.pop().ok_or(CoreError::NothingToUndo)?;
+        let fail = |err: CoreError| CoreError::Undo {
+            what: op.label(),
+            reason: err.to_string(),
+        };
+        match &op {
+            FileOp::Created(path) => self.trash(path).map_err(fail)?,
+            FileOp::Copied(paths) => {
+                for path in paths {
+                    self.trash(path).map_err(fail)?;
+                }
+            }
+            FileOp::Renamed { from, to } => self
+                .move_back(&[(from.clone(), to.clone())])
+                .map_err(fail)?,
+            FileOp::Moved(moves) => self.move_back(moves).map_err(fail)?,
+        }
+        Ok(op)
+    }
+
+    /// Whether `undo_file_op` has something to undo.
+    pub fn can_undo_file_op(&self) -> bool {
+        !self.history.is_empty()
+    }
+
+    /// Moves each `to` back to its `from` (newest first); refuses if a `from`
+    /// is taken again or a `to` is gone.
+    fn move_back(&mut self, moves: &[(PathBuf, PathBuf)]) -> Result<()> {
+        for (from, to) in moves.iter().rev() {
+            if from.symlink_metadata().is_ok() && !file_ops_same(from, to) {
+                return Err(CoreError::AlreadyExists(from.clone()));
+            }
+            std::fs::rename(to, from).map_err(|err| CoreError::io(to, err))?;
+            self.moved(to, from);
+            self.refresh_parent(to)?;
+            self.refresh_parent(from)?;
+        }
+        Ok(())
+    }
+
+    fn moved(&mut self, from: &Path, to: &Path) {
+        self.buffers.moved(from, to);
+        self.marks.moved(from, to);
+    }
+
+    fn record(&mut self, op: FileOp) {
+        self.history.push(op);
+        if self.history.len() > HISTORY_LIMIT {
+            self.history.remove(0);
+        }
+    }
+
+    /// Git state of the workspace, once a status run has finished.
+    pub fn git(&self) -> Option<&GitStatusMap> {
+        self.git.as_ref()
+    }
+
+    /// Stores a `git_status` result (computed off the UI thread).
+    pub fn set_git(&mut self, git: Option<GitStatusMap>) {
+        self.git = git;
     }
 
     /// Moves a workspace entry to the Recycle Bin / Trash. Open buffers stay
@@ -165,7 +301,14 @@ impl Core {
         move_to_trash(&path)?;
         self.refresh_parent(&path)
     }
+}
 
+/// Same entry under two spellings (a case-only rename on Windows).
+fn file_ops_same(a: &Path, b: &Path) -> bool {
+    matches!((dunce::canonicalize(a), dunce::canonicalize(b)), (Ok(a), Ok(b)) if a == b)
+}
+
+impl Core {
     fn resolve(&self, path: impl AsRef<Path>) -> Result<PathBuf> {
         self.workspace
             .as_ref()

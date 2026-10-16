@@ -5,7 +5,7 @@ fn names(core: &Core) -> Vec<String> {
         .unwrap()
         .visible_rows()
         .into_iter()
-        .map(|Row { entry, depth }| format!("{}@{depth}", entry.name))
+        .map(|Row { entry, depth, .. }| format!("{}@{depth}", entry.name))
         .collect()
 }
 

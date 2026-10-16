@@ -36,6 +36,14 @@ pub enum CoreError {
     Trash(String),
     #[error("cannot rename or delete the workspace folder itself")]
     WorkspaceRoot,
+    #[error("cannot move or copy a folder into itself: {0}")]
+    IntoItself(PathBuf),
+    #[error("git: {0}")]
+    Git(String),
+    #[error("cannot undo {what}: {reason}")]
+    Undo { what: String, reason: String },
+    #[error("nothing to undo")]
+    NothingToUndo,
 }
 
 impl CoreError {

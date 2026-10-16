@@ -7,7 +7,7 @@ use carbon_core::{Core, CoreError, FileTree, FsChanges, Row};
 fn rows(tree: &FileTree) -> Vec<String> {
     tree.visible_rows()
         .iter()
-        .map(|Row { entry, depth }| format!("{}@{depth}", entry.name))
+        .map(|Row { entry, depth, .. }| format!("{}@{depth}", entry.name))
         .collect()
 }
 
@@ -78,6 +78,7 @@ fn refresh_picks_up_new_and_removed_entries() {
     let changes = FsChanges {
         dirs: vec![root.join("a/b"), root.clone(), root.join("a")],
         rescan: false,
+        git: false,
     };
     assert!(core.apply_fs_changes(&changes).unwrap());
 
@@ -100,6 +101,7 @@ fn rescan_refreshes_every_loaded_folder() {
     let rescan = FsChanges {
         dirs: Vec::new(),
         rescan: true,
+        git: false,
     };
     assert!(core.apply_fs_changes(&rescan).unwrap());
     assert!(rows(core.tree().unwrap()).contains(&"later.txt@1".to_string()));
@@ -120,6 +122,8 @@ fn entries_inside_an_ignored_folder_are_ignored() {
     core.open_workspace(dir.path()).unwrap();
     let root = core.tree().unwrap().root().to_path_buf();
     let tree = core.tree_mut().unwrap();
+    // One row per folder here; compact chains have their own test.
+    tree.set_compact(false);
     tree.expand(&root.join("target")).unwrap();
     tree.expand(&root.join("target/debug")).unwrap();
     let ignored: Vec<(String, bool)> = tree
