@@ -17,7 +17,7 @@ use carbon_core::{Core, EntryKind, Row};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::dock::{BasePanel, Panel, PanelEvent, panel_handle, register_panel};
-use gpui_kit::component::input::Input;
+use gpui_kit::component::input::{self as input, Input};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
 use gpui_kit::component::{
     ActiveTheme, Sizable, WindowExt, h_flex, scroll::ScrollableElement, v_flex,
@@ -655,32 +655,47 @@ impl Panel for ExplorerPanel {
 impl Render for ExplorerPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
-        let body = v_flex()
-            .track_focus(&self.focus_handle)
-            .key_context(KEY_CONTEXT)
-            .on_key_down(cx.listener(Self::type_to_filter))
-            .on_action(cx.listener(Self::select_prev))
-            .on_action(cx.listener(Self::select_next))
-            .on_action(cx.listener(Self::extend_prev))
-            .on_action(cx.listener(Self::extend_next))
-            .on_action(cx.listener(Self::select_all))
-            .on_action(cx.listener(Self::expand_or_next))
-            .on_action(cx.listener(Self::collapse_or_parent))
-            .on_action(cx.listener(Self::open_selected))
-            .on_action(cx.listener(Self::collapse_all))
-            .on_action(cx.listener(Self::cancel))
-            .on_action(cx.listener(Self::new_file))
-            .on_action(cx.listener(Self::new_folder))
-            .on_action(cx.listener(Self::rename))
-            .on_action(cx.listener(Self::delete))
-            .on_action(cx.listener(Self::copy_files))
-            .on_action(cx.listener(Self::cut_files))
-            .on_action(cx.listener(Self::paste_files))
-            .on_action(cx.listener(Self::undo))
-            .on_action(cx.listener(Self::copy_path))
-            .on_action(cx.listener(Self::copy_relative_path))
-            .on_action(cx.listener(Self::reveal))
-            .size_full();
+        let body =
+            v_flex()
+                .track_focus(&self.focus_handle)
+                .key_context(KEY_CONTEXT)
+                .on_key_down(cx.listener(Self::type_to_filter))
+                .on_action(cx.listener(Self::select_prev))
+                .on_action(cx.listener(Self::select_next))
+                .on_action(cx.listener(Self::extend_prev))
+                .on_action(cx.listener(Self::extend_next))
+                .on_action(cx.listener(Self::select_all))
+                .on_action(cx.listener(Self::expand_or_next))
+                .on_action(cx.listener(Self::collapse_or_parent))
+                .on_action(cx.listener(Self::open_selected))
+                .on_action(cx.listener(Self::collapse_all))
+                .on_action(cx.listener(Self::cancel))
+                .on_action(cx.listener(Self::new_file))
+                .on_action(cx.listener(Self::new_folder))
+                .on_action(cx.listener(Self::rename))
+                .on_action(cx.listener(Self::delete))
+                .on_action(cx.listener(Self::copy_files))
+                .on_action(cx.listener(Self::cut_files))
+                .on_action(cx.listener(Self::paste_files))
+                .on_action(cx.listener(Self::undo))
+                // Edit menu items act on files here (text inputs inside handle
+                // them first).
+                .on_action(cx.listener(|this, _: &input::Cut, window, cx| {
+                    this.cut_files(&CutFiles, window, cx)
+                }))
+                .on_action(cx.listener(|this, _: &input::Copy, window, cx| {
+                    this.copy_files(&CopyFiles, window, cx)
+                }))
+                .on_action(cx.listener(|this, _: &input::Paste, window, cx| {
+                    this.paste_files(&PasteFiles, window, cx)
+                }))
+                .on_action(cx.listener(|this, _: &input::Undo, window, cx| {
+                    this.undo(&UndoFileOp, window, cx)
+                }))
+                .on_action(cx.listener(Self::copy_path))
+                .on_action(cx.listener(Self::copy_relative_path))
+                .on_action(cx.listener(Self::reveal))
+                .size_full();
 
         let Some(workspace) = self.core.read(cx).workspace() else {
             return body

@@ -14,8 +14,8 @@ Built 2026-10-16. User decisions: classic menu row (not hamburger), custom title
 
 | Menu | Items | Works |
 |---|---|---|
-| File | Open Folder... (Ctrl+K Ctrl+O), Create Folder..., Close Folder, New File, Save, Exit | Folder items (`workspace-folders.md`) and Exit (Ctrl+Q / Cmd+Q); New File, Save are placeholders |
-| Edit | Undo, Redo, Cut, Copy, Paste | None (placeholders) |
+| File | Open Folder... (Ctrl+K Ctrl+O), Create Folder..., Close Folder, New File (Ctrl+N), Save (Ctrl+S), Exit (Ctrl+Q) | All work: folder items (`workspace-folders.md`); New File, Save and Exit (asks about unsaved files) in `code-editor.md` |
+| Edit | Undo, Redo, Cut, Copy, Paste | The kit's text actions: act on the focused editor or text box; in the Explorer, on files (2026-10-17) |
 | View | Command Palette; Section submenu; dock toggles; auto-hide toggles; Layout submenu; Panel submenu | All except Command Palette (see `section-bar.md`, `panel-layout.md` s8) |
 | Help | About | None |
 

@@ -138,3 +138,34 @@ fn close_buffer_refuses_unsaved_and_clears_active() {
     assert!(core.active_buffer().is_none());
     assert!(core.buffers.get(id).is_none());
 }
+
+#[test]
+fn untitled_buffer_saves_as_a_file() {
+    let (dir, mut core) = workspace(&[]);
+    let first = core.new_file();
+    let second = core.new_file();
+    assert_eq!(core.active_buffer().unwrap().id(), second);
+    assert_eq!(core.buffers.get(first).unwrap().name(), "Untitled-1");
+    assert_eq!(core.buffers.get(second).unwrap().name(), "Untitled-2");
+    assert!(core.dirty_buffers().is_empty());
+
+    core.buffers
+        .get_mut(first)
+        .unwrap()
+        .set_rope(Rope::from_str("hello\n"));
+    assert_eq!(core.dirty_buffers(), [first]);
+    assert!(matches!(core.save_buffer(first), Err(CoreError::NoPath)));
+
+    let path = dir.path().join("hello.txt");
+    core.save_buffer_as(first, &path).unwrap();
+    let buffer = core.buffers.get(first).unwrap();
+    assert_eq!(buffer.name(), "hello.txt");
+    assert_eq!(
+        buffer.path(),
+        Some(dunce::canonicalize(&path).unwrap().as_path())
+    );
+    assert!(core.dirty_buffers().is_empty());
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello\n");
+    // Opening the file now finds the same buffer.
+    assert_eq!(core.open_file("hello.txt").unwrap(), first);
+}

@@ -418,6 +418,37 @@ impl Core {
         Ok(())
     }
 
+    /// Saves a buffer to a new file (an untitled one, or Save As). The
+    /// buffer then is that file, in its language server too.
+    pub fn save_buffer_as(&mut self, id: BufferId, path: impl AsRef<Path>) -> Result<()> {
+        let buffer = self
+            .buffers
+            .get_mut(id)
+            .ok_or(CoreError::NotFound("buffer"))?;
+        buffer.save_as(path.as_ref())?;
+        self.lsp.close_document(id);
+        self.lsp_open_buffers();
+        Ok(())
+    }
+
+    /// A new untitled buffer, made the active one.
+    pub fn new_file(&mut self) -> BufferId {
+        let id = self.buffers.create_untitled();
+        self.active_buffer = Some(id);
+        id
+    }
+
+    /// Buffers with unsaved changes, oldest first.
+    pub fn dirty_buffers(&self) -> Vec<BufferId> {
+        let mut ids: Vec<BufferId> = self
+            .buffers
+            .ids()
+            .filter(|&id| self.buffers.get(id).is_some_and(Buffer::is_dirty))
+            .collect();
+        ids.sort();
+        ids
+    }
+
     /// Opens a file outside the workspace (a language server's go to
     /// definition into a library, for example).
     pub fn open_any_file(&mut self, path: impl AsRef<Path>) -> Result<BufferId> {

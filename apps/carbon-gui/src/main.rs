@@ -4,6 +4,7 @@ mod explorer_panel;
 mod layouts;
 mod lsp_ops;
 mod menus;
+mod save_ops;
 mod section_bar;
 mod status_bar;
 mod style;
@@ -19,8 +20,8 @@ use editor_panel::{CloseEditor, SaveFile};
 use gpui_kit::component::{ActiveTheme, TitleBar, h_flex, v_flex};
 use gpui_kit::*;
 use menus::{
-    ApplyLayout, ApplyPreset, CloseFolder, CreateFolder, DeleteLayout, MovePanel, OpenFolder,
-    ResetLayout, ResizeDock, SaveLayoutAs, SwitchSection, ToggleAutoHide, ToggleDock,
+    ApplyLayout, ApplyPreset, CloseFolder, CreateFolder, DeleteLayout, MovePanel, NewFile,
+    OpenFolder, ResetLayout, ResizeDock, SaveLayoutAs, SwitchSection, ToggleAutoHide, ToggleDock,
 };
 use section_bar::SectionBar;
 use status_bar::CarbonStatusBar;
@@ -81,6 +82,8 @@ impl CarbonApp {
         let _focus_lost_sub = cx.on_focus_lost(window, |this, window, cx| {
             this.focus_handle.focus(window, cx)
         });
+        // Alt+F4, the taskbar: unsaved changes are asked about first.
+        window.on_window_should_close(cx, save_ops::can_close);
         let mut this = Self {
             title_bar,
             section_bar,
@@ -191,6 +194,7 @@ impl Render for CarbonApp {
             .on_action(cx.listener(|this, _: &CloseFolder, _, cx| {
                 workspace_ops::close_folder(&this.core, cx)
             }))
+            .on_action(|_: &NewFile, window, cx| editor_panel::new_file(window, cx))
             // Save / close with focus outside the editors act on the active one.
             .on_action(|action: &SaveFile, window, cx| {
                 if let Some(editor) = workbench::active_editor(cx) {

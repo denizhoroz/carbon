@@ -2,7 +2,10 @@
 //! The View > Layout part changes with saved layouts, so menus are rebuilt by `refresh`.
 
 use gpui_kit::component::GlobalState;
+use gpui_kit::component::input::{Copy, Cut, Paste, Redo, Undo};
 use gpui_kit::*;
+
+use crate::editor_panel::SaveFile;
 
 use crate::layouts::{MAX_SAVED, Preset, Side};
 use crate::section_bar::Section;
@@ -15,12 +18,6 @@ actions!(
         OpenFolder,
         CreateFolder,
         CloseFolder,
-        Save,
-        Undo,
-        Redo,
-        Cut,
-        Copy,
-        Paste,
         CommandPalette,
         About,
         Quit,
@@ -182,7 +179,7 @@ fn app_menus(state: &MenuState) -> Vec<Menu> {
             MenuItem::action("Close Folder", CloseFolder).disabled(!state.has_workspace),
             MenuItem::separator(),
             MenuItem::action("New File", NewFile),
-            MenuItem::action("Save", Save),
+            MenuItem::action("Save", SaveFile),
             MenuItem::separator(),
             MenuItem::action("Exit", Quit),
         ]),
@@ -218,12 +215,13 @@ fn app_menus(state: &MenuState) -> Vec<Menu> {
 /// Registers the quit action and all key bindings, and sets the initial menus.
 /// Call after `gpui_kit::init`.
 pub fn init(cx: &mut App) {
-    cx.on_action(|_: &Quit, cx| cx.quit());
+    cx.on_action(|_: &Quit, cx| crate::save_ops::quit(cx));
 
     // Dock toggles follow VS Code: Ctrl+B side bar, Ctrl+Alt+B secondary side bar, Ctrl+J panel.
     // Resize follows JetBrains: Ctrl+Alt+Shift+arrows. Move: Ctrl+K then an arrow.
     let mut bindings = vec![
         KeyBinding::new("secondary-q", Quit, None),
+        KeyBinding::new("secondary-n", NewFile, None),
         // VS Code: Ctrl+K Ctrl+O opens a folder.
         KeyBinding::new("secondary-k secondary-o", OpenFolder, None),
         KeyBinding::new("secondary-b", ToggleDock { side: Side::Left }, None),

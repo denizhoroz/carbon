@@ -44,6 +44,8 @@ impl LineEnding {
 pub struct Buffer {
     id: BufferId,
     path: Option<PathBuf>,
+    /// Number in the name of a buffer with no file ("Untitled-2").
+    untitled: u64,
     rope: Rope,
     line_ending: LineEnding,
     revision: u64,
@@ -61,6 +63,7 @@ impl Buffer {
         Self {
             id,
             path,
+            untitled: 0,
             rope: Rope::from_str(text),
             line_ending: LineEnding::detect(text),
             revision: 0,
@@ -83,6 +86,17 @@ impl Buffer {
 
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
+    }
+
+    /// What tabs and dialogs call it: the file name, or "Untitled-N".
+    pub fn name(&self) -> String {
+        match &self.path {
+            Some(path) => path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string()),
+            None => format!("Untitled-{}", self.untitled),
+        }
     }
 
     pub fn rope(&self) -> &Rope {
@@ -208,7 +222,8 @@ impl Buffer {
     pub fn save_as(&mut self, path: impl Into<PathBuf>) -> Result<()> {
         let path = path.into();
         self.write_to(&path)?;
-        self.path = Some(path);
+        // Stored canonical, like opened files (it exists now).
+        self.path = Some(dunce::canonicalize(&path).unwrap_or(path));
         Ok(())
     }
 
@@ -249,6 +264,8 @@ fn mtime(path: &Path) -> Option<SystemTime> {
 #[derive(Default)]
 pub struct BufferStore {
     next_id: u64,
+    /// Untitled buffers made so far, for their names.
+    untitled: u64,
     buffers: HashMap<BufferId, Buffer>,
 }
 
@@ -285,7 +302,10 @@ impl BufferStore {
     /// A new buffer with no file; save it with `save_as`.
     pub fn create_untitled(&mut self) -> BufferId {
         let id = self.next_id();
-        self.buffers.insert(id, Buffer::new(id, None, ""));
+        self.untitled += 1;
+        let mut buffer = Buffer::new(id, None, "");
+        buffer.untitled = self.untitled;
+        self.buffers.insert(id, buffer);
         id
     }
 

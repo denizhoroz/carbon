@@ -19,7 +19,7 @@ use gpui_kit::*;
 use serde::{Deserialize, Serialize};
 
 use carbon_core::BufferId;
-use gpui_kit::component::dock::{BasePanel, panel_handle};
+use gpui_kit::component::dock::panel_handle;
 
 use crate::editor_panel::EditorPanel;
 use crate::layouts::{LayoutStore, MAX_SAVED, Preset, SavedLayout, Side};
@@ -80,15 +80,27 @@ pub fn active_editor(cx: &App) -> Option<Entity<EditorPanel>> {
     Some(editor)
 }
 
-/// Removes a panel from the dock. Deferred: the caller is often the panel
-/// itself, which the dock then tells it was removed.
-pub fn close_panel<P: BasePanel>(panel: Entity<P>, window: &mut Window, cx: &mut App) {
+/// Closes an editor tab. The editor area's last tab is cleared to the empty
+/// editor instead, so the area never goes blank. Deferred: the caller is
+/// often the editor itself, which the dock then tells it was removed.
+pub fn close_editor(editor: Entity<EditorPanel>, window: &mut Window, cx: &mut App) {
     let Some(workbench) = current(cx) else {
         return;
     };
     window.defer(cx, move |window, cx| {
         let area = workbench.read(cx).area.clone();
-        area.update(cx, |area, cx| area.remove_panel(panel, window, cx));
+        let id = PanelId::from(editor.entity_id());
+        let center: Vec<PanelId> = area
+            .read(cx)
+            .layout(DockPlacement::Center)
+            .map(|tree| tree.panels().collect())
+            .unwrap_or_default();
+        if center == [id] {
+            editor.update(cx, |editor, cx| editor.clear(cx));
+            workbench.update(cx, |workbench, cx| workbench.schedule_save(cx));
+        } else {
+            area.update(cx, |area, cx| area.remove_panel(editor, window, cx));
+        }
     });
 }
 
@@ -202,7 +214,11 @@ impl Workbench {
         };
         self.area
             .update(cx, |area, cx| area.select_panel(panel, window, cx));
-        editor.update(cx, |editor, cx| editor.focus_editor(window, cx));
+        // Deferred: a menu that ran this (File > New File) gives focus back
+        // to where it was when it closes, after its action.
+        window.defer(cx, move |window, cx| {
+            editor.update(cx, |editor, cx| editor.focus_editor(window, cx))
+        });
         // A reused tab changes no layout node, but its saved file does.
         self.schedule_save(cx);
     }

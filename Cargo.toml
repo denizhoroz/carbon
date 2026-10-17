@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["apps/carbon-core", "apps/carbon-gui"]
+# Patched third-party crates: not ours to lint or format.
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -56,3 +58,8 @@ ttf-parser = { opt-level = 3 }
 
 [profile.release]
 strip = "symbols"
+
+# gpui-component 0.7.3 with small Carbon changes (list: vendor/gpui-component/CARBON-PATCHES.md).
+# gpui-kit pins this exact version; re-apply the patches when upgrading the kit.
+[patch.crates-io]
+gpui-component = { path = "vendor/gpui-component" }

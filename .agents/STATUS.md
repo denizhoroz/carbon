@@ -36,7 +36,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 - [x] Rust workspace scaffold (`apps/carbon-core` lib + `apps/carbon-gui` bin)
 - [x] In-process core: `apps/carbon-core` (`project/built/carbon-core.md`)
 - [ ] Daemon: workspace, buffers, terminals, LSP/DAP, agent sessions
-- [~] UI shell: `apps/carbon-gui` custom title bar (C logo, File/Edit/View/Help menu, window controls) on gpui-kit `=0.7.3`; only Exit/Ctrl+Q works, other items placeholders; builds and opens on Windows, macOS/Linux untested
+- [~] UI shell: `apps/carbon-gui` custom title bar (C logo, File/Edit/View/Help menu, window controls) on gpui-kit `=0.7.3`; File, Edit and View items work, Command Palette and About are placeholders; builds and opens on Windows, macOS/Linux untested
 - [x] GPUI Kit knowledge base written (`project/ui/ui-framework.md`)
 - [ ] CI for all three platforms
 
@@ -51,6 +51,7 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-17 | Vendor gpui-component 0.7.3 with Carbon patches (`vendor/gpui-component`, `[patch.crates-io]`): editor tabs always shown (also with one file), 30 px tabs, panel-handled tab close | user decision (editor tab bar must not change style; kit had only a dock-wide setting and fixed 32 px tabs) | `vendor/gpui-component/CARBON-PATCHES.md`, `project/built/code-editor.md` |
 | 2026-10-17 | Editor = gpui-kit `Editor` view + core buffer as source of truth (fork or own view later if the kit blocks); tier 1 = tabs/save, tree-sitter colours, speed gate, language servers | user decision after comparing VS Code, Zed, others | `documents/code-editor.md`, `project/built/code-editor.md` |
 | 2026-10-17 | Code folding and soft wrap off in the editor | measured: kit folding delays each keystroke ~25 ms, 12.6 s to open a 200k-line file, stack overflow on a big broken parse; wrap: 2.4 s open | `project/built/code-editor.md` |
 | 2026-10-17 | Language servers from a fixed table now; installable per-language packages later | user decision | `project/not_built/README.md` |
@@ -125,10 +126,18 @@ Template:
 | R-1 | Linux Vulkan/Wayland/NVIDIA issues for native GPU toolkits (webview risk closed by decision) | Medium | Open | Test early on Linux (spike S6) |
 | R-2 | AGPL/ELv2 licences of some candidate components | Medium | Open | Licence review before bundling (`PROJECT.md`) |
 | R-3 | Published latency/RAM comparisons conflict (2x-15x) | Low | Open | Run own benchmark |
-| R-4 | GPUI Kit breaks API almost every minor (0.6, 0.7); 0.7.2 yanked; accessibility "Partial"; no terminal or diagram canvas in the kit | High | Open | Pin exact version; update `gpui-kit` only; wrap kit widgets behind Carbon components; test a11y early |
+| R-4 | GPUI Kit breaks API almost every minor (0.6, 0.7); 0.7.2 yanked; accessibility "Partial"; no terminal or diagram canvas in the kit | High | Open | Pin exact version; update `gpui-kit` only; wrap kit widgets behind Carbon components; test a11y early. Since 2026-10-17 `gpui-component` is vendored with patches: re-apply `vendor/gpui-component/CARBON-PATCHES.md` on every kit upgrade |
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-17 (save and quit)
+- Done: quit asks about unsaved files (Exit, Ctrl+Q, window x, Alt+F4; Save All / Don't Save / Cancel); File > New File (Ctrl+N, untitled tabs) and File > Save wired, untitled files ask a path; Edit menu uses the kit's text actions (Explorer maps them to file copy/paste/undo); tab colours and language server follow Save As and renames. Fixed: menu focus restore stole focus from a newly opened tab. 58 tests pass + 3 ignored; click-tested.
+- Next: language packages; user's choice on LSP writes off the UI thread and the layout config folder; commit (user).
+
+### 2026-10-17 (editor tabs)
+- Done: vendored gpui-component 0.7.3 with 3 patches (always-tab panels, 30 px tabs, `request_close`); editor tabs keep the tab style with one file, x on every tab (unsaved asks), last tab clears to the empty editor, no extra content padding with several tabs. Click-tested; 57 tests pass + 3 ignored.
+- Next: as below (language packages, commit).
 
 ### 2026-10-17 (code editor tier 1)
 - Done: comparison of editor engines (`documents/code-editor.md`); core buffer sync (`set_rope`), disk reload/conflicts, LSP client (`lsp.rs`: stdio transport, store, UTF-16 positions); GUI editor tabs on the kit `Editor` (save, close dialog, restore, conflict bar, read-only outside folder), tree-sitter colours (13 grammars), rust-analyzer diagnostics/hover/completion/F12 + status bar item. Speed gate passed after turning folding and soft wrap off (big.rs 200k lines: open 52 ms, keys 2.5-9 ms). rust-analyzer installed with permission. 57 tests pass + 3 ignored. Click-tested.

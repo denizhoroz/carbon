@@ -47,6 +47,10 @@ impl Render for AppTitleBar {
         #[cfg(not(target_os = "macos"))]
         let row = row.child(self.menu_bar.clone());
 
-        TitleBar::new().child(row)
+        // The x asks about unsaved changes first (the kit's default just
+        // closes the window).
+        TitleBar::new()
+            .on_close_window(|_, window, cx| crate::save_ops::request_quit(window, cx))
+            .child(row)
     }
 }

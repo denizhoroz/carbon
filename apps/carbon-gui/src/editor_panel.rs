@@ -49,6 +49,9 @@ pub struct EditorPanel {
 struct Doc {
     buffer: BufferId,
     state: Entity<EditorState>,
+    /// The file the colours and language server are set up for; a Save As
+    /// or a rename changes it.
+    path: Option<PathBuf>,
     /// The buffer revision the editor's text matches.
     synced: u64,
     /// A file outside the folder: shown read-only.
@@ -81,9 +84,21 @@ impl EditorPanel {
     }
 
     /// Rebuilds a tab from a saved layout: opens its file again (or finds the
-    /// buffer still open, with its unsaved text).
-    fn restore(path: Option<PathBuf>, window: &mut Window, cx: &mut App) -> Entity<Self> {
+    /// buffer still open, with its unsaved text). An untitled tab's text is
+    /// gone after a restart, so its tab goes too.
+    fn restore(
+        path: Option<PathBuf>,
+        untitled: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Entity<Self> {
         let panel = Self::new(cx);
+        if untitled {
+            let stale = panel.clone();
+            window.defer(cx, move |window, cx| {
+                crate::workbench::close_editor(stale, window, cx)
+            });
+        }
         if let Some(path) = path {
             let core = current_core(cx);
             match core.update(cx, |core, _| core.open_file(&path)) {
@@ -94,7 +109,7 @@ impl EditorPanel {
                     eprintln!("not restoring editor tab {}: {err}", path.display());
                     let stale = panel.clone();
                     window.defer(cx, move |window, cx| {
-                        crate::workbench::close_panel(stale, window, cx)
+                        crate::workbench::close_editor(stale, window, cx)
                     });
                 }
             }
@@ -137,32 +152,80 @@ impl EditorPanel {
                 .folding(false)
         });
         state.update(cx, |state, cx| state.set_value(text, window, cx));
-        if let Some(path) = path.as_deref()
-            && core_lsp::server_config(path).is_some()
-        {
-            let hooks = lsp::LspHooks::new(self.core.clone(), id);
-            let uri = core_lsp::path_to_uri(path);
-            state.update(cx, |state, _| {
-                let lsp = state.lsp_mut();
-                lsp.completion_provider = Some(hooks.clone());
-                lsp.hover_provider = Some(hooks.clone());
-                lsp.definition_provider = Some(hooks);
-                lsp.show_document = Some(Rc::new(move |params, window, cx| {
-                    show_document(&uri, params, window, cx)
-                }));
-            });
-            crate::lsp_ops::ensure_started(&self.core, path, cx);
-        }
+        self.attach_language(&state, id, path.as_deref(), cx);
         let _events = cx.subscribe_in(&state, window, Self::on_editor_event);
         self.doc = Some(Doc {
             buffer: id,
             state,
+            path,
             synced: revision,
             readonly,
             diagnostics: 0,
             lsp_change: Task::ready(()),
             _events,
         });
+        cx.notify();
+    }
+
+    /// Language server hooks for the file's type, and its server started.
+    /// None for files no server handles.
+    fn attach_language(
+        &self,
+        state: &Entity<EditorState>,
+        id: BufferId,
+        path: Option<&Path>,
+        cx: &mut App,
+    ) {
+        let path = path.filter(|path| core_lsp::server_config(path).is_some());
+        let hooks = path.map(|_| lsp::LspHooks::new(self.core.clone(), id));
+        let uri = path.map(core_lsp::path_to_uri);
+        state.update(cx, |state, _| {
+            let lsp = state.lsp_mut();
+            lsp.completion_provider = hooks.clone().map(|hooks| hooks as _);
+            lsp.hover_provider = hooks.clone().map(|hooks| hooks as _);
+            lsp.definition_provider = hooks.map(|hooks| hooks as _);
+            lsp.show_document = uri.map(|uri| {
+                Rc::new(
+                    move |params: &lsp_types::ShowDocumentParams,
+                          window: &mut Window,
+                          cx: &mut App| {
+                        show_document(&uri, params, window, cx)
+                    },
+                ) as _
+            });
+        });
+        if let Some(path) = path {
+            crate::lsp_ops::ensure_started(&self.core, path, cx);
+        }
+    }
+
+    /// The buffer now has another file (Save As, or a rename in the
+    /// Explorer): colours and language server follow its type.
+    fn path_changed(&mut self, cx: &mut Context<Self>) {
+        let Some(doc) = &self.doc else {
+            return;
+        };
+        let (state, id, path) = (doc.state.clone(), doc.buffer, doc.path.clone());
+        let language = path
+            .as_deref()
+            .map(language::for_path)
+            .unwrap_or(language::PLAIN);
+        state.update(cx, |state, cx| state.set_highlighter(language, cx));
+        self.attach_language(&state, id, path.as_deref(), cx);
+    }
+
+    /// Back to the empty editor: closes the buffer (dropping unsaved text only
+    /// after "Don't Save").
+    pub fn clear(&mut self, cx: &mut Context<Self>) {
+        if let Some(id) = self.buffer() {
+            let force = std::mem::take(&mut self.discard);
+            self.core.update(cx, |core, cx| {
+                if core.close_buffer(id, force).is_ok() {
+                    cx.notify();
+                }
+            });
+        }
+        self.doc = None;
         cx.notify();
     }
 
@@ -238,7 +301,20 @@ impl EditorPanel {
             self.doc = None;
             return;
         };
-        if buffer.revision() != doc.synced {
+        let moved = buffer.path() != doc.path.as_deref();
+        if moved {
+            doc.path = buffer.path().map(Path::to_path_buf);
+        }
+        let revision = buffer.revision();
+        if moved {
+            // Not during render: this starts a language server.
+            cx.defer_in(window, |this, _, cx| this.path_changed(cx));
+        }
+        let core = self.core.read(cx);
+        let Some(buffer) = core.buffers.get(doc.buffer) else {
+            return;
+        };
+        if revision != doc.synced {
             let text = buffer.text();
             doc.synced = buffer.revision();
             doc.state.update(cx, |state, cx| {
@@ -294,51 +370,37 @@ impl EditorPanel {
     }
 
     fn name(&self, cx: &App) -> SharedString {
-        match (&self.doc, self.path(cx)) {
-            (None, _) => "Editor".into(),
-            (Some(_), Some(path)) => path
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_default()
-                .into(),
-            (Some(_), None) => "Untitled".into(),
-        }
+        self.doc
+            .as_ref()
+            .and_then(|doc| self.core.read(cx).buffers.get(doc.buffer))
+            .map(|buffer| buffer.name().into())
+            .unwrap_or_else(|| "Editor".into())
     }
 
+    /// Ctrl+S: saves the file; an untitled one asks where first.
     pub fn save(&mut self, _: &SaveFile, window: &mut Window, cx: &mut Context<Self>) {
-        if let Err(err) = self.save_now(cx) {
-            window.push_notification(format!("Cannot save: {err}"), cx);
+        if let Some(id) = self.buffer() {
+            crate::save_ops::save_buffers(vec![id], window, cx, |_, _, _| {});
         }
-    }
-
-    fn save_now(&mut self, cx: &mut Context<Self>) -> carbon_core::Result<()> {
-        let Some(id) = self.buffer() else {
-            return Ok(());
-        };
-        let result = self.core.update(cx, |core, cx| {
-            let result = core.save_buffer(id);
-            cx.notify();
-            result
-        });
-        cx.notify();
-        result
     }
 
     /// Ctrl+W: closes the tab, asking first when the file has unsaved changes.
     pub fn close(&mut self, _: &CloseEditor, window: &mut Window, cx: &mut Context<Self>) {
         let panel = cx.entity();
         if !self.is_dirty(cx) {
-            crate::workbench::close_panel(panel, window, cx);
+            crate::workbench::close_editor(panel, window, cx);
             return;
         }
         let name = self.name(cx);
+        let ids: Vec<BufferId> = self.buffer().into_iter().collect();
         let save_panel = panel.clone();
         let save = move |window: &mut Window, cx: &mut App| {
-            let saved = save_panel.update(cx, |panel, cx| panel.save_now(cx));
-            match saved {
-                Ok(()) => crate::workbench::close_panel(save_panel.clone(), window, cx),
-                Err(err) => window.push_notification(format!("Cannot save: {err}"), cx),
-            }
+            let panel = save_panel.clone();
+            crate::save_ops::save_buffers(ids.clone(), window, cx, move |saved, window, cx| {
+                if saved {
+                    crate::workbench::close_editor(panel, window, cx);
+                }
+            });
         };
         let save = std::rc::Rc::new(save);
         window.open_dialog(cx, move |dialog, _, cx| {
@@ -378,7 +440,7 @@ impl EditorPanel {
                                 .on_click(move |_, window, cx| {
                                     window.close_dialog(cx);
                                     discard_panel.update(cx, |panel, _| panel.discard = true);
-                                    crate::workbench::close_panel(
+                                    crate::workbench::close_editor(
                                         discard_panel.clone(),
                                         window,
                                         cx,
@@ -459,6 +521,17 @@ impl EditorPanel {
     }
 }
 
+/// File > New File (Ctrl+N): an untitled file in an editor tab.
+pub fn new_file(window: &mut Window, cx: &mut App) {
+    let core = current_core(cx);
+    let id = core.update(cx, |core, cx| {
+        let id = core.new_file();
+        cx.notify();
+        id
+    });
+    crate::workbench::open_buffer(id, window, cx);
+}
+
 /// Go to definition into another file: opens it in its tab (a library file
 /// outside the workspace too) and moves to the target. False for the file
 /// itself, which the kit editor handles.
@@ -509,11 +582,14 @@ pub fn register(cx: &mut App) {
         KeyBinding::new("f12", GoToDefinition, Some("Input")),
     ]);
     register_panel(cx, PANEL_NAME, |context, window, cx| {
-        let path = match context.info() {
-            PanelInfo::Panel(info) => info.get("path").and_then(|p| p.as_str()).map(PathBuf::from),
-            _ => None,
+        let (path, untitled) = match context.info() {
+            PanelInfo::Panel(info) => (
+                info.get("path").and_then(|p| p.as_str()).map(PathBuf::from),
+                info.get("untitled").is_some(),
+            ),
+            _ => (None, false),
         };
-        panel_handle(EditorPanel::restore(path, window, cx))
+        panel_handle(EditorPanel::restore(path, untitled, window, cx))
     });
 }
 
@@ -533,9 +609,10 @@ impl BasePanel for EditorPanel {
         PANEL_NAME
     }
 
-    /// A tab with unsaved changes has no close button; Ctrl+W asks first.
-    fn closable(&self, cx: &App) -> bool {
-        !self.is_dirty(cx)
+    /// The close button stays on unsaved tabs too: it asks first (see
+    /// `request_close`).
+    fn closable(&self, _: &App) -> bool {
+        true
     }
 
     fn set_active(&mut self, active: bool, _: &mut Window, cx: &mut Context<Self>) {
@@ -562,6 +639,8 @@ impl BasePanel for EditorPanel {
         let mut state = PanelState::new(PANEL_NAME);
         if let Some(path) = self.path(cx) {
             state.info = PanelInfo::panel(serde_json::json!({ "path": path }));
+        } else if self.doc.is_some() {
+            state.info = PanelInfo::panel(serde_json::json!({ "untitled": true }));
         }
         state
     }
@@ -571,6 +650,25 @@ impl Panel for EditorPanel {
     /// None: the tab strip then draws `title`, which has the unsaved dot.
     fn tab_name(&self, _: &App) -> Option<SharedString> {
         None
+    }
+
+    /// One open file looks like several: a tab with its close button
+    /// (vendored kit patch). The empty editor keeps the plain title.
+    fn always_tab_bar(&self, _: &App) -> bool {
+        self.doc.is_some()
+    }
+
+    /// Code sits right under the tabs, with one tab or several (the kit pads
+    /// only multi-tab groups by default).
+    fn inner_padding(&self, _: &App) -> bool {
+        false
+    }
+
+    /// The tab's x: same as Ctrl+W (asks about unsaved changes; the last
+    /// editor clears instead of closing).
+    fn request_close(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        self.close(&CloseEditor, window, cx);
+        true
     }
 
     fn title(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
