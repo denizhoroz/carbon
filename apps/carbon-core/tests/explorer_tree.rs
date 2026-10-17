@@ -79,6 +79,7 @@ fn refresh_picks_up_new_and_removed_entries() {
         dirs: vec![root.join("a/b"), root.clone(), root.join("a")],
         rescan: false,
         git: false,
+        ..Default::default()
     };
     assert!(core.apply_fs_changes(&changes).unwrap());
 
@@ -102,6 +103,7 @@ fn rescan_refreshes_every_loaded_folder() {
         dirs: Vec::new(),
         rescan: true,
         git: false,
+        ..Default::default()
     };
     assert!(core.apply_fs_changes(&rescan).unwrap());
     assert!(rows(core.tree().unwrap()).contains(&"later.txt@1".to_string()));

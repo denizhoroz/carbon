@@ -2,7 +2,7 @@
 
 Living tracker for Carbon. Update it at the end of each work session. Newest entries first in logs. Scope lives in `FEATURE.md`, decisions and open questions in `PROJECT.md`, evidence in `RESEARCH.md`.
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-17
 
 ## Current focus
 
@@ -25,7 +25,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 ### Pillars (implementation)
 | Pillar | State | Notes |
 |---|---|---|
-| 1 Code editor | [ ] | |
+| 1 Code editor | [~] | Tier 1 built: tabs, save, colours, rust-analyzer (`project/built/code-editor.md`) |
 | 2 Paradigm editor | [ ] | Needs research first |
 | 3 Agents tab | [ ] | |
 | 4 Multi-platform (Win/macOS/Linux) | [ ] | |
@@ -51,6 +51,9 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-17 | Editor = gpui-kit `Editor` view + core buffer as source of truth (fork or own view later if the kit blocks); tier 1 = tabs/save, tree-sitter colours, speed gate, language servers | user decision after comparing VS Code, Zed, others | `documents/code-editor.md`, `project/built/code-editor.md` |
+| 2026-10-17 | Code folding and soft wrap off in the editor | measured: kit folding delays each keystroke ~25 ms, 12.6 s to open a 200k-line file, stack overflow on a big broken parse; wrap: 2.4 s open | `project/built/code-editor.md` |
+| 2026-10-17 | Language servers from a fixed table now; installable per-language packages later | user decision | `project/not_built/README.md` |
 | 2026-10-17 | Git reads with gitoxide (`gix` 0.89, status only) for Explorer markers; problem/agent markers as API first; Explorer T3 extras: copy/cut/paste + undo, no file nesting | user decision | `project/built/file-tree.md`, FEATURE SC-06 |
 | 2026-10-16 | In-process `carbon-core` crate before real panels (option a); daemon later | keep panel state out of views; cheap now | `project/built/carbon-core.md`, `PROJECT.md` |
 | 2026-10-16 | Section Bar: left vertical bar switching sections, each with own layout; first section Code Editor | user decision | `project/built/section-bar.md`, `DESIGN.md` s4 |
@@ -103,6 +106,19 @@ Template:
 - Fix: import named items in test modules, not `super::*`
 - Prevention: comment in `apps/carbon-gui/src/style/theme.rs` tests
 
+### 2026-10-17 Editor crash: stack overflow on a background thread
+- Symptom: `thread '<unknown>' has overflowed its stack`, app exits
+- Context: 200k-line Rust file, letters typed at the start (parse error), then switching tabs; release build
+- Cause (verified by toggling): kit `extract_fold_ranges` (gpui-component `highlighter/input_adapter.rs`) recurses over the syntax tree; error recovery on a big broken file makes it deep
+- Fix: editor folding off (`EditorState::folding(false)`)
+- Prevention: comment in `editor_panel.rs`; folding stays off until fixed upstream or forked
+
+### 2026-10-17 Editor: menu Save did nothing; read-only ignored
+- Symptom: tab menu "Save" had no effect; std file opened read-only still accepted typing
+- Cause (verified): closing the popup leaves focus empty, so the action starts at the window root, above the panel handler; the kit `Editor` element applies its own `readonly` prop each render, overriding `EditorState::set_readonly`
+- Fix: Ctrl+S / Ctrl+W bound app-wide with root handlers acting on the active editor; pass `.readonly(..)` to the `Editor` element
+- Prevention: notes in `project/built/code-editor.md`
+
 ## Known issues and risks
 | ID | Issue | Severity | Status | Workaround / plan |
 |---|---|---|---|---|
@@ -113,6 +129,10 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-17 (code editor tier 1)
+- Done: comparison of editor engines (`documents/code-editor.md`); core buffer sync (`set_rope`), disk reload/conflicts, LSP client (`lsp.rs`: stdio transport, store, UTF-16 positions); GUI editor tabs on the kit `Editor` (save, close dialog, restore, conflict bar, read-only outside folder), tree-sitter colours (13 grammars), rust-analyzer diagnostics/hover/completion/F12 + status bar item. Speed gate passed after turning folding and soft wrap off (big.rs 200k lines: open 52 ms, keys 2.5-9 ms). rust-analyzer installed with permission. 57 tests pass + 3 ignored. Click-tested.
+- Next: installable language packages (user); commit; check Ctrl+S/Ctrl+W keys by hand; folding fix/fork; per-folder layouts.
 
 ### 2026-10-17 (file tree T3)
 - Done: core `git_status` (gitoxide), `marks`, `history` + `move_entries` / `copy_entries` / `undo_file_op`, compact folders in `FileTree`, watcher flags git-relevant changes; GUI split into `explorer_panel/{rows,filter,file_ops}.rs`: multi-select, drag and drop (rows + OS files), copy/cut/paste, undo, type to filter, markers; background git status (max 1/s). 48 tests pass + 2 ignored (Recycle Bin, run once). Click-tested except multi-select and modifier keys; fixed list-wide drop highlight.

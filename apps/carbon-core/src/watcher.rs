@@ -20,6 +20,9 @@ const DEBOUNCE: Duration = Duration::from_millis(100);
 pub struct FsChanges {
     /// Folders whose listing may differ (parents of created, removed or renamed entries).
     pub dirs: Vec<PathBuf>,
+    /// Entries that were created, changed, removed or renamed (outside `.git`);
+    /// open buffers of them may need a reload.
+    pub files: Vec<PathBuf>,
     /// Events were lost (the OS buffer overflowed); every loaded folder needs a refresh.
     pub rescan: bool,
     /// Something changed that git status may see: file content, or `.git`
@@ -77,11 +80,12 @@ fn debounce(
                 Err(mpsc::RecvTimeoutError::Disconnected) => return,
             }
         }
-        if batch.dirs.is_empty() && !batch.rescan && !batch.git {
+        if batch.dirs.is_empty() && batch.files.is_empty() && !batch.rescan && !batch.git {
             continue;
         }
         let batch = FsChanges {
             dirs: batch.dirs.into_iter().collect(),
+            files: batch.files.into_iter().collect(),
             rescan: batch.rescan,
             git: batch.git,
         };
@@ -94,6 +98,7 @@ fn debounce(
 #[derive(Default)]
 struct Batch {
     dirs: HashSet<PathBuf>,
+    files: HashSet<PathBuf>,
     rescan: bool,
     git: bool,
 }
@@ -136,6 +141,7 @@ impl Batch {
             if listing_changed && let Some(parent) = path.parent() {
                 self.dirs.insert(parent.to_path_buf());
             }
+            self.files.insert(path);
         }
     }
 }

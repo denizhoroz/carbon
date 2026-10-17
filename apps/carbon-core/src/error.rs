@@ -44,6 +44,8 @@ pub enum CoreError {
     Undo { what: String, reason: String },
     #[error("nothing to undo")]
     NothingToUndo,
+    #[error("language server {0}")]
+    Lsp(String),
 }
 
 impl CoreError {

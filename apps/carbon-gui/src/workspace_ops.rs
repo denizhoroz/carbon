@@ -62,7 +62,7 @@ pub fn open_folder(core: Entity<Core>, window: &mut Window, cx: &mut App) {
 const GIT_STATUS_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Applies the core's file system changes (the explorer tree re-lists the
-/// folders they name) and keeps the git status current, until the channel
+/// folders they name, open buffers follow their files) and keeps the git status current, until the channel
 /// closes with its watcher. Git status runs off the UI thread: once at the
 /// start, then after changes that may affect it, at most once per interval.
 pub fn apply_changes(
@@ -102,6 +102,12 @@ pub fn apply_changes(
                         Ok(false) => {}
                         Err(err) => eprintln!("explorer refresh failed: {err}"),
                     }
+                    // Editors reload clean buffers; dirty ones show a banner.
+                    let sync = core.sync_buffers_with_disk(batch);
+                    for (_, err) in &sync.failed {
+                        eprintln!("reload failed: {err}");
+                    }
+                    changed |= !sync.reloaded.is_empty() || !sync.conflicts.is_empty();
                 }
                 if changed {
                     cx.notify();

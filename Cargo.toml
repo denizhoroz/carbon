@@ -8,20 +8,38 @@ edition = "2024"
 
 [workspace.dependencies]
 # API breaks almost every minor: pin exact, upgrade deliberately (STATUS.md R-4).
-gpui-kit = "=0.7.3"
+gpui-kit = { version = "=0.7.3", features = [
+    # Editor syntax colours (one tree-sitter grammar per language, compiled as C).
+    "tree-sitter-rust",
+    "tree-sitter-toml",
+    "tree-sitter-markdown",
+    "tree-sitter-markdown-inline",
+    "tree-sitter-yaml",
+    "tree-sitter-python",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "tree-sitter-tsx",
+    "tree-sitter-html",
+    "tree-sitter-css",
+    "tree-sitter-bash",
+] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 # carbon-core. ropey: same beta the kit uses, so core and editor share one rope type.
-ropey = "=2.0.0-beta.1"
+ropey = { version = "=2.0.0-beta.1", features = ["metric_utf16"] }
 ignore = "0.4.33"
 portable-pty = "0.9"
 async-channel = "2.5.0"
+# carbon-gui: the error type of the kit editor's language-server hooks.
+anyhow = "1.0.104"
 thiserror = "2.0.21"
 dunce = "1.0.5"
 tempfile = "3.27.0"
 notify = "8.2.0"
 trash = "5.2.9"
 # Git status for explorer markers (FEATURE SC-06: gitoxide reads). No network, merge, blame.
+# Language server protocol types (already in the lock through the kit's editor).
+lsp-types = "0.97.0"
 gix = { version = "0.89.0", default-features = false, features = ["status", "sha1", "parallel"] }
 
 # Optimise GPUI, layout and text in dev builds so the window is usable.

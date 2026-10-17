@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::Write as _;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use ropey::{LineType, Rope};
 
@@ -47,6 +48,12 @@ pub struct Buffer {
     line_ending: LineEnding,
     revision: u64,
     saved_revision: u64,
+    /// Modified time of the file when last loaded or saved; a different time
+    /// on disk means someone else changed it.
+    disk_mtime: Option<SystemTime>,
+    /// The file changed on disk while this buffer had unsaved changes; the
+    /// user picks reload or keep.
+    disk_conflict: bool,
 }
 
 impl Buffer {
@@ -58,13 +65,16 @@ impl Buffer {
             line_ending: LineEnding::detect(text),
             revision: 0,
             saved_revision: 0,
+            disk_mtime: None,
+            disk_conflict: false,
         }
     }
 
     fn load(id: BufferId, path: PathBuf) -> Result<Self> {
-        let bytes = std::fs::read(&path).map_err(|err| CoreError::io(&path, err))?;
-        let text = String::from_utf8(bytes).map_err(|_| CoreError::NotUtf8(path.clone()))?;
-        Ok(Self::new(id, Some(path), &text))
+        let text = read_text(&path)?;
+        let mut buffer = Self::new(id, Some(path), &text);
+        buffer.disk_mtime = buffer.path().and_then(mtime);
+        Ok(buffer)
     }
 
     pub fn id(&self) -> BufferId {
@@ -108,6 +118,52 @@ impl Buffer {
 
     pub fn is_dirty(&self) -> bool {
         self.revision != self.saved_revision
+    }
+
+    /// Takes the whole text from an editor view that edited its own copy
+    /// (same rope type, so this is a cheap clone on the caller's side).
+    pub fn set_rope(&mut self, rope: Rope) {
+        self.rope = rope;
+        self.revision += 1;
+    }
+
+    /// Whether the file on disk was changed by someone else since it was
+    /// loaded or saved. False for a buffer with no file, or a deleted file.
+    pub fn changed_on_disk(&self) -> bool {
+        match (self.path().and_then(mtime), self.disk_mtime) {
+            (Some(now), Some(known)) => now != known,
+            (Some(_), None) => self.path.is_some(),
+            (None, _) => false,
+        }
+    }
+
+    /// The user keeps their unsaved text over a changed file: stop reporting
+    /// this change (the next save overwrites it).
+    pub fn ignore_disk_change(&mut self) {
+        self.disk_mtime = self.path().and_then(mtime);
+        self.disk_conflict = false;
+    }
+
+    pub fn has_disk_conflict(&self) -> bool {
+        self.disk_conflict
+    }
+
+    /// Flags a conflict; false when it was already flagged.
+    pub(crate) fn flag_disk_conflict(&mut self) -> bool {
+        !std::mem::replace(&mut self.disk_conflict, true)
+    }
+
+    /// Re-reads the file, dropping unsaved changes.
+    pub fn reload(&mut self) -> Result<()> {
+        let path = self.path.clone().ok_or(CoreError::NoPath)?;
+        let text = read_text(&path)?;
+        self.rope = Rope::from_str(&text);
+        self.line_ending = LineEnding::detect(&text);
+        self.revision += 1;
+        self.saved_revision = self.revision;
+        self.disk_mtime = mtime(&path);
+        self.disk_conflict = false;
+        Ok(())
     }
 
     pub fn insert(&mut self, offset: usize, text: &str) -> Result<()> {
@@ -172,8 +228,21 @@ impl Buffer {
         temp.persist(path)
             .map_err(|err| CoreError::io(path, err.error))?;
         self.saved_revision = self.revision;
+        self.disk_mtime = mtime(path);
+        self.disk_conflict = false;
         Ok(())
     }
+}
+
+fn read_text(path: &Path) -> Result<String> {
+    let bytes = std::fs::read(path).map_err(|err| CoreError::io(path, err))?;
+    String::from_utf8(bytes).map_err(|_| CoreError::NotUtf8(path.to_path_buf()))
+}
+
+fn mtime(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .ok()
 }
 
 /// All open buffers. A file is open at most once.
@@ -203,6 +272,14 @@ impl BufferStore {
         let id = self.next_id();
         self.buffers.insert(id, Buffer::load(id, path)?);
         Ok(id)
+    }
+
+    /// The buffer that has `path` open, if any (`path` as stored: canonical).
+    pub fn find(&self, path: &Path) -> Option<BufferId> {
+        self.buffers
+            .values()
+            .find(|b| b.path() == Some(path))
+            .map(Buffer::id)
     }
 
     /// A new buffer with no file; save it with `save_as`.

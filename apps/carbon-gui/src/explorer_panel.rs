@@ -255,12 +255,13 @@ impl ExplorerPanel {
 
     fn open_file(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) {
         let result = self.core.update(cx, |core, cx| {
-            let result = core.open_file(path).map(|_| ());
+            let result = core.open_file(path);
             cx.notify();
             result
         });
-        if let Err(err) = result {
-            window.push_notification(format!("Cannot open file: {err}"), cx);
+        match result {
+            Ok(id) => crate::workbench::open_buffer(id, window, cx),
+            Err(err) => window.push_notification(format!("Cannot open file: {err}"), cx),
         }
     }
 

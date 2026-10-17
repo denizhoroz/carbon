@@ -13,6 +13,7 @@ mod git_status;
 mod history;
 mod id;
 mod jobs;
+pub mod lsp;
 mod marks;
 mod terminal;
 mod vcs;
@@ -38,6 +39,18 @@ pub use vcs::{Branch, current_branch};
 pub use watcher::{FsChanges, FsWatcher};
 pub use workspace::Workspace;
 
+/// Result of `Core::sync_buffers_with_disk`.
+#[derive(Debug, Default)]
+pub struct DiskSync {
+    /// Reloaded from disk (they had no unsaved changes).
+    pub reloaded: Vec<BufferId>,
+    /// Newly changed on disk while they have unsaved changes (now flagged,
+    /// see `Buffer::has_disk_conflict`).
+    pub conflicts: Vec<BufferId>,
+    /// Could not be re-read (for example no longer UTF-8).
+    pub failed: Vec<(BufferId, CoreError)>,
+}
+
 /// Everything one window works on: the open folder and its sessions.
 #[derive(Default)]
 pub struct Core {
@@ -56,6 +69,8 @@ pub struct Core {
     /// Undo stack of file operations, newest last.
     history: Vec<FileOp>,
     pub buffers: BufferStore,
+    /// Language servers of the workspace; dropped (servers stopped) with it.
+    pub lsp: lsp::LspStore,
     pub terminals: TerminalStore,
     pub agents: AgentStore,
     pub jobs: JobStore,
@@ -78,6 +93,7 @@ impl Core {
         self.git = None;
         self.marks.clear();
         self.history.clear();
+        self.lsp = lsp::LspStore::default();
         Ok(self.workspace.insert(workspace))
     }
 
@@ -96,6 +112,7 @@ impl Core {
         self.git = None;
         self.marks.clear();
         self.history.clear();
+        self.lsp = lsp::LspStore::default();
     }
 
     pub fn workspace(&self) -> Option<&Workspace> {
@@ -273,8 +290,23 @@ impl Core {
     }
 
     fn moved(&mut self, from: &Path, to: &Path) {
+        // Servers know documents by path: close the moved ones, reopen after.
+        let moved: Vec<BufferId> = self
+            .buffers
+            .ids()
+            .filter(|&id| {
+                self.buffers
+                    .get(id)
+                    .and_then(Buffer::path)
+                    .is_some_and(|path| path.starts_with(from))
+            })
+            .collect();
+        for &id in &moved {
+            self.lsp.close_document(id);
+        }
         self.buffers.moved(from, to);
         self.marks.moved(from, to);
+        self.lsp_open_buffers();
     }
 
     fn record(&mut self, op: FileOp) {
@@ -359,12 +391,120 @@ impl Core {
         let path = workspace.resolve(path)?;
         let id = self.buffers.open(path)?;
         self.active_buffer = Some(id);
+        self.lsp_open_buffers();
         Ok(id)
     }
 
     /// The buffer opened last, if it is still open.
     pub fn active_buffer(&self) -> Option<&Buffer> {
         self.buffers.get(self.active_buffer?)
+    }
+
+    /// Marks `id` as the buffer the user works in (an editor tab got focus).
+    pub fn set_active_buffer(&mut self, id: BufferId) {
+        if self.buffers.get(id).is_some() {
+            self.active_buffer = Some(id);
+        }
+    }
+
+    pub fn save_buffer(&mut self, id: BufferId) -> Result<()> {
+        let buffer = self
+            .buffers
+            .get_mut(id)
+            .ok_or(CoreError::NotFound("buffer"))?;
+        buffer.save()?;
+        // The file is saved either way; a server problem shows elsewhere.
+        _ = self.lsp.save_document(buffer);
+        Ok(())
+    }
+
+    /// Opens a file outside the workspace (a language server's go to
+    /// definition into a library, for example).
+    pub fn open_any_file(&mut self, path: impl AsRef<Path>) -> Result<BufferId> {
+        let id = self.buffers.open(path.as_ref())?;
+        self.active_buffer = Some(id);
+        self.lsp_open_buffers();
+        Ok(id)
+    }
+
+    /// Opens every buffer in its language server, where one is ready.
+    pub fn lsp_open_buffers(&mut self) {
+        for id in self.buffers.ids().collect::<Vec<_>>() {
+            if let Some(buffer) = self.buffers.get(id)
+                && let Err(err) = self.lsp.open_document(buffer)
+            {
+                eprintln!("{err}");
+            }
+        }
+    }
+
+    /// Sends a buffer's current text to its language server, if it changed.
+    pub fn lsp_change(&mut self, id: BufferId) {
+        if let Some(buffer) = self.buffers.get(id)
+            && let Err(err) = self.lsp.change_document(buffer)
+        {
+            eprintln!("{err}");
+        }
+    }
+
+    /// Stores diagnostics a server published and updates the file's
+    /// problem markers.
+    pub fn set_diagnostics(&mut self, path: PathBuf, items: Vec<lsp::lsp_types::Diagnostic>) {
+        // Servers may spell the drive letter differently; markers need ours.
+        let path = dunce::canonicalize(&path).unwrap_or(path);
+        let (errors, warnings) = self.lsp.set_diagnostics(path.clone(), items);
+        self.marks.set_problems(&path, errors, warnings);
+    }
+
+    /// Closes a buffer; refuses one with unsaved changes unless `force`.
+    pub fn close_buffer(&mut self, id: BufferId, force: bool) -> Result<()> {
+        self.buffers.close(id, force)?;
+        self.lsp.close_document(id);
+        if self.active_buffer == Some(id) {
+            self.active_buffer = None;
+        }
+        Ok(())
+    }
+
+    /// Checks the open buffers a change batch names against the disk.
+    /// Buffers with no unsaved changes are reloaded; the ones with unsaved
+    /// changes are returned for the user to decide.
+    pub fn sync_buffers_with_disk(&mut self, changes: &FsChanges) -> DiskSync {
+        let mut sync = DiskSync::default();
+        let ids: Vec<BufferId> = if changes.rescan {
+            self.buffers.ids().collect()
+        } else {
+            changes
+                .files
+                .iter()
+                .filter_map(|path| {
+                    let path = dunce::canonicalize(path).unwrap_or_else(|_| path.clone());
+                    self.buffers.find(&path)
+                })
+                .collect()
+        };
+        for id in ids {
+            let Some(buffer) = self.buffers.get_mut(id) else {
+                continue;
+            };
+            if !buffer.changed_on_disk() {
+                continue;
+            }
+            if buffer.is_dirty() {
+                if buffer.flag_disk_conflict() {
+                    sync.conflicts.push(id);
+                }
+            } else {
+                match buffer.reload() {
+                    Ok(()) => {
+                        _ = self.lsp.change_document(buffer);
+                        sync.reloaded.push(id)
+                    }
+                    Err(err) => sync.failed.push((id, err)),
+                }
+            }
+        }
+        sync
     }
 
     /// Starts a terminal; without an explicit working directory it starts in

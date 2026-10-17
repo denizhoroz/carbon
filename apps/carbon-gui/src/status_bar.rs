@@ -1,8 +1,10 @@
-//! Compact bottom bar, left to right: workspace, git branch, jobs (DESIGN.md s4).
+//! Compact bottom bar, left to right: workspace, git branch, jobs (DESIGN.md s4);
+//! language servers on the right.
 //! Reads `carbon_core::Core`; the branch is polled because nothing watches `.git` yet.
 
 use std::time::Duration;
 
+use carbon_core::lsp::{LspStatus, ServerEntry};
 use carbon_core::{Branch, Core};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -88,6 +90,27 @@ fn workspace_button(name: SharedString, has_workspace: bool, cx: &App) -> impl I
         })
 }
 
+/// One language server: its name and state; hover for details.
+fn language_server(ix: usize, entry: &ServerEntry, cx: &App) -> impl IntoElement {
+    let name = entry.config.name;
+    let (text, tooltip): (String, Option<String>) = match &entry.status {
+        LspStatus::Starting => (format!("{name}: starting"), None),
+        LspStatus::Busy(work) => (format!("{name}: {work}"), None),
+        LspStatus::Ready => (name.to_string(), None),
+        LspStatus::Missing(hint) => (format!("{name}: not installed"), Some(hint.clone())),
+        LspStatus::Failed(error) => (format!("{name}: stopped"), Some(error.clone())),
+    };
+    let button =
+        Button::new(("status-lsp", ix))
+            .ghost()
+            .xsmall()
+            .child(item(IconName::Code, text, cx));
+    match tooltip {
+        Some(tooltip) => button.tooltip(tooltip),
+        None => button,
+    }
+}
+
 impl Render for CarbonStatusBar {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let core = self.core.read(cx);
@@ -112,6 +135,12 @@ impl Render for CarbonStatusBar {
         if let Some(branch) = &self.branch {
             bar = bar.left(item(IconName::GitBranch, branch.label().to_string(), cx));
         }
-        bar.left(item(IconName::ListChecks, jobs, cx))
+        bar = bar.left(item(IconName::ListChecks, jobs, cx));
+        let mut servers: Vec<_> = core.lsp.entries().collect();
+        servers.sort_by_key(|entry| entry.config.name);
+        for (ix, entry) in servers.into_iter().enumerate() {
+            bar = bar.right(language_server(ix, entry, cx));
+        }
+        bar
     }
 }

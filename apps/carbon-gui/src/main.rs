@@ -2,6 +2,7 @@ mod app_assets;
 mod editor_panel;
 mod explorer_panel;
 mod layouts;
+mod lsp_ops;
 mod menus;
 mod section_bar;
 mod status_bar;
@@ -14,6 +15,7 @@ mod workspace_ops;
 use std::path::PathBuf;
 
 use carbon_core::{Core, FsChanges};
+use editor_panel::{CloseEditor, SaveFile};
 use gpui_kit::component::{ActiveTheme, TitleBar, h_flex, v_flex};
 use gpui_kit::*;
 use menus::{
@@ -63,6 +65,7 @@ impl CarbonApp {
         focus_handle.focus(window, cx);
         let title_bar = cx.new(|cx| AppTitleBar::new(cx));
         let workbench = cx.new(|cx| Workbench::new(window, cx));
+        cx.set_global(workbench::CurrentWorkbench(workbench.downgrade()));
         let section = workbench.read(cx).menu_state().section;
         let section_bar = cx.new(|_| SectionBar::new(section));
         let _menus_sub = cx.subscribe(&workbench, |this, _, _: &MenusChanged, cx| {
@@ -188,6 +191,17 @@ impl Render for CarbonApp {
             .on_action(cx.listener(|this, _: &CloseFolder, _, cx| {
                 workspace_ops::close_folder(&this.core, cx)
             }))
+            // Save / close with focus outside the editors act on the active one.
+            .on_action(|action: &SaveFile, window, cx| {
+                if let Some(editor) = workbench::active_editor(cx) {
+                    editor.update(cx, |editor, cx| editor.save(action, window, cx));
+                }
+            })
+            .on_action(|action: &CloseEditor, window, cx| {
+                if let Some(editor) = workbench::active_editor(cx) {
+                    editor.update(cx, |editor, cx| editor.close(action, window, cx));
+                }
+            })
             // Auto-hide: after any click is handled, close auto-hide docks it landed outside of.
             .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, window, cx| {
                 let position = event.position;

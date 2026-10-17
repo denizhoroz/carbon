@@ -16,3 +16,5 @@ tempfile.workspace = true
 notify.workspace = true
 trash.workspace = true
 gix.workspace = true
+lsp-types.workspace = true
+serde_json.workspace = true

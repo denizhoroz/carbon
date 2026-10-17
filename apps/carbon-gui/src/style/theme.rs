@@ -4,6 +4,7 @@
 
 use std::path::PathBuf;
 
+use gpui_kit::component::highlighter::HighlightTheme;
 use gpui_kit::component::{Theme, ThemeMode, ThemeRegistry};
 use gpui_kit::*;
 use serde::Deserialize;
@@ -84,6 +85,23 @@ fn apply(settings: &Settings, cx: &mut App) {
     };
     // `change` reloads the mode's theme, syncs the base layer and refreshes windows.
     Theme::change(mode, None, cx);
+
+    // Editor syntax colours: a theme without its own `highlight` section gets
+    // the kit's default for its mode (the kit would keep the light one).
+    let theme = Theme::global_mut(cx);
+    let config = if mode.is_dark() {
+        &theme.dark_theme
+    } else {
+        &theme.light_theme
+    };
+    if config.highlight.is_none() {
+        theme.highlight_theme = if mode.is_dark() {
+            HighlightTheme::default_dark()
+        } else {
+            HighlightTheme::default_light()
+        };
+        cx.refresh_windows();
+    }
 }
 
 #[cfg(test)]

@@ -18,6 +18,10 @@ use gpui_kit::component::{WindowExt, h_flex};
 use gpui_kit::*;
 use serde::{Deserialize, Serialize};
 
+use carbon_core::BufferId;
+use gpui_kit::component::dock::{BasePanel, panel_handle};
+
+use crate::editor_panel::EditorPanel;
 use crate::layouts::{LayoutStore, MAX_SAVED, Preset, SavedLayout, Side};
 use crate::menus::{Direction, MenuState};
 use crate::section_bar::Section;
@@ -41,6 +45,52 @@ const CENTER_AND_DOCKS: [DockPlacement; 4] = [
 
 /// A shared callback run with the window (dialog buttons and Enter share one).
 pub type WindowCallback = Rc<dyn Fn(&mut Window, &mut App)>;
+
+/// The window's workbench, for panels that open or close tabs. One window
+/// for now, like `CurrentCore`.
+pub struct CurrentWorkbench(pub WeakEntity<Workbench>);
+
+impl Global for CurrentWorkbench {}
+
+fn current(cx: &App) -> Option<Entity<Workbench>> {
+    cx.try_global::<CurrentWorkbench>()?.0.upgrade()
+}
+
+/// Shows buffer `id` in an editor tab: its own tab if it has one, else an
+/// empty editor tab, else a new tab in the center. Focuses the editor.
+pub fn open_buffer(id: BufferId, window: &mut Window, cx: &mut App) {
+    if let Some(workbench) = current(cx) {
+        workbench.update(cx, |workbench, cx| workbench.show_buffer(id, window, cx));
+    }
+}
+
+/// The editor tab of the core's active buffer, for actions that reach the
+/// app root (from a menu, or with focus outside the editors).
+pub fn active_editor(cx: &App) -> Option<Entity<EditorPanel>> {
+    let id = crate::workspace_ops::current_core(cx)
+        .read(cx)
+        .active_buffer()?
+        .id();
+    let workbench = current(cx)?;
+    let (_, editor, _) = workbench
+        .read(cx)
+        .editors(cx)
+        .into_iter()
+        .find(|(_, editor, _)| editor.read(cx).buffer() == Some(id))?;
+    Some(editor)
+}
+
+/// Removes a panel from the dock. Deferred: the caller is often the panel
+/// itself, which the dock then tells it was removed.
+pub fn close_panel<P: BasePanel>(panel: Entity<P>, window: &mut Window, cx: &mut App) {
+    let Some(workbench) = current(cx) else {
+        return;
+    };
+    window.defer(cx, move |window, cx| {
+        let area = workbench.read(cx).area.clone();
+        area.update(cx, |area, cx| area.remove_panel(panel, window, cx));
+    });
+}
 
 /// Section, saved layouts or auto-hide flags changed; the owner rebuilds the
 /// menus and updates the Section Bar.
@@ -100,6 +150,61 @@ impl Workbench {
             this.set_dock_open(side.placement(), false, window, cx);
         }
         this
+    }
+
+    /// Every editor tab, center first, with its dock placement.
+    fn editors(&self, cx: &App) -> Vec<(PanelId, Entity<EditorPanel>, DockPlacement)> {
+        let area = self.area.read(cx);
+        let mut editors = Vec::new();
+        for placement in CENTER_AND_DOCKS {
+            let Some(tree) = area.layout(placement) else {
+                continue;
+            };
+            for panel in tree.panels() {
+                if let Some(editor) = area
+                    .panel(panel)
+                    .and_then(|view| view.view().downcast::<EditorPanel>().ok())
+                {
+                    editors.push((panel, editor, placement));
+                }
+            }
+        }
+        editors
+    }
+
+    fn show_buffer(&mut self, id: BufferId, window: &mut Window, cx: &mut Context<Self>) {
+        let mut own = None;
+        let mut empty = None;
+        for (panel, editor, placement) in self.editors(cx) {
+            match editor.read(cx).buffer() {
+                Some(buffer) if buffer == id => own = Some((panel, editor)),
+                None if empty.is_none() && placement == DockPlacement::Center => {
+                    empty = Some((panel, editor))
+                }
+                _ => {}
+            }
+        }
+        let (panel, editor) = match (own, empty) {
+            (Some(own), _) => own,
+            (None, Some((panel, editor))) => {
+                editor.update(cx, |editor, cx| editor.set_buffer(id, window, cx));
+                (panel, editor)
+            }
+            (None, None) => {
+                let editor = EditorPanel::for_buffer(id, window, cx);
+                let handle = panel_handle(editor.clone());
+                let panel = handle.panel_id(cx);
+                self.area.update(cx, |area, cx| {
+                    area.add_panel_view(handle, DockPlacement::Center, None, window, cx)
+                });
+                (panel, editor)
+            }
+        };
+        self.area
+            .update(cx, |area, cx| area.select_panel(panel, window, cx));
+        editor.update(cx, |editor, cx| editor.focus_editor(window, cx));
+        // A reused tab changes no layout node, but its saved file does.
+        self.schedule_save(cx);
     }
 
     pub fn menu_state(&self) -> MenuState {

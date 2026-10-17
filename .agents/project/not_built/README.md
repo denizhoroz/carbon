@@ -10,10 +10,10 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Command palette (every command, shortcut shown) | WB-01, `DESIGN.md` s4 | Menu item exists, no handler |
 | Status bar rest: dock toggles, diagnostics, agents, cost, job spinner + Stop, clickable items (`../built/status-bar.md` has workspace/branch/jobs) | `DESIGN.md` s4 | |
 | Recent folders list; reopen last folder on start; layout per folder | WB-03, WB-09 | Open/create/close built (`../built/workspace-folders.md`) |
-| Explorer leftovers: file nesting, redo, compact-folders setting, OS clipboard for files; problem markers fed by diagnostics, agent markers fed by agent sessions; whole-project background index (go-to-file, search) | WB-03, SC-01, AG-01 | T1-T3 built (`../built/file-tree.md`) |
-| Code Editor section contents: Editor (placeholder shows opened file), Chat, Terminal (placeholders), then problems/output | WB-03, WB-04, ED-01, TM-01, AG-01 | `test_panel.rs` placeholders; `../built/section-bar.md` |
+| Explorer leftovers: file nesting, redo, compact-folders setting, OS clipboard for files; agent markers fed by agent sessions (problem markers now come from language servers); whole-project background index (go-to-file, search) | WB-03, SC-01, AG-01 | T1-T3 built (`../built/file-tree.md`) |
+| Code Editor section contents: Chat, Terminal (placeholders), then problems/output | WB-03, WB-04, TM-01, AG-01 | Editor built (`../built/code-editor.md`); `test_panel.rs` placeholders |
 | More sections in the Section Bar (paradigm, agents) and its bottom group (settings) | `DESIGN.md` s4 | Presets Paradigm/Agents exist as layouts only |
-| Per-workspace layout (now one global file) | WB-09 | Needs workspace concept |
+| Per-workspace layout (now one global file; editor tabs of another folder are dropped on start) | WB-09 | Needs workspace concept |
 | Settings UI, keymap, VS Code settings/keymap/theme import | ST-01, ST-04, ST-06 | |
 | Accessibility audit (Narrator, VoiceOver, Orca) | AX-01, `DESIGN.md` s3 | Kit a11y "partial" (R-4) |
 
@@ -21,9 +21,10 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 
 | Feature | Refs |
 |---|---|
-| Core editing: multi-cursor, find/replace, folding, format, auto save/hot exit, diff editor | ED-01..04 |
-| Tabs/splits for editors, explorer, problems | WB-02, WB-03, WB-04 |
-| Language intelligence: LSP, navigation/refactor, tree-sitter, semantic tokens | LS-01..04, LS-06 |
+| Editor leftovers: code folding (kit folding delays every keystroke ~25 ms and can crash on big broken files: fix or fork the kit), soft-wrap setting, find/replace UI check, format, auto save / hot exit, diff editor, preview tabs, signature help, references, rename, code actions, anchors + agent range edits, incremental LSP sync | ED-01..04, ED-11, LS-02 | Tier 1 built (`../built/code-editor.md`) |
+| Installable language packages: each language (rust-analyzer, Python server, ...) installed on demand instead of a fixed table; more servers and grammars | LS-01, LS-03, EX-06 | User request 2026-10-17; table is `SERVERS` in core `lsp.rs` |
+| Tabs/splits for explorer, problems; Problems panel | WB-02, WB-03, WB-04 | Editor tabs built |
+| Language intelligence rest: navigation/refactor, semantic tokens | LS-02..04, LS-06 | Diagnostics, hover, completion, definition built |
 | Debugging: DAP, launch.json, logpoints | DB-01, DB-02 |
 | Workspace search | SR-01 |
 | Git: hunks, blame, history, merge editor, PR | SC-01, SC-03, SC-04, ED-06 |
