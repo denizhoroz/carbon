@@ -45,6 +45,15 @@ impl Side {
             .find(|side| side.placement() == placement)
     }
 
+    /// Size of a dock created on this side.
+    pub fn default_size(self) -> Pixels {
+        match self {
+            Side::Left => fixed::LEFT_DOCK_SIZE,
+            Side::Right => fixed::RIGHT_DOCK_SIZE,
+            Side::Bottom => fixed::BOTTOM_DOCK_SIZE,
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Side::Left => "Left",

@@ -28,7 +28,7 @@ Placeholder items have no handler; they map to unbuilt features in `../not_built
 | `apps/carbon-gui/src/title_bar.rs` | `AppTitleBar`: logo + `AppMenuBar`; `reload_menus` after a rebuild |
 | `apps/carbon-gui/src/menus.rs` | Actions (plain + data actions), key bindings, `app_menus(&MenuState)`, `refresh` (rebuilds native + in-window menus) |
 | `apps/carbon-gui/src/main.rs` | Opens the window with `TitleBar::window_options()`; root view holds base focus so menu actions reach handlers |
-| `apps/carbon-gui/src/style/fixed.rs` | Logo letter, size, weight; title bar gap |
+| `apps/carbon-gui/src/style/fixed.rs` | Logo letter, size, weight; title bar gap; `BAR_HEIGHT` (30 px, title and status bar, = tab bar; 2026-10-17) |
 
 ## Limits
 

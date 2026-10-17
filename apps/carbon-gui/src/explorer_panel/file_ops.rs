@@ -110,8 +110,7 @@ impl ExplorerPanel {
             let open = dir.clone();
             self.update_tree(window, cx, |tree| tree.expand(&open));
         }
-        let placeholder = if folder { "Folder name" } else { "File name" };
-        self.start_edit(EditKind::New { dir, folder }, "", placeholder, window, cx);
+        self.start_edit(EditKind::New { dir, folder }, "", window, cx);
     }
 
     pub(super) fn rename(&mut self, _: &Rename, window: &mut Window, cx: &mut Context<Self>) {
@@ -121,7 +120,7 @@ impl ExplorerPanel {
         let entry = &self.rows[ix].entry;
         let (path, name) = (entry.path.clone(), entry.name.clone());
         let is_file = entry.kind != EntryKind::Dir;
-        self.start_edit(EditKind::Rename { path }, &name, "", window, cx);
+        self.start_edit(EditKind::Rename { path }, &name, window, cx);
         // Select the name without its extension, like VS Code.
         let stem = match name.rfind('.') {
             Some(dot) if is_file && dot > 0 => dot,
@@ -137,16 +136,11 @@ impl ExplorerPanel {
         &mut self,
         kind: EditKind,
         value: &str,
-        placeholder: &'static str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let value = value.to_string();
-        let input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(placeholder)
-                .default_value(value)
-        });
+        let input = cx.new(|cx| InputState::new(window, cx).default_value(value));
         let _events = cx.subscribe_in(&input, window, |this, _, event, window, cx| match event {
             // Enter keeps the box open on an error so the name can be fixed;
             // clicking away gives up on a bad name.

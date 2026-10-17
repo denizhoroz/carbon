@@ -287,7 +287,10 @@ impl TabGroupSkin {
         let control = zoom_control(group, cx);
         let toolbar_zoom = control.is_some_and(|control| control.toolbar_visible());
         let menu_zoom = control.is_some_and(|control| control.menu_visible());
-        let closable = group.is_closable();
+        // CARBON PATCH: always-tab panels offer Close as their last group's
+        // panel too (it goes through `request_close`, below).
+        let closable =
+            group.is_closable() || handle.is_some_and(|handle| handle.always_tab_bar(cx));
         let buttons = handle.and_then(|handle| handle.toolbar_buttons(window, cx));
         let panel = handle.map(|handle| handle.panel());
 
@@ -512,9 +515,11 @@ impl TabGroupSkin {
                             .when(
                                 !collapsed
                                     && self.shared.close_button_visible.get()
-                                    // CARBON PATCH: always-tab panels keep their button.
+                                    // CARBON PATCH: always-tab panels keep their button,
+                                    // unless the panel says it is not closable.
                                     && (group.is_panel_closable(panel.panel_id(cx), cx)
-                                        || handle.is_some_and(|handle| handle.always_tab_bar(cx))),
+                                        || (panel.closable(cx)
+                                            && handle.is_some_and(|handle| handle.always_tab_bar(cx)))),
                                 |this| {
                                     this.suffix(
                                         Button::new(("close-tab", ix))
@@ -729,6 +734,12 @@ impl TabGroupRenderer for TabGroupSkin {
                         let Some(panel) = group.active_panel() else {
                             return;
                         };
+                        // CARBON PATCH: the panel may close itself, as with
+                        // the tab's close button.
+                        let view = PanelHandle::of(panel).map(|handle| handle.panel());
+                        if view.is_some_and(|view| view.request_close(window, cx)) {
+                            return;
+                        }
                         let panel = panel.panel_id(cx);
                         group.close(panel, window, cx);
                     }

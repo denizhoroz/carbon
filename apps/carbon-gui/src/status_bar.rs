@@ -10,7 +10,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::menu::DropdownMenu;
 use gpui_kit::component::status_bar::StatusBar;
-use gpui_kit::component::{ActiveTheme, Icon, Sizable, Size, TITLE_BAR_HEIGHT, h_flex};
+use gpui_kit::component::{ActiveTheme, Icon, Sizable, Size, h_flex};
 use gpui_kit::*;
 
 use crate::menus::{CloseFolder, CreateFolder, OpenFolder};
@@ -126,9 +126,9 @@ impl Render for CarbonStatusBar {
             many => format!("{} jobs", many.len()),
         };
 
-        // Same height as the title/menu bar (kit constant, so they stay equal).
+        // Same height as the title/menu bar and the tab bar.
         let mut bar = StatusBar::new()
-            .h(TITLE_BAR_HEIGHT)
+            .h(fixed::BAR_HEIGHT)
             .py_0()
             .px(fixed::STATUS_BAR_PADDING)
             .left(workspace_button(workspace, has_workspace, cx));

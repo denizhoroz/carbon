@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use carbon_core::{EntryKind, GitStatus, Mark};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::input::Input;
+use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::{ActiveTheme, Icon, Sizable, Size, Theme, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -139,7 +139,7 @@ impl ExplorerPanel {
             )
             .map(|this| match &self.edit {
                 Some(edit) if matches!(&edit.kind, EditKind::Rename { path } if *path == entry.path) => {
-                    this.child(Input::new(&edit.input).xsmall().flex_1())
+                    this.child(name_box(&edit.input))
                 }
                 _ => this.child(div().flex_1().min_w_0().truncate().child(row.label.clone())),
             })
@@ -211,9 +211,15 @@ impl ExplorerPanel {
                     .text_color(cx.theme().muted_foreground),
             )
             .when_some(self.edit.as_ref(), |this, edit| {
-                this.child(Input::new(&edit.input).xsmall().flex_1())
+                this.child(name_box(&edit.input))
             })
     }
+}
+
+/// The inline name box for new and renamed entries: the row's full height,
+/// the plain input border (no focus ring), no placeholder.
+fn name_box(input: &Entity<InputState>) -> Input {
+    Input::new(input).small().focus_bordered(false).flex_1()
 }
 
 /// Right side of a row: agent mark, problem counts, git letter. Folders show

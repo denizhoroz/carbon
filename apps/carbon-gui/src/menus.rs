@@ -26,6 +26,17 @@ actions!(
     ]
 );
 
+/// Panels the user can add (View > Add Panel).
+pub const ADDABLE_PANELS: [&str; 3] = ["Explorer", "Chat", "Terminal"];
+
+/// Add a panel by name: the Explorer is shown (there is one); other kinds get
+/// a new numbered tab beside their kind.
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = carbon, no_json)]
+pub struct AddPanel {
+    pub name: SharedString,
+}
+
 /// Show or hide a dock.
 #[derive(Clone, PartialEq, Action)]
 #[action(namespace = carbon, no_json)]
@@ -150,6 +161,8 @@ fn app_menus(state: &MenuState) -> Vec<Menu> {
     layout.push(MenuItem::separator());
     layout.push(MenuItem::action("Reset Layout", ResetLayout));
 
+    let add = ADDABLE_PANELS.map(|name| MenuItem::action(name, AddPanel { name: name.into() }));
+
     let panel = [
         MenuItem::action(
             "Move to Left Dock",
@@ -205,6 +218,7 @@ fn app_menus(state: &MenuState) -> Vec<Menu> {
             .chain([
                 MenuItem::separator(),
                 MenuItem::submenu(Menu::new("Layout").items(layout)),
+                MenuItem::submenu(Menu::new("Add Panel").items(add)),
                 MenuItem::submenu(Menu::new("Panel").items(panel)),
             ]),
         ),

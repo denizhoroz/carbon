@@ -20,8 +20,9 @@ use editor_panel::{CloseEditor, SaveFile};
 use gpui_kit::component::{ActiveTheme, TitleBar, h_flex, v_flex};
 use gpui_kit::*;
 use menus::{
-    ApplyLayout, ApplyPreset, CloseFolder, CreateFolder, DeleteLayout, MovePanel, NewFile,
-    OpenFolder, ResetLayout, ResizeDock, SaveLayoutAs, SwitchSection, ToggleAutoHide, ToggleDock,
+    AddPanel, ApplyLayout, ApplyPreset, CloseFolder, CreateFolder, DeleteLayout, MovePanel,
+    NewFile, OpenFolder, ResetLayout, ResizeDock, SaveLayoutAs, SwitchSection, ToggleAutoHide,
+    ToggleDock,
 };
 use section_bar::SectionBar;
 use status_bar::CarbonStatusBar;
@@ -175,6 +176,10 @@ impl Render for CarbonApp {
             ))
             .on_action(self.on(
                 |w, _: &SaveLayoutAs, window, cx| w.open_save_dialog(window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, a: &AddPanel, window, cx| w.add_panel(&a.name, window, cx),
                 cx,
             ))
             .on_action(self.on(

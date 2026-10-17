@@ -3,10 +3,12 @@
 use gpui_kit::component::dock::{
     BasePanel, Panel, PanelEvent, PanelInfo, PanelState, panel_handle, register_panel,
 };
+use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::{ActiveTheme, v_flex};
 use gpui_kit::*;
 
 use crate::editor_panel::EditorPanel;
+use crate::menus::AddPanel;
 use crate::style::fixed;
 
 /// Persistence key in saved layouts. Never change it.
@@ -24,6 +26,18 @@ impl TestPanel {
             title,
             focus_handle: cx.focus_handle(),
         })
+    }
+
+    pub fn title(&self) -> SharedString {
+        self.title.clone()
+    }
+
+    /// The kind: the title without its number ("Chat 2" -> "Chat").
+    pub fn kind(&self) -> SharedString {
+        match self.title.rsplit_once(' ') {
+            Some((kind, number)) if number.parse::<u32>().is_ok() => kind.to_string().into(),
+            _ => self.title.clone(),
+        }
     }
 }
 
@@ -69,6 +83,31 @@ impl Panel for TestPanel {
 
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         self.title.clone()
+    }
+
+    /// Tabs with a close button, alone or with others, like editor tabs.
+    fn always_tab_bar(&self, _: &App) -> bool {
+        true
+    }
+
+    fn inner_padding(&self, _: &App) -> bool {
+        false
+    }
+
+    /// The tab's x closes it even as the last tab of its dock.
+    fn request_close(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        crate::workbench::close_panel(cx.entity(), window, cx);
+        true
+    }
+
+    fn dropdown_menu(
+        &mut self,
+        menu: PopupMenu,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> PopupMenu {
+        let kind = self.kind();
+        menu.menu(format!("New {kind}"), Box::new(AddPanel { name: kind }))
     }
 }
 

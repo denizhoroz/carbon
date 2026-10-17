@@ -112,8 +112,11 @@ Legend: **Y** yes, **P** partial, **N** no, **build** = Carbon must build it, `=
 | Keyboard move focused panel | `area.move_panel` into first tab group of target | Ctrl+K then left/right/down (docks), up (center); View > Panel |
 | Keyboard resize focused dock | `set_dock_size` +-24 px, min 120 px | Ctrl+Alt+Shift+arrows |
 | Auto-hide docks | Start hidden; open with toggle and take focus; close on click outside (bounds + dock size) | View > Auto-Hide Left/Right/Bottom Dock (checkmark) |
+| Panels like editor tabs (2026-10-17, user) | Every Code Editor panel (Explorer, Chat, Terminal, placeholders) draws as a tab with a close button, alone or with others (`always_tab_bar`); x and "..." > Close work on a dock's last panel too (`request_close` -> `workbench::close_panel`); an emptied dock closes (also on load); closing the center's last panel leaves an empty editor | Tab x, "..." > Close |
+| Explorer differs (2026-10-17, user) | The main panel: alone in its dock it shows the plain "Explorer" title (no tab, no close button; `always_tab_bar` and `closable` false); in a group with other panels it is a tab without x | View > Add Panel > Explorer if moved away |
+| Add panels | Explorer: one; shown (dock opened) if open, else added to the left. Chat, Terminal, other placeholders: a new numbered tab ("Terminal 2") in the region of its kind, else the default (Chat right, Terminal bottom) | View > Add Panel; a panel's "..." > New <kind> |
 
-Code: `apps/carbon-gui/src/workbench.rs` (area, actions, persistence), `layouts.rs` (presets, store, tests), `test_panel.rs` (placeholder `TestPanel`, title persisted in `PanelInfo::Panel`), `menus.rs` (actions, bindings, dynamic menus), `main.rs` (action wiring, click hook).
+Code: `apps/carbon-gui/src/workbench.rs` (area, actions, persistence, `add_panel`, `close_panel`, `close_empty_docks`), `layouts.rs` (presets, store, tests), `test_panel.rs` (placeholder `TestPanel`, title persisted in `PanelInfo::Panel`), `menus.rs` (actions, bindings, dynamic menus), `main.rs` (action wiring, click hook).
 
 Verified: `cargo check` clean, tests `layout_store_round_trips`, `missing_fields_default` pass. Not verified: everything by hand (T1 started on Windows; T2 not run yet). Known limits: one global layout (no workspaces yet); keyboard move/resize need a focused panel; move into an empty dock untested; auto-hide uses geometry, corners between bottom and side docks may misjudge; dock round-trip UI test blocked (kit `test-support` does not resolve, `STATUS.md` error log).
 

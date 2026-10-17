@@ -615,7 +615,11 @@ impl RenderOnce for Dialog {
         // margin so that the preferred offset does not waste usable height.
         let margin = cx.theme().spacing_tokens().lg;
         let layer_offset = px(layer_ix as f32 * 16.);
-        let y = self.props.margin_top.unwrap_or(view_size.height / 10.) + layer_offset;
+        // CARBON PATCH: without `margin_top`, the dialog's middle sits at
+        // the window's middle (was its top at a tenth of the height). See
+        // `vendor/gpui-component/CARBON-PATCHES.md`.
+        let centered = self.props.margin_top.is_none();
+        let y = self.props.margin_top.unwrap_or(view_size.height / 2.) + layer_offset;
         let entrance = self.props.entrance;
         let motion = cx.theme().motion_tokens();
         let animated = entrance != DialogEntrance::None
@@ -708,7 +712,11 @@ impl RenderOnce for Dialog {
                             })
                             .popup(
                                 gpui_base::Positioner::corner(
-                                    Anchor::TopLeft,
+                                    if centered {
+                                        Anchor::LeftCenter
+                                    } else {
+                                        Anchor::TopLeft
+                                    },
                                     point(window_paddings.left + x, window_paddings.top + y),
                                 )
                                 .margin(margin)

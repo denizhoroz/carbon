@@ -59,7 +59,8 @@ ttf-parser = { opt-level = 3 }
 [profile.release]
 strip = "symbols"
 
-# gpui-component 0.7.3 with small Carbon changes (list: vendor/gpui-component/CARBON-PATCHES.md).
-# gpui-kit pins this exact version; re-apply the patches when upgrading the kit.
+# gpui-component and gpui-base 0.7.3 with small Carbon changes (lists: vendor/*/CARBON-PATCHES.md).
+# gpui-kit pins these exact versions; re-apply the patches when upgrading the kit.
 [patch.crates-io]
 gpui-component = { path = "vendor/gpui-component" }
+gpui-base = { path = "vendor/gpui-base" }

@@ -51,6 +51,8 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-17 | Every Code Editor panel behaves like editor tabs: tab + close button alone or with others; Chat/Terminal addable many times (View > Add Panel, "..." > New); Explorer: one instance, plain "Explorer" title, not closable (user, same day). Supersedes "side panels keep their title" | user decision (changed mind) | `project/built/panel-layout.md` s8 |
+| 2026-10-17 | Also vendor `gpui-base` 0.7.3 (`vendor/gpui-base`, patch: gutter gap); title/status bar 30 px; dialogs centered (kit patch 4) | user appearance requests; gutter gap and dialog position are hard-coded in the kit | `vendor/*/CARBON-PATCHES.md` |
 | 2026-10-17 | Vendor gpui-component 0.7.3 with Carbon patches (`vendor/gpui-component`, `[patch.crates-io]`): editor tabs always shown (also with one file), 30 px tabs, panel-handled tab close | user decision (editor tab bar must not change style; kit had only a dock-wide setting and fixed 32 px tabs) | `vendor/gpui-component/CARBON-PATCHES.md`, `project/built/code-editor.md` |
 | 2026-10-17 | Editor = gpui-kit `Editor` view + core buffer as source of truth (fork or own view later if the kit blocks); tier 1 = tabs/save, tree-sitter colours, speed gate, language servers | user decision after comparing VS Code, Zed, others | `documents/code-editor.md`, `project/built/code-editor.md` |
 | 2026-10-17 | Code folding and soft wrap off in the editor | measured: kit folding delays each keystroke ~25 ms, 12.6 s to open a 200k-line file, stack overflow on a big broken parse; wrap: 2.4 s open | `project/built/code-editor.md` |
@@ -126,10 +128,15 @@ Template:
 | R-1 | Linux Vulkan/Wayland/NVIDIA issues for native GPU toolkits (webview risk closed by decision) | Medium | Open | Test early on Linux (spike S6) |
 | R-2 | AGPL/ELv2 licences of some candidate components | Medium | Open | Licence review before bundling (`PROJECT.md`) |
 | R-3 | Published latency/RAM comparisons conflict (2x-15x) | Low | Open | Run own benchmark |
-| R-4 | GPUI Kit breaks API almost every minor (0.6, 0.7); 0.7.2 yanked; accessibility "Partial"; no terminal or diagram canvas in the kit | High | Open | Pin exact version; update `gpui-kit` only; wrap kit widgets behind Carbon components; test a11y early. Since 2026-10-17 `gpui-component` is vendored with patches: re-apply `vendor/gpui-component/CARBON-PATCHES.md` on every kit upgrade |
+| R-4 | GPUI Kit breaks API almost every minor (0.6, 0.7); 0.7.2 yanked; accessibility "Partial"; no terminal or diagram canvas in the kit | High | Open | Pin exact version; update `gpui-kit` only; wrap kit widgets behind Carbon components; test a11y early. Since 2026-10-17 `gpui-component` and `gpui-base` are vendored with patches: re-apply `vendor/*/CARBON-PATCHES.md` on every kit upgrade |
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-17 (appearance + panels)
+- Done: title and status bar 30 px (= tab bar); Explorer name box full row height, plain border, no placeholder; dialogs centered (kit patch 4); 24 px gutter gap (vendored `gpui-base`, patch 1); every Code Editor panel has tabs + close, Chat/Terminal addable (View > Add Panel, "..." > New), Explorer closable and re-addable, emptied docks close. Fixed: the kit's "..." > Close closed unsaved editors without asking. 58 tests pass + 3 ignored; click-tested.
+- Then (same day): Explorer back to its plain title, not closable; empty editor has no bar ("No file open").
+- Next: language packages; commit incl. `vendor/` (user).
 
 ### 2026-10-17 (save and quit)
 - Done: quit asks about unsaved files (Exit, Ctrl+Q, window x, Alt+F4; Save All / Don't Save / Cancel); File > New File (Ctrl+N, untitled tabs) and File > Save wired, untitled files ask a path; Edit menu uses the kit's text actions (Explorer maps them to file copy/paste/undo); tab colours and language server follow Save As and renames. Fixed: menu focus restore stole focus from a newly opened tab. 58 tests pass + 3 ignored; click-tested.

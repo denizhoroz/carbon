@@ -640,6 +640,12 @@ impl BasePanel for ExplorerPanel {
     fn panel_name(&self) -> &'static str {
         PANEL_NAME
     }
+
+    /// No close button on its tab (user); "..." > Close still hides it and
+    /// View > Add Panel > Explorer brings it back.
+    fn closable(&self, _: &App) -> bool {
+        false
+    }
 }
 
 impl Panel for ExplorerPanel {
@@ -649,6 +655,21 @@ impl Panel for ExplorerPanel {
 
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         "Explorer"
+    }
+
+    /// Alone in its dock it shows the plain "Explorer" title, not a tab
+    /// (user): the main panel, not one of many.
+    fn always_tab_bar(&self, _: &App) -> bool {
+        false
+    }
+
+    fn inner_padding(&self, _: &App) -> bool {
+        false
+    }
+
+    fn request_close(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        crate::workbench::close_panel(cx.entity(), window, cx);
+        true
     }
 }
 

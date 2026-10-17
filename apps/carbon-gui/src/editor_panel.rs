@@ -658,6 +658,12 @@ impl Panel for EditorPanel {
         self.doc.is_some()
     }
 
+    /// The empty editor alone in its area has no bar at all (user): the
+    /// area starts with "No file open".
+    fn title_bar(&self, _: &App) -> bool {
+        self.doc.is_some()
+    }
+
     /// Code sits right under the tabs, with one tab or several (the kit pads
     /// only multi-tab groups by default).
     fn inner_padding(&self, _: &App) -> bool {
@@ -696,8 +702,9 @@ impl Panel for EditorPanel {
         if self.doc.is_none() {
             return menu;
         }
+        // The kit adds Close (it asks about unsaved changes via
+        // `request_close`).
         menu.menu("Save", Box::new(SaveFile))
-            .menu("Close", Box::new(CloseEditor))
     }
 }
 
@@ -734,12 +741,7 @@ impl Render for EditorPanel {
             .items_center()
             .justify_center()
             .text_center()
-            .child("Editor")
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(muted)
-                    .child("Pick a file in the Explorer."),
-            )
+            .child("No file open")
+            .child(div().text_sm().text_color(muted).child("New file: Ctrl+N"))
     }
 }

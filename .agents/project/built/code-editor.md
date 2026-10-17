@@ -12,8 +12,9 @@ Built 2026-10-17. User request: build a text/code editor; compare what other edi
 | Ctrl+N or File > New File | New tab "Untitled-N" (plain text). Not restored after a restart (its tab is dropped) |
 | Edit menu: Undo, Redo, Cut, Copy, Paste | Act on the focused editor (the kit's own actions) |
 | Quit: File > Exit, Ctrl+Q, window x, Alt+F4 | With unsaved files: dialog naming them, Save (All) / Don't Save / Cancel (Enter = Save). Save All asks a path for untitled files; a cancelled path or a failed save keeps the app open |
-| Tabs | Editor files always show as tabs (30 px, close button), one file or several; the empty editor shows the plain "Editor" title. Code starts right under the tabs either way |
-| Ctrl+W, tab x, or tab "..." menu: Close | Closes the tab; with unsaved changes asks Save / Don't Save / Cancel (Enter = Save). The last tab clears to the empty editor instead of leaving the area blank |
+| Tabs | Editor files always show as tabs (30 px, close button), one file or several; the empty editor alone in its area has no bar at all (`Panel::title_bar` false; user) and shows "No file open / New file: Ctrl+N". Code starts right under the tabs either way. Since 2026-10-17 every Code Editor panel has tabs the same way (`panel-layout.md` s8) |
+| Line numbers | 24 px between the numbers and the code (vendored `gpui-base` patch; the kit only left that room with folding on) |
+| Ctrl+W, tab x, or tab "..." menu: Close (the kit's item, routed through `request_close`) | Closes the tab; with unsaved changes asks Save / Don't Save / Cancel (Enter = Save). The last tab clears to the empty editor instead of leaving the area blank |
 | File changed on disk by another program | No unsaved changes: reloads quietly (cursor kept). Unsaved changes: bar "This file changed on disk. You have unsaved changes." with Reload / Keep Mine |
 | Close Folder / open another folder | Editor tabs stay open (intended, user 2026-10-17) |
 | Rename a file in the Explorer | Its tab follows; colours and language server follow the new extension |
@@ -38,7 +39,7 @@ Built 2026-10-17. User request: build a text/code editor; compare what other edi
 | Server lifecycle | `apps/carbon-gui/src/lsp_ops.rs` | Starts a server on first matching file, initializes it, reads diagnostics and `$/progress` until it stops |
 | Tabs | `apps/carbon-gui/src/workbench.rs` | `CurrentWorkbench` global; `open_buffer` (own tab / empty tab / new center tab, saves layout), `close_editor` (deferred; the last tab clears), `active_editor` |
 | App root | `apps/carbon-gui/src/main.rs` | Ctrl+S / Ctrl+W bound app-wide; root handlers act on the active editor (menus leave focus empty) |
-| Kit patch | `vendor/gpui-component/` (+ `CARBON-PATCHES.md`), root `Cargo.toml` `[patch.crates-io]` | `Panel::always_tab_bar`, `Panel::request_close`, 30 px tabs |
+| Kit patches | `vendor/gpui-component/`, `vendor/gpui-base/` (each with `CARBON-PATCHES.md`), root `Cargo.toml` `[patch.crates-io]` | `Panel::always_tab_bar`, `Panel::request_close` (tab x and "..." Close), 30 px tabs, centered dialogs; gutter gap |
 | Status bar | `apps/carbon-gui/src/status_bar.rs` | Language server item on the right |
 | Theme | `apps/carbon-gui/src/style/theme.rs` | Kit default highlight theme for the mode when the theme file has no `highlight` section |
 | Deps | root `Cargo.toml` | gpui-kit tree-sitter grammar features (13 grammars, MIT); `lsp-types 0.97` (MIT, was in the lock); `anyhow` (MIT/Apache, was in the lock); ropey `metric_utf16` |

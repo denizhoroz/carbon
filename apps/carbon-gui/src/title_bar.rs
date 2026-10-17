@@ -50,6 +50,7 @@ impl Render for AppTitleBar {
         // The x asks about unsaved changes first (the kit's default just
         // closes the window).
         TitleBar::new()
+            .h(fixed::BAR_HEIGHT)
             .on_close_window(|_, window, cx| crate::save_ops::request_quit(window, cx))
             .child(row)
     }

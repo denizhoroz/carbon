@@ -10,8 +10,8 @@ use std::time::Duration;
 use gpui_kit::base::Placement;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::dock::{
-    BasePanelView, DockArea, DockAreaState, DockEvent, DockPlacement, DockSkin, InsertTarget,
-    NodeId, PaneRef, PaneTree, PanelId,
+    BasePanel, BasePanelView, DockArea, DockAreaState, DockEvent, DockPlacement, DockSkin,
+    InsertTarget, NodeId, PaneRef, PaneTree, PanelId,
 };
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{WindowExt, h_flex};
@@ -22,10 +22,12 @@ use carbon_core::BufferId;
 use gpui_kit::component::dock::panel_handle;
 
 use crate::editor_panel::EditorPanel;
+use crate::explorer_panel::ExplorerPanel;
 use crate::layouts::{LayoutStore, MAX_SAVED, Preset, SavedLayout, Side};
 use crate::menus::{Direction, MenuState};
 use crate::section_bar::Section;
 use crate::style::fixed;
+use crate::test_panel::TestPanel;
 
 /// Saved-layout schema version; bump when old layouts can no longer load.
 /// 2: Explorer is a real panel (v1 layouts hold a placeholder "Explorer").
@@ -104,6 +106,44 @@ pub fn close_editor(editor: Entity<EditorPanel>, window: &mut Window, cx: &mut A
     });
 }
 
+/// Closes a panel's tab (Explorer, Chat, Terminal, ...; editors use
+/// `close_editor`). The center never goes blank: closing its last panel
+/// leaves an empty editor. Deferred: the caller is inside the panel's update.
+pub fn close_panel<P: BasePanel>(panel: Entity<P>, window: &mut Window, cx: &mut App) {
+    let Some(workbench) = current(cx) else {
+        return;
+    };
+    window.defer(cx, move |window, cx| {
+        let area = workbench.read(cx).area.clone();
+        let id = PanelId::from(panel.entity_id());
+        let placement = CENTER_AND_DOCKS.into_iter().find(|&placement| {
+            area.read(cx)
+                .layout(placement)
+                .is_some_and(|tree| tree.panels().any(|panel| panel == id))
+        });
+        let only = placement.is_some_and(|placement| {
+            area.read(cx)
+                .layout(placement)
+                .is_some_and(|tree| tree.panels().eq([id]))
+        });
+        area.update(cx, |area, cx| {
+            area.remove_panel(panel, window, cx);
+            match placement {
+                Some(DockPlacement::Center) if only => {
+                    let editor = panel_handle(EditorPanel::new(cx));
+                    area.add_panel_view(editor, DockPlacement::Center, None, window, cx);
+                }
+                // An emptied dock closes instead of leaving a blank strip.
+                Some(placement) if only && area.is_dock_open(placement) => {
+                    area.toggle_dock(placement, window, cx)
+                }
+                _ => {}
+            }
+        });
+        workbench.update(cx, |workbench, cx| workbench.schedule_save(cx));
+    });
+}
+
 /// Section, saved layouts or auto-hide flags changed; the owner rebuilds the
 /// menus and updates the Section Bar.
 pub struct MenusChanged;
@@ -157,6 +197,7 @@ impl Workbench {
         if !this.restore(window, cx) {
             this.apply_preset(section_preset(this.section), window, cx);
         }
+        this.close_empty_docks(window, cx);
         // Auto-hide docks start hidden, like JetBrains unpinned tool windows.
         for side in this.store.auto_hide.clone() {
             this.set_dock_open(side.placement(), false, window, cx);
@@ -223,6 +264,78 @@ impl Workbench {
         self.schedule_save(cx);
     }
 
+    /// View > Add Panel, or a panel's "New ..." item.
+    pub fn add_panel(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
+        // Every panel with its place; placeholders also with their kind.
+        let mut panels: Vec<(PanelId, DockPlacement, Option<SharedString>, bool)> = Vec::new();
+        {
+            let area = self.area.read(cx);
+            for placement in CENTER_AND_DOCKS {
+                let Some(tree) = area.layout(placement) else {
+                    continue;
+                };
+                for id in tree.panels() {
+                    let Some(view) = area.panel(id).map(|view| view.view()) else {
+                        continue;
+                    };
+                    let kind = view
+                        .clone()
+                        .downcast::<TestPanel>()
+                        .ok()
+                        .map(|panel| panel.read(cx).kind());
+                    let explorer = view.downcast::<ExplorerPanel>().is_ok();
+                    panels.push((id, placement, kind, explorer));
+                }
+            }
+        }
+        let (id, placement, handle) = if name == "Explorer" {
+            match panels.iter().find(|(.., explorer)| *explorer) {
+                // There is one Explorer: show it.
+                Some(&(id, placement, ..)) => (id, placement, None),
+                None => {
+                    let handle = panel_handle(ExplorerPanel::new(cx));
+                    (handle.panel_id(cx), DockPlacement::Left, Some(handle))
+                }
+            }
+        } else {
+            let same: Vec<_> = panels
+                .iter()
+                .filter(|(_, _, kind, _)| kind.as_deref() == Some(name))
+                .collect();
+            let placement = same
+                .first()
+                .map(|(_, placement, ..)| *placement)
+                .unwrap_or_else(|| default_placement(name));
+            let titles: Vec<SharedString> = same
+                .iter()
+                .filter_map(|(id, ..)| {
+                    let view = self.area.read(cx).panel(*id)?.view();
+                    let panel = view.downcast::<TestPanel>().ok()?;
+                    Some(panel.read(cx).title())
+                })
+                .collect();
+            let handle = panel_handle(TestPanel::new(next_title(name, &titles), cx));
+            (handle.panel_id(cx), placement, Some(handle))
+        };
+        self.area.update(cx, |area, cx| {
+            if let Some(handle) = handle {
+                let size = Side::of(placement).map(Side::default_size);
+                area.add_panel_view(handle, placement, size, window, cx);
+            }
+            if placement != DockPlacement::Center && !area.is_dock_open(placement) {
+                area.toggle_dock(placement, window, cx);
+            }
+            area.select_panel(id, window, cx);
+        });
+        if let Some(view) = self.area.read(cx).panel(id).cloned() {
+            // Deferred: the menu that ran this gives focus back when it closes.
+            window.defer(cx, move |window, cx| {
+                view.focus_handle(cx).focus(window, cx)
+            });
+        }
+        self.schedule_save(cx);
+    }
+
     pub fn menu_state(&self) -> MenuState {
         MenuState {
             section: self.section,
@@ -276,6 +389,22 @@ impl Workbench {
             && let Some(panel) = self.first_panel(placement, cx)
         {
             panel.focus_handle(cx).focus(window, cx);
+        }
+    }
+
+    /// Docks whose panels were all closed stay closed (older layouts saved
+    /// them open and blank).
+    fn close_empty_docks(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        for side in Side::ALL {
+            let placement = side.placement();
+            let empty = self
+                .area
+                .read(cx)
+                .layout(placement)
+                .is_none_or(|tree| tree.panels().next().is_none());
+            if empty {
+                self.set_dock_open(placement, false, window, cx);
+            }
         }
     }
 
@@ -466,6 +595,7 @@ impl Workbench {
         }
         self.store.auto_hide = layout.auto_hide;
         self.store.save();
+        self.close_empty_docks(window, cx);
         cx.emit(MenusChanged);
     }
 
@@ -594,6 +724,30 @@ impl Workbench {
             }
         }
     }
+}
+
+/// Where a panel kind goes when none of its kind is open.
+fn default_placement(name: &str) -> DockPlacement {
+    match name {
+        "Explorer" => DockPlacement::Left,
+        "Chat" => DockPlacement::Right,
+        "Terminal" => DockPlacement::Bottom,
+        _ => DockPlacement::Center,
+    }
+}
+
+/// "Chat", then "Chat 2", "Chat 3", ...: the first name not in use.
+fn next_title(name: &str, titles: &[SharedString]) -> String {
+    (1..)
+        .map(|n| {
+            if n == 1 {
+                name.to_string()
+            } else {
+                format!("{name} {n}")
+            }
+        })
+        .find(|title| !titles.iter().any(|used| used.as_ref() == title))
+        .unwrap_or_else(|| name.to_string())
 }
 
 /// Where a moved panel lands: the first tab group of the target, or a new group

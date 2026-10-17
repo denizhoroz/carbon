@@ -11,6 +11,10 @@ pub const LOGO_TEXT: &str = "C";
 pub const LOGO_SIZE: Rems = rems(1.25);
 pub const LOGO_WEIGHT: FontWeight = FontWeight::BOLD;
 
+/// Height of the title (menu) bar and the status bar: the editor tab bar's
+/// height (vendored kit tabs are 30 px), so the three bars line up.
+pub const BAR_HEIGHT: Pixels = px(30.);
+
 /// Gap between items in the title bar row (logo, menu bar).
 pub const TITLE_BAR_GAP: Rems = rems(0.5);
 

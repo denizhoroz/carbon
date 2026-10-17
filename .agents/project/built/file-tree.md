@@ -30,7 +30,7 @@ Built 2026-10-17. User request: plan the file tree, compare design alternatives,
 | Header button (chevrons) | Collapse all |
 | Header buttons | New File, New Folder, Collapse All |
 | Right-click row / empty space | Menu: New File..., New Folder..., Rename (F2), Delete (Delete), Copy Path (Shift+Alt+C), Copy Relative Path (Ctrl+Shift+Alt+C), Reveal in File Explorer (Shift+Alt+R; "Reveal in Finder" / "Open Containing Folder" elsewhere). Empty space acts on the root; Rename/Delete greyed |
-| New File / New Folder | Name box as the first row of the target folder (selected folder, selected file's folder, or root; folder opens). Enter creates (file: selected + opened); error keeps the box (notification: "'x' already exists"); click away creates, or drops a bad name; Escape cancels |
+| New File / New Folder | Name box (row height, plain border, no focus ring or placeholder; 2026-10-17) as the first row of the target folder (selected folder, selected file's folder, or root; folder opens). Enter creates (file: selected + opened); error keeps the box (notification: "'x' already exists"); click away creates, or drops a bad name; Escape cancels |
 | F2 | Name box in the row, name selected without extension; Enter / click away renames; open buffers follow the new path (also inside a renamed folder) |
 | Delete | Dialog "Delete 'x'?" / "Delete folder 'x' and its contents?", "You can restore it from the Recycle Bin"; Enter or "Move to Recycle Bin" moves it there (`trash` crate), Cancel/Escape keeps it. Open buffers stay; Editor shows "(deleted)" |
 | Copy Path / Copy Relative Path / Reveal | Selected entry, or the root without a selection (relative path of the root = ".") |
