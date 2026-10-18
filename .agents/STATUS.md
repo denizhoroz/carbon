@@ -25,7 +25,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 ### Pillars (implementation)
 | Pillar | State | Notes |
 |---|---|---|
-| 1 Code editor | [~] | Tier 1 built: tabs, save, colours, rust-analyzer (`project/built/code-editor.md`) |
+| 1 Code editor | [~] | Tier 1 built: tabs, save, colours, rust-analyzer (`project/built/code-editor.md`); terminal tier 1 (`project/built/terminal.md`) |
 | 2 Paradigm editor | [ ] | Needs research first |
 | 3 Agents tab | [ ] | |
 | 4 Multi-platform (Win/macOS/Linux) | [ ] | |
@@ -51,6 +51,7 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-18 | Terminal = `alacritty_terminal` emulator in the core + `portable-pty` + own GPUI view; tier 1 = base, selection/copy/paste/scrollback, profiles, shell integration (OSC 633/133), links, find; Windows default PowerShell 7, else Windows PowerShell | user decision after comparing VS Code, Zed, Lapce, WezTerm, Warp, Windows Terminal, Ghostty, JetBrains | `documents/terminal.md`, `project/built/terminal.md` |
 | 2026-10-17 | Every Code Editor panel behaves like editor tabs: tab + close button alone or with others; Chat/Terminal addable many times (View > Add Panel, "..." > New); Explorer: one instance, plain "Explorer" title, not closable (user, same day). Supersedes "side panels keep their title" | user decision (changed mind) | `project/built/panel-layout.md` s8 |
 | 2026-10-17 | Also vendor `gpui-base` 0.7.3 (`vendor/gpui-base`, patch: gutter gap); title/status bar 30 px; dialogs centered (kit patch 4) | user appearance requests; gutter gap and dialog position are hard-coded in the kit | `vendor/*/CARBON-PATCHES.md` |
 | 2026-10-17 | Vendor gpui-component 0.7.3 with Carbon patches (`vendor/gpui-component`, `[patch.crates-io]`): editor tabs always shown (also with one file), 30 px tabs, panel-handled tab close | user decision (editor tab bar must not change style; kit had only a dock-wide setting and fixed 32 px tabs) | `vendor/gpui-component/CARBON-PATCHES.md`, `project/built/code-editor.md` |
@@ -132,6 +133,10 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-18 (terminal tier 1)
+- Done: comparison (`documents/terminal.md`); core emulator (`terminal/{mod,emulator,osc,shells}.rs`, Carbon shell integration scripts for PowerShell/bash/zsh); GUI `terminal_panel` (canvas drawing, keystroke interceptor, text input handler, selection/copy/paste, scrollback, find, links, exit-code marks, profiles in "...", restart, restore). Fixed during testing: marks after ConPTY resize, "..." actions not reaching the panel, Git Bash MSYS cwd. Speed gate: 50 MB in 29 s (ConPTY limit 25 s), frame p99 1.6 ms, key echo median 0.3 ms. 67 tests pass + 4 ignored; click-tested.
+- Next: language packages; agents using terminal `commands()`; commit incl. `vendor/` (user).
 
 ### 2026-10-18 (drag docks shut/open)
 - Done: VS Code-style snap: drag a dock edge to the window edge to hide it, drag the edge back out to show it (left, right, bottom); closed bottom dock fully hidden (was a 29 px strip). Vendored kit patches: gpui-base 2, gpui-component 5. Click-tested all three docks both ways with simulated drags; 58 tests pass + 3 ignored.

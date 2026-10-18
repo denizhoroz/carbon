@@ -11,7 +11,7 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Status bar rest: dock toggles, diagnostics, agents, cost, job spinner + Stop, clickable items (`../built/status-bar.md` has workspace/branch/jobs) | `DESIGN.md` s4 | |
 | Recent folders list; reopen last folder on start; layout per folder | WB-03, WB-09 | Open/create/close built (`../built/workspace-folders.md`) |
 | Explorer leftovers: file nesting, redo, compact-folders setting, OS clipboard for files; agent markers fed by agent sessions (problem markers now come from language servers); whole-project background index (go-to-file, search) | WB-03, SC-01, AG-01 | T1-T3 built (`../built/file-tree.md`) |
-| Code Editor section contents: Chat, Terminal (placeholders), then problems/output | WB-03, WB-04, TM-01, AG-01 | Editor built (`../built/code-editor.md`); `test_panel.rs` placeholders |
+| Code Editor section contents: Chat (placeholder), then problems/output | WB-03, WB-04, AG-01 | Editor and Terminal built (`../built/code-editor.md`, `../built/terminal.md`); `test_panel.rs` placeholders |
 | More sections in the Section Bar (paradigm, agents) and its bottom group (settings) | `DESIGN.md` s4 | Presets Paradigm/Agents exist as layouts only |
 | Per-workspace layout (now one global file; editor tabs of another folder are dropped on start) | WB-09 | Needs workspace concept |
 | Settings UI, keymap, VS Code settings/keymap/theme import | ST-01, ST-04, ST-06 | |
@@ -28,7 +28,7 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Debugging: DAP, launch.json, logpoints | DB-01, DB-02 |
 | Workspace search | SR-01 |
 | Git: hunks, blame, history, merge editor, PR | SC-01, SC-03, SC-04, ED-06 |
-| Integrated terminal + shell integration | TM-01, TM-02 |
+| Terminal leftovers: mouse reporting to programs, IME composition display, split inside a tab, persistent sessions / reattach, inline images, terminal settings (font, size, scrollback, cursor), shell integration for cmd/WSL/fish, agents running commands through `commands()` | TM-01..04 | Tier 1 built (`../built/terminal.md`) |
 
 ## Pillar 2: Paradigm editor
 
@@ -53,7 +53,6 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Feature | Refs |
 |---|---|
 | Daemon split of `carbon-core` (now in-process: `../built/carbon-core.md`); LSP/DAP, git, file watching in core | RM-06, `PROJECT.md` |
-| Terminal emulation for the Terminal panel (VT parser + grid; must answer ConPTY `ESC[6n`) | TM-01, `../built/carbon-core.md` findings |
 | Agent backend for sessions (ACP / direct APIs) on the core session model | AG-06, SE-04 |
 | macOS and Linux builds + CI on all three | PL-12, `STATUS.md` |
 | Startup/RAM budgets and benchmarks | PL-11 |

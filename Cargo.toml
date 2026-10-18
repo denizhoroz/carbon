@@ -31,6 +31,8 @@ serde_json = "1.0.154"
 ropey = { version = "=2.0.0-beta.1", features = ["metric_utf16"] }
 ignore = "0.4.33"
 portable-pty = "0.9"
+# Terminal emulation (VT parser, grid, scrollback) for PTY sessions; Zed and Lapce use it too.
+alacritty_terminal = { version = "0.26.0", default-features = false }
 async-channel = "2.5.0"
 # carbon-gui: the error type of the kit editor's language-server hooks.
 anyhow = "1.0.104"

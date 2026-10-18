@@ -8,6 +8,7 @@ mod save_ops;
 mod section_bar;
 mod status_bar;
 mod style;
+mod terminal_panel;
 mod test_panel;
 mod title_bar;
 mod workbench;
@@ -179,7 +180,13 @@ impl Render for CarbonApp {
                 cx,
             ))
             .on_action(self.on(
-                |w, a: &AddPanel, window, cx| w.add_panel(&a.name, window, cx),
+                |w, a: &AddPanel, window, cx| w.add_panel(&a.name, None, window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, a: &terminal_panel::NewTerminal, window, cx| {
+                    w.add_panel("Terminal", Some(&a.profile), window, cx)
+                },
                 cx,
             ))
             .on_action(self.on(
@@ -205,6 +212,12 @@ impl Render for CarbonApp {
                 if let Some(editor) = workbench::active_editor(cx) {
                     editor.update(cx, |editor, cx| editor.save(action, window, cx));
                 }
+            })
+            .on_action(|action: &terminal_panel::Find, window, cx| {
+                terminal_panel::on_root_action(action, window, cx)
+            })
+            .on_action(|action: &terminal_panel::Restart, window, cx| {
+                terminal_panel::on_root_action(action, window, cx)
             })
             .on_action(|action: &CloseEditor, window, cx| {
                 if let Some(editor) = workbench::active_editor(cx) {
@@ -251,6 +264,7 @@ fn main() {
         test_panel::register(cx);
         explorer_panel::register(cx);
         editor_panel::register(cx);
+        terminal_panel::register(cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(style::fixed::WINDOW_SIZE, cx)),
             ..TitleBar::window_options()

@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::editor_panel::EditorPanel;
 use crate::explorer_panel::ExplorerPanel;
 use crate::style::fixed;
+use crate::terminal_panel::TerminalPanel;
 use crate::test_panel::TestPanel;
 
 const STORE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/carbon-gui");
@@ -132,6 +133,7 @@ fn tabs(titles: &[&str], cx: &mut App) -> DockLayout {
         let panel = match *title {
             "Explorer" => panel_handle(ExplorerPanel::new(cx)),
             "Editor" => panel_handle(EditorPanel::new(cx)),
+            "Terminal" => panel_handle(TerminalPanel::new(None, None, None, cx)),
             _ => panel_handle(TestPanel::new(*title, cx)),
         };
         layout.panel_view(panel, cx)

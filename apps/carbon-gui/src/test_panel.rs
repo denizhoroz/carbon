@@ -10,6 +10,7 @@ use gpui_kit::*;
 use crate::editor_panel::EditorPanel;
 use crate::menus::AddPanel;
 use crate::style::fixed;
+use crate::terminal_panel::TerminalPanel;
 
 /// Persistence key in saved layouts. Never change it.
 const PANEL_NAME: &str = "TestPanel";
@@ -51,6 +52,10 @@ pub fn register(cx: &mut App) {
         // Layouts saved before the Editor became its own panel.
         if title == "Editor" {
             return panel_handle(EditorPanel::new(cx));
+        }
+        // Layouts saved while the Terminal was a placeholder ("Terminal 2").
+        if title == "Terminal" || title.starts_with("Terminal ") {
+            return panel_handle(TerminalPanel::new(None, None, None, cx));
         }
         panel_handle(TestPanel::new(title, cx))
     });

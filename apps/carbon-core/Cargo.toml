@@ -9,6 +9,7 @@ edition.workspace = true
 ropey.workspace = true
 ignore.workspace = true
 portable-pty.workspace = true
+alacritty_terminal.workspace = true
 async-channel.workspace = true
 thiserror.workspace = true
 dunce.workspace = true

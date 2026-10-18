@@ -15,7 +15,7 @@ mod id;
 mod jobs;
 pub mod lsp;
 mod marks;
-mod terminal;
+pub mod terminal;
 mod vcs;
 mod watcher;
 mod workspace;
@@ -34,7 +34,9 @@ pub use history::{FileOp, HISTORY_LIMIT};
 pub use jobs::{Job, JobId, JobStatus, JobStore};
 pub use marks::{Mark, Marks};
 pub use ropey::Rope;
-pub use terminal::{Terminal, TerminalEvent, TerminalId, TerminalSpec, TerminalStore};
+pub use terminal::{
+    Command as TerminalCommand, Terminal, TerminalEvent, TerminalId, TerminalSpec, TerminalStore,
+};
 pub use vcs::{Branch, current_branch};
 pub use watcher::{FsChanges, FsWatcher};
 pub use workspace::Workspace;

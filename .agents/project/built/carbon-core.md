@@ -16,7 +16,7 @@ Built 2026-10-16. User decision: option (a), an in-process core crate before rea
 | `history` | `FileOp`, `HISTORY_LIMIT` | Undo stack entries for create / rename / move / copy |
 | `watcher` | `FsWatcher`, `FsChanges` | `notify` recursive watch of the workspace; 100 ms debounced batches of folders to re-list (or `rescan`) on an `async_channel` |
 | `buffer` | `Buffer`, `BufferStore`, `BufferId`, `LineEnding` | Rope (`ropey 2.0.0-beta.1`, same as the kit), byte offsets on char boundaries; insert/remove/replace (validated, one revision each); `revision`, `is_dirty`; line endings kept as on disk, CRLF/LF detected; UTF-8 only (`NotUtf8` for binary); atomic save (temp file + rename + fsync); `save_as`; store opens each file once; `close` refuses dirty unless forced; `set_rope` (editor view's text), `reload`, disk-change detection by modified time, conflict flag |
-| `terminal` | `Terminal`, `TerminalStore`, `TerminalSpec`, `TerminalEvent` | PTY via `portable-pty` (ConPTY on Windows); default shell = `$SHELL` / `%COMSPEC%`; reader + waiter threads send `Output(bytes)` / `Exited(code)` on an `async_channel` (blocking and async receive); `write`, `resize`, `kill`; `close` kills |
+| `terminal` (+ `emulator`, `osc`, `shells`) | `Terminal`, `TerminalStore`, `TerminalSpec`, `TerminalEvent`, `Command`, `CommandMark`, `Term`, `shells::{Profile, profiles, default_profile}` | PTY via `portable-pty` (ConPTY on Windows) plus the `alacritty_terminal` emulator (since 2026-10-18; details in `terminal.md`): reader thread parses, writer thread sends input, events `Wakeup`/`Title`/`Bell`/`Clipboard`/`Exited`; `screen_text`, `commands` (shell integration), `cwd`; `close` kills |
 | `vcs` | `Branch`, `current_branch` | Git branch from `.git/HEAD` (searches parents; `.git` file for worktrees/submodules); detached = short id; no git binary/library |
 | `jobs` | `JobStore`, `Job`, `JobId`, `JobStatus` | Background job registry (Running/Succeeded/Failed) for the status bar; model only |
 | `agent` | `AgentSession`, `AgentStore`, `Message`, `Role`, `AgentStatus` | Data model only: title, status (Idle/Running/AwaitingApproval/Finished/Failed), messages; no backend (protocol undecided) |
@@ -28,9 +28,9 @@ Built 2026-10-16. User decision: option (a), an in-process core crate before rea
 
 ## Findings
 
-- **Windows ConPTY sends `ESC[6n` (cursor position request) first and blocks until answered** (`ESC[row;colR`). The terminal panel's emulator must answer it; the test does so by hand.
+- **Windows ConPTY sends `ESC[6n` (cursor position request) first and blocks until answered** (`ESC[row;colR`). The core's emulator answers it (`PtyWrite`), since 2026-10-18.
 - `ropey` is a beta pinned `=2.0.0-beta.1` to share the kit's rope type; revisit when the editor panel is built.
 
 ## Not in scope yet
 
-File watching (`notify`), undo/redo, anchors and per-actor edits (ED-11), encodings other than UTF-8, terminal emulation (VT parser/grid), agent protocol, persistence of sessions, daemon split.
+File watching (`notify`), undo/redo, anchors and per-actor edits (ED-11), encodings other than UTF-8, agent protocol, persistence of sessions, daemon split.

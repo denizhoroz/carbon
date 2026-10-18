@@ -57,3 +57,11 @@ pub const TREE_ITEM_GAP: Pixels = px(4.);
 /// Explorer markers: agent-edit icon and the dot a folder shows for what is inside.
 pub const TREE_MARK_ICON_SIZE: Pixels = px(12.);
 pub const TREE_DOT_SIZE: Pixels = px(6.);
+
+/// Terminal: line height as a multiple of the font size, the left gutter
+/// (command marks live there), top padding, scrollbar width, mark size.
+pub const TERMINAL_LINE_HEIGHT: f32 = 1.3;
+pub const TERMINAL_GUTTER: Pixels = px(14.);
+pub const TERMINAL_PADDING_TOP: Pixels = px(4.);
+pub const TERMINAL_SCROLLBAR_WIDTH: Pixels = px(6.);
+pub const TERMINAL_MARK_SIZE: Pixels = px(6.);

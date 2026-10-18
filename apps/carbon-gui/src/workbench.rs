@@ -27,7 +27,9 @@ use crate::layouts::{LayoutStore, MAX_SAVED, Preset, SavedLayout, Side};
 use crate::menus::{Direction, MenuState};
 use crate::section_bar::Section;
 use crate::style::fixed;
+use crate::terminal_panel::TerminalPanel;
 use crate::test_panel::TestPanel;
+use carbon_core::terminal::shells;
 
 /// Saved-layout schema version; bump when old layouts can no longer load.
 /// 2: Explorer is a real panel (v1 layouts hold a placeholder "Explorer").
@@ -268,7 +270,15 @@ impl Workbench {
     }
 
     /// View > Add Panel, or a panel's "New ..." item.
-    pub fn add_panel(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
+    /// View > Add Panel, a panel's "New ..." item, or a terminal's "New
+    /// <shell>" (`profile`: that shell; otherwise the default).
+    pub fn add_panel(
+        &mut self,
+        name: &str,
+        profile: Option<&str>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         // Every panel with its place; placeholders also with their kind.
         let mut panels: Vec<(PanelId, DockPlacement, Option<SharedString>, bool)> = Vec::new();
         {
@@ -285,7 +295,13 @@ impl Workbench {
                         .clone()
                         .downcast::<TestPanel>()
                         .ok()
-                        .map(|panel| panel.read(cx).kind());
+                        .map(|panel| panel.read(cx).kind())
+                        .or_else(|| {
+                            view.clone()
+                                .downcast::<TerminalPanel>()
+                                .is_ok()
+                                .then(|| "Terminal".into())
+                        });
                     let explorer = view.downcast::<ExplorerPanel>().is_ok();
                     panels.push((id, placement, kind, explorer));
                 }
@@ -313,11 +329,27 @@ impl Workbench {
                 .iter()
                 .filter_map(|(id, ..)| {
                     let view = self.area.read(cx).panel(*id)?.view();
-                    let panel = view.downcast::<TestPanel>().ok()?;
-                    Some(panel.read(cx).title())
+                    match view.clone().downcast::<TestPanel>() {
+                        Ok(panel) => Some(panel.read(cx).title()),
+                        Err(_) => Some(view.downcast::<TerminalPanel>().ok()?.read(cx).label()),
+                    }
                 })
                 .collect();
-            let handle = panel_handle(TestPanel::new(next_title(name, &titles), cx));
+            let handle = if name == "Terminal" {
+                let profile = profile
+                    .filter(|name| !name.is_empty())
+                    .and_then(shells::profile_named)
+                    .or_else(shells::default_profile);
+                let base = profile
+                    .as_ref()
+                    .map_or_else(|| "Terminal".to_string(), |profile| profile.name.clone());
+                let label = next_title(&base, &titles).into();
+                // New terminals start where the last one was.
+                let cwd = crate::terminal_panel::active_terminal_cwd(cx);
+                panel_handle(TerminalPanel::new(profile, Some(label), cwd, cx))
+            } else {
+                panel_handle(TestPanel::new(next_title(name, &titles), cx))
+            };
             (handle.panel_id(cx), placement, Some(handle))
         };
         self.area.update(cx, |area, cx| {
