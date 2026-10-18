@@ -6,7 +6,7 @@ use std::{ops::Deref as _, rc::Rc, sync::Arc};
 use gpui::{
     AnyElement, App, AppContext as _, Axis, Context, Div, Element, Empty, InteractiveElement as _,
     IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Render, Stateful, Style,
-    Styled as _, Window, div,
+    Styled as _, Window, deferred, div,
 };
 use gpui_base::{
     HandleEdge, ResizeHandleContext,
@@ -89,6 +89,32 @@ impl DockAreaRenderer for DockSkin {
             .into_any_element()
     }
 
+    /// CARBON PATCH: a closed dock's edge stays draggable, like VS Code's
+    /// sashes: the same handle as an open dock's, on the side facing the
+    /// centre, painted last so the centre's content does not cover it.
+    fn render_closed_dock(
+        &self,
+        dock: &DockContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        let edge = match dock.placement() {
+            DockPlacement::Left => HandleEdge::Leading,
+            _ => HandleEdge::Trailing,
+        };
+        Some(
+            div()
+                .absolute()
+                .size_full()
+                .child(deferred(self.resize_handle_at(dock, edge, window, cx)).with_priority(1))
+                .child(DockResizeTracker {
+                    dock: dock.clone(),
+                    shared: self.shared().clone(),
+                })
+                .into_any_element(),
+        )
+    }
+
     /// The "unknown panel" message the old `InvalidPanel` drew.
     ///
     /// It answers `dump` with the state it was handed, so a layout written by
@@ -114,6 +140,23 @@ impl DockSkin {
     fn render_resize_handle(
         &self,
         dock: &DockContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        // Every dock's handle lives inside the dock, because `dock_frame` clips
+        // to the dock's box. The left dock hugs its trailing edge; the right
+        // and bottom docks hug their leading one.
+        let edge = match dock.placement() {
+            DockPlacement::Left => HandleEdge::Trailing,
+            _ => HandleEdge::Leading,
+        };
+        self.resize_handle_at(dock, edge, window, cx)
+    }
+
+    fn resize_handle_at(
+        &self,
+        dock: &DockContext,
+        edge: HandleEdge,
         _: &mut Window,
         _: &mut App,
     ) -> impl IntoElement {
@@ -129,14 +172,6 @@ impl DockSkin {
             DockPlacement::Right => "resize-handle-right",
             DockPlacement::Bottom => "resize-handle-bottom",
             DockPlacement::Center => "resize-handle-center",
-        };
-
-        // Every dock's handle lives inside the dock, because `dock_frame` clips
-        // to the dock's box. The left dock hugs its trailing edge; the right
-        // and bottom docks hug their leading one.
-        let edge = match placement {
-            DockPlacement::Left => HandleEdge::Trailing,
-            _ => HandleEdge::Leading,
         };
 
         resize_handle(id, placement.axis())

@@ -104,7 +104,7 @@ Legend: **Y** yes, **P** partial, **N** no, **build** = Carbon must build it, `=
 | Feature | How | Shortcut / menu |
 |---|---|---|
 | Drag tabs between groups, docks, center; split on edge drop; resize; close; zoom | Kit `DockArea` + `DockSkin` (close buttons on) | Mouse |
-| Toggle docks | `area.toggle_dock` | Ctrl+B left, Ctrl+Alt+B right, Ctrl+J bottom; View menu |
+| Toggle docks | `area.toggle_dock`; no collapse buttons in tab bars (`set_toggle_button_visible(false)`, user 2026-10-18) | Ctrl+B left, Ctrl+Alt+B right, Ctrl+J bottom; View menu |
 | Persist current layout | Per section (`section-bar.md`): `dump` on `LayoutChanged`, 500 ms debounce, `load` on start, fallback section default | `target/carbon-gui/layout.json` |
 | Task presets | `Preset::{Code, Paradigm, Agents}` (`layouts.rs`) | View > Layout > Preset |
 | Reset layout | Active section's default (Code Editor = Code preset), reopens docks | View > Layout > Reset Layout |
@@ -113,6 +113,7 @@ Legend: **Y** yes, **P** partial, **N** no, **build** = Carbon must build it, `=
 | Keyboard resize focused dock | `set_dock_size` +-24 px, min 120 px | Ctrl+Alt+Shift+arrows |
 | Auto-hide docks | Start hidden; open with toggle and take focus; close on click outside (bounds + dock size) | View > Auto-Hide Left/Right/Bottom Dock (checkmark) |
 | Panels like editor tabs (2026-10-17, user) | Every Code Editor panel (Explorer, Chat, Terminal, placeholders) draws as a tab with a close button, alone or with others (`always_tab_bar`); x and "..." > Close work on a dock's last panel too (`request_close` -> `workbench::close_panel`); an emptied dock closes (also on load); closing the center's last panel leaves an empty editor | Tab x, "..." > Close |
+| Drag a dock shut / open (2026-10-18, user; VS Code sash snap) | Drag a dock's edge toward the window edge: under 50 px (half the kit minimum, 100 px) it snaps closed and is fully hidden (bottom too, no strip); back over 50 px in the same drag it reopens at 100 px and follows the pointer. A closed dock with panels keeps a 5 px grab strip at its edge (left: next to the Section Bar; right: window edge; bottom: above the status bar): drag it out to reopen. Empty docks get no strip. Vendored kit: gpui-base patch 2, gpui-component patch 5 | Mouse; toggles unchanged |
 | Explorer differs (2026-10-17, user) | The main panel: alone in its dock it shows the plain "Explorer" title (no tab, no close button; `always_tab_bar` and `closable` false); in a group with other panels it is a tab without x | View > Add Panel > Explorer if moved away |
 | Add panels | Explorer: one; shown (dock opened) if open, else added to the left. Chat, Terminal, other placeholders: a new numbered tab ("Terminal 2") in the region of its kind, else the default (Chat right, Terminal bottom) | View > Add Panel; a panel's "..." > New <kind> |
 

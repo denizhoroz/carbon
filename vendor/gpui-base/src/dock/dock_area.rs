@@ -1324,10 +1324,16 @@ impl DockArea {
             return;
         };
         let was_open = pane.dock.is_open();
-        if placement == DockPlacement::Bottom && pane.dock.is_collapsible() && size < PANEL_MIN_SIZE
-        {
-            pane.dock.set_open(size > CLOSED_BOTTOM_STRIP);
-            pane.dock.set_live_size(Some(size.max(CLOSED_BOTTOM_STRIP)));
+        // CARBON PATCH: every collapsible dock snaps like VS Code's panels:
+        // dragged under half its minimum it closes, back over half it opens
+        // at the minimum, in the same drag. See `vendor/gpui-base/CARBON-PATCHES.md`.
+        if pane.dock.is_collapsible() && size < PANEL_MIN_SIZE {
+            let open = size >= PANEL_MIN_SIZE / 2.;
+            pane.dock.set_open(open);
+            pane.dock.set_live_size(None);
+            if open {
+                pane.dock.set_size(PANEL_MIN_SIZE);
+            }
         } else {
             pane.dock.set_open(true);
             pane.dock.set_live_size(None);
@@ -1486,6 +1492,17 @@ impl DockArea {
         // nobody can see.
         let size = dock_extent(&dock);
         if size <= px(0.) {
+            // CARBON PATCH: a closed dock that has panels keeps a grab strip
+            // at its edge (the renderer's), so dragging it out reopens it.
+            if !dock.is_open() && pane.tree.panels().next().is_some() {
+                let frame = div().flex_none().relative().map(|this| match placement {
+                    DockPlacement::Bottom => this.w_full().h(px(0.)),
+                    _ => this.h_full().w(px(0.)),
+                });
+                if let Some(grip) = self.renderer.render_closed_dock(&dock, window, cx) {
+                    return Some(frame.child(grip).into_any_element());
+                }
+            }
             return Some(div().into_any_element());
         }
 
@@ -1873,7 +1890,8 @@ pub const CLOSED_BOTTOM_STRIP: Pixels = px(29.);
 pub fn dock_extent(dock: &DockContext) -> Pixels {
     match (dock.is_open(), dock.placement()) {
         (true, _) => dock.size(),
-        (false, DockPlacement::Bottom) => CLOSED_BOTTOM_STRIP,
+        // CARBON PATCH: a closed bottom dock is hidden like a side dock (VS
+        // Code); its grab strip reopens it (`render_closed_dock`).
         (false, _) => px(0.),
     }
 }
@@ -1975,6 +1993,19 @@ pub trait DockAreaRenderer: 'static {
         cx: &mut App,
     ) -> AnyElement {
         content
+    }
+
+    /// CARBON PATCH: what a closed dock with panels draws at its edge, inside
+    /// a zero-size, unclipped box where the dock would be: a strip that
+    /// reopens the dock when dragged (through [`DockContext::resize_to`]).
+    /// `None` draws nothing.
+    fn render_closed_dock(
+        &self,
+        dock: &DockContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        None
     }
 
     /// The stand-in for a panel this build cannot construct — one whose

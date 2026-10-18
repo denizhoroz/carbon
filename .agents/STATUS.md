@@ -133,6 +133,11 @@ Template:
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
 
+### 2026-10-18 (drag docks shut/open)
+- Done: VS Code-style snap: drag a dock edge to the window edge to hide it, drag the edge back out to show it (left, right, bottom); closed bottom dock fully hidden (was a 29 px strip). Vendored kit patches: gpui-base 2, gpui-component 5. Click-tested all three docks both ways with simulated drags; 58 tests pass + 3 ignored.
+- Then: dock collapse buttons removed from all tab bars (skin setting, no patch).
+- Next: language packages; commit incl. `vendor/` (user).
+
 ### 2026-10-17 (appearance + panels)
 - Done: title and status bar 30 px (= tab bar); Explorer name box full row height, plain border, no placeholder; dialogs centered (kit patch 4); 24 px gutter gap (vendored `gpui-base`, patch 1); every Code Editor panel has tabs + close, Chat/Terminal addable (View > Add Panel, "..." > New), Explorer closable and re-addable, emptied docks close. Fixed: the kit's "..." > Close closed unsaved editors without asking. 58 tests pass + 3 ignored; click-tested.
 - Then (same day): Explorer back to its plain title, not closable; empty editor has no bar ("No file open").

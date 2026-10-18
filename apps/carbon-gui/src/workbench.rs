@@ -179,6 +179,9 @@ impl Workbench {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (area, skin) = DockSkin::dock_area("carbon-main", Some(LAYOUT_VERSION), window, cx);
         skin.set_close_button_visible(true, cx);
+        // No dock collapse buttons in tab bars (user): docks open and close by
+        // dragging their edge, the View menu and Ctrl+B / Ctrl+Alt+B / Ctrl+J.
+        skin.set_toggle_button_visible(false, cx);
 
         let _layout_sub = cx.subscribe(&area, |this, _, event: &DockEvent, cx| {
             if let DockEvent::LayoutChanged = event {

@@ -4,4 +4,5 @@ Copied unchanged from crates.io `gpui-base` 0.7.3 (Apache-2.0, `LICENSE-APACHE`)
 
 | # | Date | File | Change | Why |
 |---|---|---|---|---|
+| 2 | 2026-10-18 | `src/dock/dock_area.rs` (`resize_dock`, `render_dock`, `dock_extent`, `DockAreaRenderer::render_closed_dock`) | Every collapsible dock snaps when dragged: under half `PANEL_MIN_SIZE` it closes, back over half it opens at the minimum, in the same drag (was: bottom dock only, with a live strip); a closed bottom dock is hidden (was a 29 px strip); a closed dock with panels asks the renderer for a grab strip at its edge (new hook, default none) | VS Code: drag the terminal/sidebar edge to the window edge to hide it, drag the edge out to bring it back (user) |
 | 1 | 2026-10-17 | `src/input/base/element.rs` (`layout_line_numbers`) | The fold column's width (18 px) is reserved whenever line numbers show, not only with folding on | Carbon turns folding off (cost, crash); without the column, code sat 6 px from the line numbers. Now 24 px, as with the kit's default folding |
