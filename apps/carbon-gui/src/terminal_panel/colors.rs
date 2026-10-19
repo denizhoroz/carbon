@@ -45,7 +45,13 @@ impl Palette {
                 c.foreground,
             ],
             foreground: c.foreground,
-            background: c.background,
+            // The code editor's background (as the kit's editor picks it), so
+            // a terminal beside or below the code reads as the same surface.
+            background: theme
+                .highlight_theme
+                .style
+                .editor_background
+                .unwrap_or_else(|| theme.input_background()),
             cursor: c.caret,
             selection: c.selection,
             muted: c.muted_foreground,

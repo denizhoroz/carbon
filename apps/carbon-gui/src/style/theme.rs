@@ -32,7 +32,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             mode: Mode::Dark,
-            dark_theme: "Carbon Dark".into(),
+            dark_theme: "Gruvbox Dark Hard".into(),
             light_theme: "Carbon Light".into(),
         }
     }
@@ -123,6 +123,53 @@ mod tests {
                 names.extend(set.themes.into_iter().map(|theme| theme.name));
             }
         }
+        // Unknown keys are dropped silently too: every key a theme file sets
+        // must survive a parse and re-serialize.
+        let mut unknown = Vec::new();
+        for entry in std::fs::read_dir(THEMES_DIR).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|ext| ext != "json") {
+                continue;
+            }
+            let raw: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let set: ThemeSet = serde_json::from_value(raw.clone()).unwrap();
+            let back = serde_json::to_value(&set).unwrap();
+            for (theme, parsed) in raw["themes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .zip(back["themes"].as_array().unwrap())
+            {
+                for section in [&["colors"][..], &["highlight"], &["highlight", "syntax"]] {
+                    let pick = |value: &serde_json::Value| {
+                        section.iter().fold(value.clone(), |v, key| v[*key].clone())
+                    };
+                    let (Some(keys), Some(known)) = (
+                        pick(theme).as_object().cloned(),
+                        pick(parsed).as_object().cloned(),
+                    ) else {
+                        continue;
+                    };
+                    for key in keys.keys() {
+                        if !known.contains_key(key) && key != "syntax" {
+                            unknown.push(format!("{} {}: {key}", path.display(), theme["name"]));
+                        }
+                    }
+                }
+            }
+        }
+
+        assert!(
+            unknown.is_empty(),
+            "not kit theme keys:
+{}",
+            unknown.join(
+                "
+"
+            )
+        );
+
         let settings = load_settings();
         assert!(
             names.contains(&settings.dark_theme),

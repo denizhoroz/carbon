@@ -136,6 +136,10 @@ Template:
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
 
+### 2026-10-19 (themes)
+- Done: terminal background = code editor background; `gruvbox.json` with six variants (UI, syntax, terminal ANSI); Gruvbox Dark Hard is the default dark theme; theme test now rejects unknown keys (caught 9 stale kit names). Screenshot-checked dark hard.
+- Next: theme picker in the palette (live switch, no restart).
+
 ### 2026-10-19 (drop zones)
 - Done: drop-as-tab zone made the big one: split strips a quarter of the side, max 80 px (gpui-base patch 3); click-tested merge vs. left split; your layout restored after the test.
 
