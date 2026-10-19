@@ -41,6 +41,12 @@ pub const STATUS_ITEM_GAP: Rems = rems(0.25);
 /// Width of small dialogs (Create Folder).
 pub const DIALOG_WIDTH: Pixels = px(480.);
 
+/// Manage dialogs (Extensions, Workflows, Settings): width, body height,
+/// placeholder icon size.
+pub const MANAGE_WIDTH: Pixels = px(720.);
+pub const MANAGE_BODY_HEIGHT: Pixels = px(420.);
+pub const MANAGE_EMPTY_ICON_SIZE: Pixels = px(28.);
+
 /// Inner padding of panel bodies (DESIGN.md s4: 16 px) and gap between their items.
 pub const PANEL_PADDING: Rems = rems(1.);
 pub const PANEL_GAP: Rems = rems(0.5);

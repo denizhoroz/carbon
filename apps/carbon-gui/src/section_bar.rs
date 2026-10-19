@@ -1,5 +1,6 @@
 //! Section Bar: vertical icon strip on the left (like VS Code's activity bar).
-//! Each icon switches the whole workbench to that section's layout.
+//! Each icon at the top switches the whole workbench to that section's layout;
+//! the icons at the bottom open Manage dialogs (`manage.rs`).
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -7,6 +8,7 @@ use gpui_kit::component::{ActiveTheme, Icon, Selectable, Sizable, Size, v_flex};
 use gpui_kit::*;
 use serde::{Deserialize, Serialize};
 
+use crate::manage::{self, Manage};
 use crate::menus::SwitchSection;
 use crate::style::fixed;
 
@@ -68,16 +70,26 @@ impl Render for SectionBar {
             .border_r_1()
             .border_color(cx.theme().title_bar_border)
             .children(Section::ALL.map(|section| {
-                Button::new(section.id())
-                    .icon(Icon::new(section.icon()).with_size(Size::Size(fixed::SECTION_ICON_SIZE)))
-                    .ghost()
-                    .with_size(Size::Size(fixed::SECTION_BUTTON_SIZE))
+                bar_button(section.id(), section.icon(), section.label())
                     .selected(section == self.active)
-                    .tooltip(section.label())
-                    .accessibility_label(section.label())
                     .on_click(move |_, window, cx| {
                         window.dispatch_action(Box::new(SwitchSection { section }), cx)
                     })
             }))
+            // Bottom group: Manage dialogs, pushed down by the spacer.
+            .child(div().flex_1())
+            .children(Manage::ALL.map(|target| {
+                bar_button(target.id(), target.icon(), target.label())
+                    .on_click(move |_, window, cx| manage::open(target, window, cx))
+            }))
     }
+}
+
+fn bar_button(id: &'static str, icon: IconName, label: &'static str) -> Button {
+    Button::new(id)
+        .icon(Icon::new(icon).with_size(Size::Size(fixed::SECTION_ICON_SIZE)))
+        .ghost()
+        .with_size(Size::Size(fixed::SECTION_BUTTON_SIZE))
+        .tooltip(label)
+        .accessibility_label(label)
 }

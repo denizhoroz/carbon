@@ -34,7 +34,10 @@ icon_assets!(
         Paperclip,
         TextCursorInput,
         MessageSquare,
-        Eraser
+        Eraser,
+        // Section Bar Manage buttons (Settings is in the kit default set).
+        Puzzle,
+        Workflow
     ]
 );
 

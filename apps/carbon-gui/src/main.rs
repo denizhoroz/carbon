@@ -5,6 +5,7 @@ mod editor_panel;
 mod explorer_panel;
 mod layouts;
 mod lsp_ops;
+mod manage;
 mod menus;
 mod palette;
 mod save_ops;
