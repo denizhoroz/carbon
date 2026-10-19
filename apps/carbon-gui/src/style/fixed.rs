@@ -78,3 +78,17 @@ pub const PALETTE_LIST_MAX_HEIGHT: Pixels = px(420.);
 pub const PALETTE_ICON_SIZE: Pixels = px(16.);
 pub const PALETTE_FADE: Duration = Duration::from_millis(150);
 pub const PALETTE_FADE_TRAVEL: Pixels = px(4.);
+
+/// Chat panel: side padding, padding inside the user's message box, the readable column width (centred in wide panels),
+/// starter-prompt width, chip width, role and empty-state icons, composer
+/// rows, and how long a streaming reply waits before it is saved.
+pub const CHAT_PADDING: Pixels = px(12.);
+pub const CHAT_BUBBLE_PADDING: Pixels = px(8.);
+pub const CHAT_COLUMN_MAX_WIDTH: Pixels = px(760.);
+pub const CHAT_STARTERS_MAX_WIDTH: Pixels = px(320.);
+pub const CHAT_CHIP_MAX_WIDTH: Pixels = px(220.);
+pub const CHAT_ROLE_ICON_SIZE: Pixels = px(12.);
+pub const CHAT_EMPTY_ICON_SIZE: Pixels = px(28.);
+pub const CHAT_COMPOSER_MIN_ROWS: usize = 2;
+pub const CHAT_COMPOSER_MAX_ROWS: usize = 10;
+pub const CHAT_SAVE_DELAY: Duration = Duration::from_secs(1);

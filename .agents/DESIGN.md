@@ -114,6 +114,7 @@ Unresearched (see `PROJECT.md` open questions). Design rules below come from the
 - Transcript: collapsible tool calls, diffs inline, plan view, and a linear accessible reading mode (8). **[R]**
 - Logs and raw consoles are collapsible and closed by default; the status carries the summary. **[K]**
 - Details: 7. The tab opens in the right dock by default and can be moved to the editor area or its own window.
+- Built (v1, demo backend): `project/built/chat.md`.
 
 ## 5.4 Modular extension sections (viewers and panels)
 - A section is a panel or editor type contributed by an extension (SVG viewer, 3D model viewer). It declares: id, title, icon (from the shared set), file types it opens, placement (editor area, a dock), and capabilities it needs. **[N]**

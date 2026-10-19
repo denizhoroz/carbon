@@ -8,6 +8,7 @@ use carbon_core::terminal::shells;
 use gpui_kit::assets::IconName;
 use gpui_kit::*;
 
+use crate::chat_panel;
 use crate::editor_panel::CloseEditor;
 use crate::explorer_panel;
 use crate::menus::{self, Direction, MenuState, ResizeDock};
@@ -155,6 +156,20 @@ fn extras() -> Vec<CommandSpec> {
         ));
     }
 
+    for (label, action) in [
+        (
+            "Stop Response",
+            Box::new(chat_panel::StopReply) as Box<dyn Action>,
+        ),
+        ("Retry Last Reply", Box::new(chat_panel::RetryReply)),
+        ("Clear Chat", Box::new(chat_panel::ClearChat)),
+        ("Attach Current File", Box::new(chat_panel::AttachFile)),
+        ("Attach Selection", Box::new(chat_panel::AttachSelection)),
+        ("Cancel Editing", Box::new(chat_panel::CancelEdit)),
+    ] {
+        out.push(CommandSpec::new("Chat", format!("Chat: {label}"), action));
+    }
+
     let explorer: [(&str, Box<dyn Action>); 10] = [
         ("New File", Box::new(explorer_panel::NewFile)),
         ("New Folder", Box::new(explorer_panel::NewFolder)),
@@ -236,6 +251,14 @@ fn decorate(spec: &mut CommandSpec) {
         ),
         "NewTerminal" | "Restart" => (Some(IconName::SquareTerminal), &["shell", "console"]),
         "Find" => (Some(IconName::Search), &["search"]),
+        "StopReply" => (Some(IconName::Square), &["cancel", "chat", "agent"]),
+        "RetryReply" => (Some(IconName::RefreshCw), &["regenerate", "again", "chat"]),
+        "ClearChat" => (Some(IconName::Eraser), &["new chat", "reset", "start over"]),
+        "AttachFile" | "AttachSelection" => (
+            Some(IconName::Paperclip),
+            &["context", "chip", "agent", "chat"],
+        ),
+        "CancelEdit" => (Some(IconName::Close), &["chat", "edit"]),
         "CloseEditor" => (Some(IconName::Close), &["tab"]),
         "About" => (Some(IconName::Info), &["version"]),
         _ if spec.group.as_ref() == "Explorer" => (Some(IconName::Folder), &["file", "tree"]),

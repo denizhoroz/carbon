@@ -134,6 +134,9 @@ fn tabs(titles: &[&str], cx: &mut App) -> DockLayout {
             "Explorer" => panel_handle(ExplorerPanel::new(cx)),
             "Editor" => panel_handle(EditorPanel::new(cx)),
             "Terminal" => panel_handle(TerminalPanel::new(None, None, None, cx)),
+            t if crate::chat_panel::is_chat_title(t) => {
+                panel_handle(crate::chat_panel::ChatPanel::new(t.to_string(), cx))
+            }
             _ => panel_handle(TestPanel::new(*title, cx)),
         };
         layout.panel_view(panel, cx)

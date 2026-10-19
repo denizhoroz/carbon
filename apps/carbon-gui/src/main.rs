@@ -1,4 +1,5 @@
 mod app_assets;
+mod chat_panel;
 mod commands;
 mod editor_panel;
 mod explorer_panel;
@@ -60,6 +61,7 @@ impl CarbonApp {
     fn new(folder: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let core = cx.new(|_| {
             let mut core = Core::new();
+            core.chats.set_dir(chat_panel::CHAT_DIR);
             if let Some(folder) = folder
                 && let Err(err) = core.open_workspace(&folder)
             {
@@ -336,6 +338,7 @@ fn main() {
         explorer_panel::register(cx);
         editor_panel::register(cx);
         terminal_panel::register(cx);
+        chat_panel::register(cx);
         palette::register(cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(style::fixed::WINDOW_SIZE, cx)),

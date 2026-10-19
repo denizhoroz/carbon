@@ -28,7 +28,13 @@ icon_assets!(
         FileSearch,
         FolderX,
         Move,
-        Keyboard
+        Keyboard,
+        // Chat panel.
+        Pencil,
+        Paperclip,
+        TextCursorInput,
+        MessageSquare,
+        Eraser
     ]
 );
 

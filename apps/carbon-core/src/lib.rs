@@ -6,6 +6,7 @@
 
 mod agent;
 mod buffer;
+pub mod chat;
 mod error;
 mod file_index;
 mod file_ops;
@@ -78,6 +79,8 @@ pub struct Core {
     pub lsp: lsp::LspStore,
     pub terminals: TerminalStore,
     pub agents: AgentStore,
+    /// Chat conversations (chat panels) and the backend that answers them.
+    pub chats: chat::ChatStore,
     pub jobs: JobStore,
     /// Bumped whenever the workspace's set of files may have changed (Quick
     /// Open re-lists files when it differs from the one it listed at).

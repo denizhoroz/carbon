@@ -46,6 +46,8 @@ pub enum CoreError {
     NothingToUndo,
     #[error("language server {0}")]
     Lsp(String),
+    #[error("chat: {0}")]
+    Chat(String),
 }
 
 impl CoreError {

@@ -20,6 +20,7 @@ Built 2026-10-16. User decision: option (a), an in-process core crate before rea
 | `vcs` | `Branch`, `current_branch` | Git branch from `.git/HEAD` (searches parents; `.git` file for worktrees/submodules); detached = short id; no git binary/library |
 | `jobs` | `JobStore`, `Job`, `JobId`, `JobStatus` | Background job registry (Running/Succeeded/Failed) for the status bar; model only |
 | `agent` | `AgentSession`, `AgentStore`, `Message`, `Role`, `AgentStatus` | Data model only: title, status (Idle/Running/AwaitingApproval/Finished/Failed), messages; no backend (protocol undecided) |
+| `chat` | `Chat`, `ChatId`, `ChatMessage`, `ContextItem`, `ChatBackend`, `DemoBackend`, `ChatStore` (`Core::chats`) | Chat conversations for the chat panel (2026-10-19): model, backend interface with streaming + cancel, demo backend, JSON save/load (`../built/chat.md`) |
 | `error` | `CoreError`, `Result` | `thiserror`; Io (with path), InvalidName, AlreadyExists, NotADirectory, OutsideWorkspace, NoWorkspace, NotUtf8, InvalidOffset, NoPath, Dirty, NotFound, Terminal, Watch, Trash, WorkspaceRoot, IntoItself, Git, Undo, NothingToUndo |
 
 ## Verified

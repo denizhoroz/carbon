@@ -51,6 +51,7 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-19 | Chat panel v1 is GUI only: `ChatBackend` interface in the core + streaming demo agent (labelled); IDE layout; edit & retry, context chips, status label; chats saved per tab in `target/carbon-gui/chats/`; chat model separate from `AgentSession`; files kept when a tab closes | user decision (no model loader or API now) after comparing VS Code, Zed, Cursor, JetBrains | `project/built/chat.md` |
 | 2026-10-19 | Every panel can move into every region, both ways (terminal/chat into the editor area, editor into docks); a region's last panel is draggable (kit patch 6); emptied center refills, emptied dock closes | user request after VS Code (terminal in editor area) and Zed (center terminal) | `project/built/panel-layout.md` s8 |
 | 2026-10-19 | Command palette: Ctrl+Shift+P / F1 (Ctrl+K stays a chord prefix), Ctrl+P files, Ctrl+G line; one input with VS Code prefixes; `nucleo-matcher` fuzzy + usage tie-break; Zed look (under the title bar, no backdrop), drawn by `CarbonApp` not the kit Dialog; menus are the command source; Ctrl+P / F1 taken from the terminal's shell | user decision after comparing Superhuman, Linear, Raycast, VS Code, Retool, Warp, Zed | `project/built/command-palette.md` |
 | 2026-10-18 | Terminal = `alacritty_terminal` emulator in the core + `portable-pty` + own GPUI view; tier 1 = base, selection/copy/paste/scrollback, profiles, shell integration (OSC 633/133), links, find; Windows default PowerShell 7, else Windows PowerShell | user decision after comparing VS Code, Zed, Lapce, WezTerm, Warp, Windows Terminal, Ghostty, JetBrains | `documents/terminal.md`, `project/built/terminal.md` |
@@ -135,6 +136,10 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-19 (chat panel)
+- Done: core `chat` module (model, backend interface, demo agent, store) + 15 tests; GUI `chat_panel` (transcript, composer, chips, stop/retry/edit/clear, persistence, palette commands); placeholders and presets migrate. Click-tested in a test build (fixed: user-message action row gap, edit caret). 116 tests pass + 4 ignored; clippy and fmt clean.
+- Next: a real backend (ACP or an API) behind `ChatBackend`; `@` mentions; chat list.
 
 ### 2026-10-19 (themes)
 - Done: terminal background = code editor background; `gruvbox.json` with six variants (UI, syntax, terminal ANSI); Gruvbox Dark Hard is the default dark theme; theme test now rejects unknown keys (caught 9 stale kit names). Screenshot-checked dark hard.

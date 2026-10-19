@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use carbon_core::BufferId;
 use gpui_kit::component::dock::panel_handle;
 
+use crate::chat_panel::ChatPanel;
 use crate::editor_panel::EditorPanel;
 use crate::explorer_panel::ExplorerPanel;
 use crate::layouts::{LayoutStore, MAX_SAVED, Preset, SavedLayout, Side};
@@ -318,6 +319,12 @@ impl Workbench {
                                 .downcast::<TerminalPanel>()
                                 .is_ok()
                                 .then(|| "Terminal".into())
+                        })
+                        .or_else(|| {
+                            view.clone()
+                                .downcast::<ChatPanel>()
+                                .is_ok()
+                                .then(|| "Chat".into())
                         });
                     let explorer = view.downcast::<ExplorerPanel>().is_ok();
                     panels.push((id, placement, kind, explorer));
@@ -346,10 +353,13 @@ impl Workbench {
                 .iter()
                 .filter_map(|(id, ..)| {
                     let view = self.area.read(cx).panel(*id)?.view();
-                    match view.clone().downcast::<TestPanel>() {
-                        Ok(panel) => Some(panel.read(cx).title()),
-                        Err(_) => Some(view.downcast::<TerminalPanel>().ok()?.read(cx).label()),
+                    if let Ok(panel) = view.clone().downcast::<TestPanel>() {
+                        return Some(panel.read(cx).title());
                     }
+                    if let Ok(panel) = view.clone().downcast::<ChatPanel>() {
+                        return Some(panel.read(cx).label());
+                    }
+                    Some(view.downcast::<TerminalPanel>().ok()?.read(cx).label())
                 })
                 .collect();
             let handle = if name == "Terminal" {
@@ -364,6 +374,8 @@ impl Workbench {
                 // New terminals start where the last one was.
                 let cwd = crate::terminal_panel::active_terminal_cwd(cx);
                 panel_handle(TerminalPanel::new(profile, Some(label), cwd, cx))
+            } else if name == "Chat" {
+                panel_handle(ChatPanel::new(next_title(name, &titles), cx))
             } else {
                 panel_handle(TestPanel::new(next_title(name, &titles), cx))
             };

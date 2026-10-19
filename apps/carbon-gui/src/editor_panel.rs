@@ -241,6 +241,26 @@ impl EditorPanel {
         });
     }
 
+    /// The selected text and its first and last line (1-based), for chat
+    /// context; `None` without a selection.
+    pub(crate) fn selection(&self, cx: &App) -> Option<(String, u32, u32)> {
+        let state = self.doc.as_ref()?.state.read(cx);
+        let range = state.selected_range();
+        if range.is_empty() {
+            return None;
+        }
+        let text = state.text();
+        let first = text.offset_to_position(range.start).line + 1;
+        // A selection ending at a line start does not include that line.
+        let end = text.offset_to_position(range.end);
+        let last = if end.character == 0 && end.line + 1 > first {
+            end.line
+        } else {
+            end.line + 1
+        };
+        Some((state.selected_value().to_string(), first, last))
+    }
+
     /// The cursor (0-based line and UTF-16 column) and the line count, for Go to Line.
     pub fn cursor_and_lines(&self, cx: &App) -> Option<(lsp_types::Position, usize)> {
         let state = self.doc.as_ref()?.state.read(cx);
@@ -359,7 +379,7 @@ impl EditorPanel {
         }
     }
 
-    fn path(&self, cx: &App) -> Option<PathBuf> {
+    pub(crate) fn path(&self, cx: &App) -> Option<PathBuf> {
         let doc = self.doc.as_ref()?;
         let core = self.core.read(cx);
         core.buffers.get(doc.buffer)?.path().map(Path::to_path_buf)
@@ -375,7 +395,7 @@ impl EditorPanel {
         })
     }
 
-    fn name(&self, cx: &App) -> SharedString {
+    pub(crate) fn name(&self, cx: &App) -> SharedString {
         self.doc
             .as_ref()
             .and_then(|doc| self.core.read(cx).buffers.get(doc.buffer))

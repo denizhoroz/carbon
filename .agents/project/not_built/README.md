@@ -10,7 +10,7 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Status bar rest: dock toggles, diagnostics, agents, cost, job spinner + Stop, clickable items (`../built/status-bar.md` has workspace/branch/jobs) | `DESIGN.md` s4 | |
 | Recent folders list; reopen last folder on start; layout per folder | WB-03, WB-09 | Open/create/close built (`../built/workspace-folders.md`) |
 | Explorer leftovers: file nesting, redo, compact-folders setting, OS clipboard for files; agent markers fed by agent sessions (problem markers now come from language servers); whole-project search (go-to-file built: `../built/command-palette.md`) | WB-03, SC-01, AG-01 | T1-T3 built (`../built/file-tree.md`) |
-| Code Editor section contents: Chat (placeholder), then problems/output | WB-03, WB-04, AG-01 | Editor and Terminal built (`../built/code-editor.md`, `../built/terminal.md`); `test_panel.rs` placeholders |
+| Code Editor section contents: problems/output | WB-03, WB-04 | Editor, Terminal and Chat built (`../built/code-editor.md`, `../built/terminal.md`, `../built/chat.md`) |
 | More sections in the Section Bar (paradigm, agents) and its bottom group (settings) | `DESIGN.md` s4 | Presets Paradigm/Agents exist as layouts only |
 | Per-workspace layout (now one global file; editor tabs of another folder are dropped on start) | WB-09 | Needs workspace concept |
 | Settings UI, keymap, VS Code settings/keymap/theme import | ST-01, ST-04, ST-06 | |
@@ -53,7 +53,7 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Feature | Refs |
 |---|---|
 | Daemon split of `carbon-core` (now in-process: `../built/carbon-core.md`); LSP/DAP, git, file watching in core | RM-06, `PROJECT.md` |
-| Agent backend for sessions (ACP / direct APIs) on the core session model | AG-06, SE-04 |
+| Agent backend for sessions (ACP / direct APIs) on the core session model; a real `ChatBackend` for the chat panel (now demo only, `../built/chat.md`); chat leftovers: `@` mentions, chat list/search, queued follow-ups, accessible linear view | AG-06, SE-04, AG-01 |
 | macOS and Linux builds + CI on all three | PL-12, `STATUS.md` |
 | Startup/RAM budgets and benchmarks | PL-11 |
 | WASM extensions with capability grants | EX-06 |

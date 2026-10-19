@@ -57,6 +57,10 @@ pub fn register(cx: &mut App) {
         if title == "Terminal" || title.starts_with("Terminal ") {
             return panel_handle(TerminalPanel::new(None, None, None, cx));
         }
+        // Layouts saved while Chat was a placeholder ("Chat 2", "Agent Chat 1").
+        if crate::chat_panel::is_chat_title(&title) {
+            return panel_handle(crate::chat_panel::ChatPanel::new(title, cx));
+        }
         panel_handle(TestPanel::new(title, cx))
     });
 }
