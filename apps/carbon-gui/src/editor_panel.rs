@@ -241,6 +241,12 @@ impl EditorPanel {
         });
     }
 
+    /// The cursor (0-based line and UTF-16 column) and the line count, for Go to Line.
+    pub fn cursor_and_lines(&self, cx: &App) -> Option<(lsp_types::Position, usize)> {
+        let state = self.doc.as_ref()?.state.read(cx);
+        Some((state.cursor_position(), state.text().lines_len()))
+    }
+
     pub fn focus_editor(&self, window: &mut Window, cx: &mut App) {
         match &self.doc {
             Some(doc) => doc.state.focus_handle(cx).focus(window, cx),

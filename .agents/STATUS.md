@@ -2,7 +2,7 @@
 
 Living tracker for Carbon. Update it at the end of each work session. Newest entries first in logs. Scope lives in `FEATURE.md`, decisions and open questions in `PROJECT.md`, evidence in `RESEARCH.md`.
 
-**Last updated:** 2026-10-17
+**Last updated:** 2026-10-19
 
 ## Current focus
 
@@ -36,7 +36,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 - [x] Rust workspace scaffold (`apps/carbon-core` lib + `apps/carbon-gui` bin)
 - [x] In-process core: `apps/carbon-core` (`project/built/carbon-core.md`)
 - [ ] Daemon: workspace, buffers, terminals, LSP/DAP, agent sessions
-- [~] UI shell: `apps/carbon-gui` custom title bar (C logo, File/Edit/View/Help menu, window controls) on gpui-kit `=0.7.3`; File, Edit and View items work, Command Palette and About are placeholders; builds and opens on Windows, macOS/Linux untested
+- [~] UI shell: `apps/carbon-gui` custom title bar (C logo, File/Edit/View/Help menu, window controls) on gpui-kit `=0.7.3`; File, Edit and View items work, command palette + Quick Open built (`project/built/command-palette.md`), About is a placeholder; builds and opens on Windows, macOS/Linux untested
 - [x] GPUI Kit knowledge base written (`project/ui/ui-framework.md`)
 - [ ] CI for all three platforms
 
@@ -51,6 +51,7 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-19 | Command palette: Ctrl+Shift+P / F1 (Ctrl+K stays a chord prefix), Ctrl+P files, Ctrl+G line; one input with VS Code prefixes; `nucleo-matcher` fuzzy + usage tie-break; Zed look (under the title bar, no backdrop), drawn by `CarbonApp` not the kit Dialog; menus are the command source; Ctrl+P / F1 taken from the terminal's shell | user decision after comparing Superhuman, Linear, Raycast, VS Code, Retool, Warp, Zed | `project/built/command-palette.md` |
 | 2026-10-18 | Terminal = `alacritty_terminal` emulator in the core + `portable-pty` + own GPUI view; tier 1 = base, selection/copy/paste/scrollback, profiles, shell integration (OSC 633/133), links, find; Windows default PowerShell 7, else Windows PowerShell | user decision after comparing VS Code, Zed, Lapce, WezTerm, Warp, Windows Terminal, Ghostty, JetBrains | `documents/terminal.md`, `project/built/terminal.md` |
 | 2026-10-17 | Every Code Editor panel behaves like editor tabs: tab + close button alone or with others; Chat/Terminal addable many times (View > Add Panel, "..." > New); Explorer: one instance, plain "Explorer" title, not closable (user, same day). Supersedes "side panels keep their title" | user decision (changed mind) | `project/built/panel-layout.md` s8 |
 | 2026-10-17 | Also vendor `gpui-base` 0.7.3 (`vendor/gpui-base`, patch: gutter gap); title/status bar 30 px; dialogs centered (kit patch 4) | user appearance requests; gutter gap and dialog position are hard-coded in the kit | `vendor/*/CARBON-PATCHES.md` |
@@ -133,6 +134,10 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-19 (command palette)
+- Done: research (Superhuman, Linear, Raycast, VS Code, Retool, Warp, Zed); core `fuzzy.rs` (nucleo-matcher) + `file_index.rs` + `files_generation`; gui `commands.rs` registry from the menus + extras, `palette.rs` (commands `>`, files, line `:`, help `?`), usage ranking file, full-chord shortcut chips, focus-restoring dispatch; View > Go to File / Go to Line; palette keys kept from the terminal. Click test found `available_actions` dropping actions with fields (fixed: per-action `is_action_available`). 96 tests pass + 4 ignored; clippy and fmt clean; click-tested with F1 (Ctrl shortcuts untested).
+- Next: try Ctrl+Shift+P / Ctrl+P / Ctrl+G and click-outside by hand; `@`/`#` once LSP symbols exist; commit (user).
 
 ### 2026-10-18 (terminal tier 1)
 - Done: comparison (`documents/terminal.md`); core emulator (`terminal/{mod,emulator,osc,shells}.rs`, Carbon shell integration scripts for PowerShell/bash/zsh); GUI `terminal_panel` (canvas drawing, keystroke interceptor, text input handler, selection/copy/paste, scrollback, find, links, exit-code marks, profiles in "...", restart, restore). Fixed during testing: marks after ConPTY resize, "..." actions not reaching the panel, Git Bash MSYS cwd. Speed gate: 50 MB in 29 s (ConPTY limit 25 s), frame p99 1.6 ms, key echo median 0.3 ms. 67 tests pass + 4 ignored; click-tested.

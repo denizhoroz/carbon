@@ -1,9 +1,11 @@
 mod app_assets;
+mod commands;
 mod editor_panel;
 mod explorer_panel;
 mod layouts;
 mod lsp_ops;
 mod menus;
+mod palette;
 mod save_ops;
 mod section_bar;
 mod status_bar;
@@ -21,12 +23,14 @@ use editor_panel::{CloseEditor, SaveFile};
 use gpui_kit::component::{ActiveTheme, TitleBar, h_flex, v_flex};
 use gpui_kit::*;
 use menus::{
-    AddPanel, ApplyLayout, ApplyPreset, CloseFolder, CreateFolder, DeleteLayout, MovePanel,
-    NewFile, OpenFolder, ResetLayout, ResizeDock, SaveLayoutAs, SwitchSection, ToggleAutoHide,
-    ToggleDock,
+    AddPanel, ApplyLayout, ApplyPreset, CloseFolder, CommandPalette, CreateFolder, DeleteLayout,
+    GoToLine, MenuState, MovePanel, NewFile, OpenFolder, QuickOpen, ResetLayout, ResizeDock,
+    SaveLayoutAs, SwitchSection, ToggleAutoHide, ToggleDock,
 };
+use palette::{FileIndex, Palette};
 use section_bar::SectionBar;
 use status_bar::CarbonStatusBar;
+use style::fixed;
 use title_bar::AppTitleBar;
 use workbench::{MenusChanged, Workbench};
 
@@ -45,6 +49,10 @@ struct CarbonApp {
     _focus_lost_sub: Subscription,
     /// The watcher channel being applied, and the task applying it.
     watch: Option<(async_channel::Receiver<FsChanges>, Task<()>)>,
+    /// The open command palette, drawn over everything under the title bar.
+    palette: Option<(Entity<Palette>, Subscription)>,
+    /// Quick Open's file list; kept between palette openings.
+    files: Entity<FileIndex>,
 }
 
 impl CarbonApp {
@@ -97,15 +105,22 @@ impl CarbonApp {
             _menus_sub,
             _focus_lost_sub,
             watch: None,
+            palette: None,
+            files: cx.new(|_| FileIndex::new()),
         };
         this.refresh_menus(cx);
         this.sync_watch(cx);
         this
     }
 
-    fn refresh_menus(&self, cx: &mut App) {
+    fn menu_state(&self, cx: &App) -> MenuState {
         let mut state = self.workbench.read(cx).menu_state();
         state.has_workspace = self.core.read(cx).workspace().is_some();
+        state
+    }
+
+    fn refresh_menus(&self, cx: &mut App) {
+        let state = self.menu_state(cx);
         self.section_bar
             .update(cx, |bar, cx| bar.set_active(state.section, cx));
         menus::refresh(&state, cx);
@@ -130,6 +145,31 @@ impl CarbonApp {
         }
     }
 
+    /// Opens the palette with `prefix` typed (`>` commands, `` files, `:`
+    /// line), or switches an open one to it.
+    fn open_palette(&mut self, prefix: &'static str, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some((palette, _)) = &self.palette {
+            palette.update(cx, |palette, cx| palette.set_query(prefix, window, cx));
+            return;
+        }
+        // Deferred: a menu gives focus back after its action runs, and the
+        // palette must see where focus really is.
+        cx.defer_in(window, move |this, window, cx| {
+            if this.palette.is_some() {
+                return;
+            }
+            let menu = this.menu_state(cx);
+            let (core, files) = (this.core.clone(), this.files.clone());
+            let palette = cx.new(|cx| Palette::new(prefix, &menu, core, files, window, cx));
+            let sub = cx.subscribe(&palette, |this, _, _: &DismissEvent, cx| {
+                this.palette = None;
+                cx.notify();
+            });
+            this.palette = Some((palette, sub));
+            cx.notify();
+        });
+    }
+
     /// Wires an action to a `Workbench` method.
     fn on<A: Action>(
         &self,
@@ -144,7 +184,24 @@ impl CarbonApp {
 }
 
 impl Render for CarbonApp {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let palette = self.palette.as_ref().map(|(palette, _)| {
+            let viewport = window.viewport_size();
+            let width = fixed::PALETTE_WIDTH
+                .min(viewport.width - fixed::PALETTE_WINDOW_MARGIN * 2.)
+                .max(px(0.));
+            let origin = point(
+                (viewport.width - width) / 2.,
+                fixed::BAR_HEIGHT + fixed::PALETTE_TOP_GAP,
+            );
+            deferred(
+                anchored()
+                    .position(origin)
+                    .snap_to_window_with_margin(fixed::PALETTE_WINDOW_MARGIN)
+                    .child(div().w(width).child(palette.clone())),
+            )
+            .with_priority(1)
+        });
         v_flex()
             .track_focus(&self.focus_handle)
             .on_action(self.on(
@@ -207,6 +264,15 @@ impl Render for CarbonApp {
                 workspace_ops::close_folder(&this.core, cx)
             }))
             .on_action(|_: &NewFile, window, cx| editor_panel::new_file(window, cx))
+            .on_action(cx.listener(|this, _: &CommandPalette, window, cx| {
+                this.open_palette(">", window, cx)
+            }))
+            .on_action(
+                cx.listener(|this, _: &QuickOpen, window, cx| this.open_palette("", window, cx)),
+            )
+            .on_action(
+                cx.listener(|this, _: &GoToLine, window, cx| this.open_palette(":", window, cx)),
+            )
             // Save / close with focus outside the editors act on the active one.
             .on_action(|action: &SaveFile, window, cx| {
                 if let Some(editor) = workbench::active_editor(cx) {
@@ -251,6 +317,7 @@ impl Render for CarbonApp {
                     ),
             )
             .child(self.status_bar.clone())
+            .children(palette)
     }
 }
 
@@ -265,6 +332,7 @@ fn main() {
         explorer_panel::register(cx);
         editor_panel::register(cx);
         terminal_panel::register(cx);
+        palette::register(cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(style::fixed::WINDOW_SIZE, cx)),
             ..TitleBar::window_options()

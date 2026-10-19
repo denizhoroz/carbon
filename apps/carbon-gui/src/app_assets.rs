@@ -17,7 +17,18 @@ icon_assets!(
         ChevronsDownUp,
         FilePlus,
         FolderPlus,
-        Bot
+        Bot,
+        // Command palette rows.
+        Save,
+        Scissors,
+        ClipboardPaste,
+        CircleQuestionMark,
+        LogOut,
+        ListOrdered,
+        FileSearch,
+        FolderX,
+        Move,
+        Keyboard
     ]
 );
 

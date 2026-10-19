@@ -10,7 +10,7 @@ use crate::editor_panel::SaveFile;
 use crate::layouts::{MAX_SAVED, Preset, Side};
 use crate::section_bar::Section;
 
-// Placeholder actions have no handler yet.
+// About is a placeholder: it has no handler yet.
 actions!(
     carbon,
     [
@@ -19,6 +19,8 @@ actions!(
         CreateFolder,
         CloseFolder,
         CommandPalette,
+        QuickOpen,
+        GoToLine,
         About,
         Quit,
         ResetLayout,
@@ -118,7 +120,7 @@ impl Default for MenuState {
     }
 }
 
-fn app_menus(state: &MenuState) -> Vec<Menu> {
+pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
     let sections = Section::ALL.map(|section| {
         MenuItem::action(section.label(), SwitchSection { section })
             .checked(section == state.section)
@@ -207,6 +209,8 @@ fn app_menus(state: &MenuState) -> Vec<Menu> {
         Menu::new("View").items(
             [
                 MenuItem::action("Command Palette", CommandPalette),
+                MenuItem::action("Go to File...", QuickOpen),
+                MenuItem::action("Go to Line...", GoToLine),
                 MenuItem::separator(),
                 MenuItem::submenu(Menu::new("Section").items(sections)),
                 MenuItem::separator(),
@@ -230,12 +234,22 @@ fn app_menus(state: &MenuState) -> Vec<Menu> {
 /// Call after `gpui_kit::init`.
 pub fn init(cx: &mut App) {
     cx.on_action(|_: &Quit, cx| crate::save_ops::quit(cx));
+    cx.bind_keys(app_bindings());
+    refresh(&MenuState::default(), cx);
+}
 
+/// The app-wide key bindings (panels bind their own in their key context).
+pub fn app_bindings() -> Vec<KeyBinding> {
+    // Palette keys follow VS Code: Ctrl+Shift+P / F1 commands, Ctrl+P files, Ctrl+G line.
     // Dock toggles follow VS Code: Ctrl+B side bar, Ctrl+Alt+B secondary side bar, Ctrl+J panel.
     // Resize follows JetBrains: Ctrl+Alt+Shift+arrows. Move: Ctrl+K then an arrow.
     let mut bindings = vec![
         KeyBinding::new("secondary-q", Quit, None),
         KeyBinding::new("secondary-n", NewFile, None),
+        KeyBinding::new("secondary-shift-p", CommandPalette, None),
+        KeyBinding::new("f1", CommandPalette, None),
+        KeyBinding::new("secondary-p", QuickOpen, None),
+        KeyBinding::new("secondary-g", GoToLine, None),
         // VS Code: Ctrl+K Ctrl+O opens a folder.
         KeyBinding::new("secondary-k secondary-o", OpenFolder, None),
         KeyBinding::new("secondary-b", ToggleDock { side: Side::Left }, None),
@@ -283,9 +297,7 @@ pub fn init(cx: &mut App) {
             None,
         ));
     }
-    cx.bind_keys(bindings);
-
-    refresh(&MenuState::default(), cx);
+    bindings
 }
 
 /// Rebuilds both the native and the in-window menus. The in-window `AppMenuBar`

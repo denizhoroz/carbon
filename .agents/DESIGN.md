@@ -78,7 +78,7 @@ Zed-style docks with VS Code's familiar panels. **[R][N]**
 - **Menus:** classic menu row (File, Edit, View, Help) inside the custom title bar on Windows/Linux, after the logo; system menu bar on macOS. Same commands as the palette; no in-window toolbar. (User decision 2026-10-16, replaces hamburger.) **[N]**
 - **Tabs and rows are compact:** one-line tabs with close on hover, tree rows in small steps, breadcrumbs optional and off by default. **[N]**
 - **Every region is movable and hideable**; layout persists per workspace and can be saved as a profile. Zen / focus mode hides all chrome. **[R]**
-- **Command palette** reaches every command, setting and view; the single entry point for keyboard users. Shows each command's shortcut. **[R]**
+- **Command palette** reaches every command, setting and view; the single entry point for keyboard users. Shows each command's shortcut. **[R]** Built: `project/built/command-palette.md` (a menu item is a palette command automatically; others go in `commands::extras`).
 - **Multi-window:** an editor, paradigm or agent chat can pop out to its own window (agents tab pillar); windows share one session state. Deferred to layout tier T3 with top dock and guide diamond; T1+T2 first (`project/built/panel-layout.md` s7). **[R][N]**
 - **Narrow windows:** docks collapse to drawers; nothing scrolls sideways at the minimum window size. **[K]**
 - **Panels and cards:** bordered surface, 16 px padding and gap, stretch with their column, never a fixed width. 20 px between stacked cards. Grid cells in one row share height. Titles live inside the card border. **[K]**

@@ -66,3 +66,33 @@ fn core_needs_an_open_workspace() {
     assert!(core.workspace().is_some());
     assert!(core.list_dir(".").unwrap().is_empty());
 }
+
+#[test]
+fn files_generation_follows_workspace_and_fs_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut core = Core::new();
+    let start = core.files_generation();
+
+    core.open_workspace(dir.path()).unwrap();
+    let opened = core.files_generation();
+    assert_ne!(opened, start);
+
+    // Content-only changes keep the file list.
+    let content_only = carbon_core::FsChanges {
+        files: vec![dir.path().join("a.txt")],
+        ..Default::default()
+    };
+    core.apply_fs_changes(&content_only).unwrap();
+    assert_eq!(core.files_generation(), opened);
+
+    let listing = carbon_core::FsChanges {
+        dirs: vec![dir.path().to_path_buf()],
+        ..Default::default()
+    };
+    core.apply_fs_changes(&listing).unwrap();
+    let changed = core.files_generation();
+    assert_ne!(changed, opened);
+
+    core.close_workspace();
+    assert_ne!(core.files_generation(), changed);
+}

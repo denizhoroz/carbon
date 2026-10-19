@@ -44,6 +44,8 @@ trash = "5.2.9"
 # Git status for explorer markers (FEATURE SC-06: gitoxide reads). No network, merge, blame.
 # Language server protocol types (already in the lock through the kit's editor).
 lsp-types = "0.97.0"
+# Fuzzy matching for the command palette and Quick Open (fzf scoring; Helix and Zed use it).
+nucleo-matcher = "0.3.1"
 gix = { version = "0.89.0", default-features = false, features = ["status", "sha1", "parallel"] }
 
 # Optimise GPUI, layout and text in dev builds so the window is usable.

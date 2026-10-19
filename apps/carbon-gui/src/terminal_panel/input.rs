@@ -8,7 +8,8 @@ use carbon_core::terminal::alacritty_terminal::term::TermMode;
 use gpui_kit::Keystroke;
 
 /// Keys the app keeps while a terminal has focus (like VS Code's
-/// "commands to skip shell"): dock toggles, quit, saved layouts, dock resize.
+/// "commands to skip shell"): dock toggles, quit, saved layouts, dock resize,
+/// and the palette (Ctrl+Shift+P, F1, Ctrl+P). Ctrl+G stays with the shell.
 pub fn app_keeps(keystroke: &Keystroke) -> bool {
     let m = &keystroke.modifiers;
     let key = keystroke.key.as_str();
@@ -16,9 +17,11 @@ pub fn app_keeps(keystroke: &Keystroke) -> bool {
         return true;
     }
     match (m.control, m.alt, m.shift) {
-        (true, false, false) => matches!(key, "b" | "j" | "q"),
+        (true, false, false) => matches!(key, "b" | "j" | "q" | "p"),
+        (true, false, true) => key == "p",
         (true, true, false) => key == "b" || key.len() == 1 && key.as_bytes()[0].is_ascii_digit(),
         (true, true, true) => matches!(key, "left" | "right" | "up" | "down"),
+        (false, false, false) => key == "f1",
         _ => false,
     }
 }
@@ -201,6 +204,13 @@ mod tests {
         assert!(app_keeps(&key("ctrl-alt-3")));
         assert!(!app_keeps(&key("ctrl-w")));
         assert!(!app_keeps(&key("ctrl-k")));
+        // The palette keys work from a terminal; Ctrl+G (readline abort) does not.
+        assert!(app_keeps(&key("ctrl-shift-p")));
+        assert!(app_keeps(&key("ctrl-p")));
+        assert!(app_keeps(&key("f1")));
+        assert!(!app_keeps(&key("ctrl-g")));
+        assert!(!app_keeps(&key("ctrl-shift-c")));
+        assert!(!app_keeps(&key("f2")));
         let mut a = key("a");
         a.key_char = Some("a".into());
         assert!(passes_as_text(&a));

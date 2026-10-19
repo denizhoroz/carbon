@@ -7,14 +7,14 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Feature | Refs | Notes |
 |---|---|---|
 | Panel layout T3: pop-out OS windows, multi-monitor, top dock, guide diamond, float inside window | `../built/panel-layout.md` s7, `DESIGN.md` s4 | Deferred by user; kit has no cross-window docking |
-| Command palette (every command, shortcut shown) | WB-01, `DESIGN.md` s4 | Menu item exists, no handler |
 | Status bar rest: dock toggles, diagnostics, agents, cost, job spinner + Stop, clickable items (`../built/status-bar.md` has workspace/branch/jobs) | `DESIGN.md` s4 | |
 | Recent folders list; reopen last folder on start; layout per folder | WB-03, WB-09 | Open/create/close built (`../built/workspace-folders.md`) |
-| Explorer leftovers: file nesting, redo, compact-folders setting, OS clipboard for files; agent markers fed by agent sessions (problem markers now come from language servers); whole-project background index (go-to-file, search) | WB-03, SC-01, AG-01 | T1-T3 built (`../built/file-tree.md`) |
+| Explorer leftovers: file nesting, redo, compact-folders setting, OS clipboard for files; agent markers fed by agent sessions (problem markers now come from language servers); whole-project search (go-to-file built: `../built/command-palette.md`) | WB-03, SC-01, AG-01 | T1-T3 built (`../built/file-tree.md`) |
 | Code Editor section contents: Chat (placeholder), then problems/output | WB-03, WB-04, AG-01 | Editor and Terminal built (`../built/code-editor.md`, `../built/terminal.md`); `test_panel.rs` placeholders |
 | More sections in the Section Bar (paradigm, agents) and its bottom group (settings) | `DESIGN.md` s4 | Presets Paradigm/Agents exist as layouts only |
 | Per-workspace layout (now one global file; editor tabs of another folder are dropped on start) | WB-09 | Needs workspace concept |
 | Settings UI, keymap, VS Code settings/keymap/theme import | ST-01, ST-04, ST-06 | |
+| Palette leftovers: `@` / `#` symbol search, live Go to Line preview, query history (Up), settings in the palette | WB-01 | Commands, files, line, help built (`../built/command-palette.md`) |
 | Accessibility audit (Narrator, VoiceOver, Orca) | AX-01, `DESIGN.md` s3 | Kit a11y "partial" (R-4) |
 
 ## Pillar 1: Code editor

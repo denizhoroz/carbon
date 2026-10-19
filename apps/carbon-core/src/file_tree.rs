@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use crate::{CoreError, Result};
 
 /// Never listed, like VS Code's default `files.exclude`.
-const ALWAYS_EXCLUDED: &[&str] = &[".git", ".hg", ".svn", "CVS", ".DS_Store", "Thumbs.db"];
+pub(crate) const ALWAYS_EXCLUDED: &[&str] =
+    &[".git", ".hg", ".svn", "CVS", ".DS_Store", "Thumbs.db"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EntryKind {

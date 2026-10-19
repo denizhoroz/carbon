@@ -3,6 +3,7 @@
 //! Files live in the build dir for now; they move to the OS user dir later.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -65,6 +66,21 @@ fn current(cx: &App) -> Option<Entity<Workbench>> {
 pub fn open_buffer(id: BufferId, window: &mut Window, cx: &mut App) {
     if let Some(workbench) = current(cx) {
         workbench.update(cx, |workbench, cx| workbench.show_buffer(id, window, cx));
+    }
+}
+
+/// Opens the file at `path` in an editor tab, like a click in the Explorer.
+/// Reports a failure as a notification.
+pub fn open_file_at(path: &Path, window: &mut Window, cx: &mut App) {
+    let core = crate::workspace_ops::current_core(cx);
+    let result = core.update(cx, |core, cx| {
+        let result = core.open_file(path);
+        cx.notify();
+        result
+    });
+    match result {
+        Ok(id) => open_buffer(id, window, cx),
+        Err(err) => window.push_notification(format!("Cannot open file: {err}"), cx),
     }
 }
 

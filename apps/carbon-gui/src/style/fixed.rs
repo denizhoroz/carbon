@@ -1,6 +1,8 @@
 //! Fixed styling choices: not part of any theme and not user-configurable.
 //! Colours, fonts and radii belong in theme JSON, not here.
 
+use std::time::Duration;
+
 use gpui_kit::{FontWeight, Pixels, Rems, Size, px, rems, size};
 
 /// Initial window size (centered on the main display).
@@ -65,3 +67,14 @@ pub const TERMINAL_GUTTER: Pixels = px(14.);
 pub const TERMINAL_PADDING_TOP: Pixels = px(4.);
 pub const TERMINAL_SCROLLBAR_WIDTH: Pixels = px(6.);
 pub const TERMINAL_MARK_SIZE: Pixels = px(6.);
+
+/// Command palette (VS Code / Zed style): width, gap below the title bar, the
+/// least room kept to the window edge, list height before it scrolls, row
+/// icon size, and the open animation (fade plus a short settle downwards).
+pub const PALETTE_WIDTH: Pixels = px(600.);
+pub const PALETTE_TOP_GAP: Pixels = px(6.);
+pub const PALETTE_WINDOW_MARGIN: Pixels = px(16.);
+pub const PALETTE_LIST_MAX_HEIGHT: Pixels = px(420.);
+pub const PALETTE_ICON_SIZE: Pixels = px(16.);
+pub const PALETTE_FADE: Duration = Duration::from_millis(150);
+pub const PALETTE_FADE_TRAVEL: Pixels = px(4.);

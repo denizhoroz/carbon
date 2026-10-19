@@ -7,8 +7,10 @@
 mod agent;
 mod buffer;
 mod error;
+mod file_index;
 mod file_ops;
 mod file_tree;
+pub mod fuzzy;
 mod git_status;
 mod history;
 mod id;
@@ -25,6 +27,7 @@ use std::path::{Path, PathBuf};
 pub use agent::{AgentSession, AgentSessionId, AgentStatus, AgentStore, Message, Role};
 pub use buffer::{Buffer, BufferId, BufferStore, LineEnding};
 pub use error::{CoreError, Result};
+pub use file_index::{FILE_INDEX_LIMIT, FileList, list_files};
 pub use file_ops::{
     copy_into, create_file, create_folder, move_into, move_to_trash, rename, validate_name,
 };
@@ -76,6 +79,9 @@ pub struct Core {
     pub terminals: TerminalStore,
     pub agents: AgentStore,
     pub jobs: JobStore,
+    /// Bumped whenever the workspace's set of files may have changed (Quick
+    /// Open re-lists files when it differs from the one it listed at).
+    files_generation: u64,
 }
 
 impl Core {
@@ -96,6 +102,7 @@ impl Core {
         self.marks.clear();
         self.history.clear();
         self.lsp = lsp::LspStore::default();
+        self.files_generation += 1;
         Ok(self.workspace.insert(workspace))
     }
 
@@ -115,10 +122,16 @@ impl Core {
         self.marks.clear();
         self.history.clear();
         self.lsp = lsp::LspStore::default();
+        self.files_generation += 1;
     }
 
     pub fn workspace(&self) -> Option<&Workspace> {
         self.workspace.as_ref()
+    }
+
+    /// Changes whenever the workspace's files may have changed (see the field).
+    pub fn files_generation(&self) -> u64 {
+        self.files_generation
     }
 
     /// Git branch of the workspace, read fresh from disk (cheap; safe to poll).
@@ -159,6 +172,9 @@ impl Core {
         let Some(tree) = self.tree.as_mut() else {
             return Ok(false);
         };
+        if changes.rescan || !changes.dirs.is_empty() {
+            self.files_generation += 1;
+        }
         if changes.rescan {
             return tree.refresh_all();
         }

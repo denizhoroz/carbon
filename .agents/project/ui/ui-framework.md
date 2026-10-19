@@ -306,6 +306,18 @@ Format: Problem - Cause - Solution.
 ## Menu shows only "Ctrl+K" for a chord (Carbon, 0.7.3 source)
 **Cause:** `Kbd::from_binding` renders `keystrokes().first()`. **Solution:** none in the kit; give menu actions a single-key binding or accept.
 
+## Command palette item runs nothing, or the wrong thing (Carbon, 0.7.3 source)
+**Cause:** `CommandItem::action` is dispatched by `CommandState::confirm` from the palette's own focus, so actions handled by a focused editor or Explorer find no handler. **Solution:** give rows no action; in `on_confirm` focus the previously focused handle, then `window.dispatch_action` (`palette.rs`).
+
+## Command palette rows with `.child(..)` show no shortcut and re-layout every render (Carbon, 0.7.3 source)
+**Cause:** the kit only draws the `Kbd` for label rows, and treats an item with a custom child as never unchanged, so every host render measures all rows again. **Solution:** draw the chips in the child (`palette/row.rs`, one `Kbd` per keystroke so chords show in full); cap the rows (100).
+
+## `window.available_actions` misses actions with fields (gpui-pre 0.3.9 source)
+**Cause:** it rebuilds each action type from its name, which fails for `no_json` actions and any with fields (Carbon's `ToggleDock`, `AddPanel`, ...), so they are left out. **Solution:** ask per action with `window.is_action_available(&action, cx)`; `available_actions` still adds app-wide (`cx.on_action`) listeners.
+
+## Esc in a `Command` clears the query instead of closing (Carbon, 0.7.3 source)
+**Cause:** `CommandState`'s `Cancel` handler empties a non-empty query and returns. **Solution:** `capture_action::<Cancel>` on a wrapper, stop propagation, close.
+
 ## Path text cut at the wrong end
 **Solution:** `.overflow_hidden().whitespace_nowrap().text_ellipsis_start()` (GPUI) keeps the end of a path; `.truncate()` cuts the end.
 

@@ -27,7 +27,8 @@ use gpui_kit::*;
 use crate::menus::{CreateFolder, OpenFolder};
 use crate::style::fixed;
 use crate::workspace_ops::current_core;
-use file_ops::{Edit, EditKind, FileClipboard, REVEAL_LABEL};
+pub(crate) use file_ops::REVEAL_LABEL;
+use file_ops::{Edit, EditKind, FileClipboard};
 use filter::Filter;
 
 /// Persistence key in saved layouts. Never change it.
