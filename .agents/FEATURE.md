@@ -152,6 +152,9 @@ Status: **Committed** (inherent to the pillar or already a decision in PROJECT.m
 | Optional VS Code extension host (phase 3+, no API parity)                                                                 | EX-04                      | Open                    |
 | Extension bisect / process isolation so one extension cannot stall all                                                    | PL-08                      | Proposed                |
 | Narrow-API escape hatch (MCP) because Zed has no custom panels                                                            | EX-07                      | Proposed                |
+| Manage Extensions dialog (Section Bar bottom): official + user-added extensions/plugins, VS Code-like (compilers, linters, appearances, ...) | EX-01, EX-03               | Committed (user 2026-10-19) |
+| Workflows (= Section Bar sections): Code Editor now; Paradigm Editor, Agent Automation planned; users add custom-built workflows; Manage Workflows dialog adds/removes them | -                          | Committed (user 2026-10-19) |
+| Manage Settings dialog (Section Bar bottom): every user option (system, appearance, agents, ...) | ST-01                      | Committed (user 2026-10-19) |
 
 ## 1.3 Cross-cutting decisions and constraints
 

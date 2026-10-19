@@ -72,7 +72,8 @@ Zed-style docks with VS Code's familiar panels. **[R][N]**
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Section Bar** (user decision 2026-10-16): a vertical icon strip at the far left, like VS Code's activity bar, but it switches **sections** (Code Editor first; later paradigm, agents), each with its own remembered dock layout. It does not toggle single panels. **[N]**
+- **Section Bar** (user decision 2026-10-16): a vertical icon strip at the far left, like VS Code's activity bar, but it switches **sections** (Code Editor first; later paradigm, agents), each with its own remembered dock layout. It does not toggle single panels. In user-facing text a section is a **workflow** (Code Editor now; Paradigm Editor, Agent Automation planned; user-built custom workflows). **[N]**
+- **Section Bar bottom group** (user decision 2026-10-19), top to bottom: **Manage Extensions** (puzzle icon), **Manage Workflows** (workflow icon), **Manage Settings** (gear). Each opens a dialog, never a dock panel; never shown as selected. Extensions = official and user-added plugins, VS Code-like (compilers, linters, appearances); Workflows = add/remove workflows (built-in and custom); Settings = all user options (see Settings). **[N]**
 - **Docks inside a section.** Left, right and bottom docks hold panels; each panel has a status-bar toggle button with a tooltip and shortcut. Panels can be dragged between docks. **[N]**
 - **Default first screen:** left dock with file tree, editor area, thin status bar; right and bottom docks closed. **[N]**
 - **Menus:** classic menu row (File, Edit, View, Help) inside the custom title bar on Windows/Linux, after the logo; system menu bar on macOS. Same commands as the palette; no in-window toolbar. (User decision 2026-10-16, replaces hamburger.) **[N]**
@@ -121,6 +122,7 @@ Unresearched (see `PROJECT.md` open questions). Design rules below come from the
 - Hosts give a section: theme tokens, spacing and type scale, focus/keyboard routing, accessibility hooks, and a standard toolbar/empty-state/error frame. Sections never draw their own chrome. **[N]**
 - Sections run isolated (sandboxed); a crashing section shows an error card with Reload and never takes down the window. **[R]**
 - Installing a section is one action with a visible capability list and a Remove button that confirms (6). **[R][K]**
+- All extensions (official and user-added: compilers, linters, appearances, viewers) are listed, installed and removed in the **Manage Extensions** dialog, VS Code-like. Custom workflows (whole workspace modes, s4) are managed in **Manage Workflows**, not here. **[N]**
 - Image/media sets use one gallery grid with a viewer dialog (arrows step, Esc closes), never bare thumbnails or raw file links. **[K]**
 
 
@@ -150,6 +152,7 @@ Unresearched (see `PROJECT.md` open questions). Design rules below come from the
 - Output pickers: one pattern everywhere ("Save as new" default / "Overwrite source" with an "I understand" checkbox); suggested names are `<input>-<suffix>`. **[K]**
 
 ## Settings
+- Opened from **Manage Settings** (Section Bar bottom). Holds every option the user can change (system, appearance, agents, ...).
 - One searchable settings view in plain language, plus a JSON view for power users; both edit the same data. Sections by concern: Appearance, Editor, Agents (models, keys, approvals, sandbox), Extensions, System. Common settings first, advanced ones behind "Show advanced". **[R][N]**
 - Layered scopes (user, workspace, folder) shown as a badge on each changed setting. **[R]**
 - API keys show "Saved" only, never any part of the key; the line under the field is the "Where to find the token" link; purpose goes in the label's info tip. **[K]**
