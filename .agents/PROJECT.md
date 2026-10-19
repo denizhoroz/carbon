@@ -23,7 +23,7 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 - **UI: native desktop GUI with GPUI + gpui-kit (gpui-component, renamed at v0.6; decided by the user, 2026-10-16); webview excluded.** Depend on `gpui-kit` with an exact version (0.7.3 read) on crates.io `gpui-pre` `=0.3.9`, Rust 1.92+; API breaks every minor. Usage notes: `project/ui/ui-framework.md`; alternatives and risks: `documents/gui-framework.md` (API churn, accessibility, editor build cost).
 - **Protocol:** AHP-like state-first protocol (snapshot, ordered actions, replay); ACP for external agents; MCP (+ MCP Apps) for tools.
 - **Buffer:** rope + anchors, per-actor undo, agents as attributed edit peers; CRDT deferred.
-- **Extensions:** no full `vscode` API parity. Declarative VSIX and LSP/DAP launchers first, WASM (WIT, capability grants) + MCP native, Open VSX + own gallery, no Microsoft-only dependencies.
+- **Extensions:** no full `vscode` API parity. Declarative VSIX and LSP/DAP launchers first, WASM (WIT, capability grants) + MCP native, Open VSX + own gallery, no Microsoft-only dependencies. **No preinstalled language tools** (servers, linters, formatters, compilers): users install them via Manage Extensions (user decision, 2026-10-19; `documents/language-tools.md`).
 - **Safety defaults:** OS sandbox on, tiered approvals + classifier + hooks, side-effect-aware checkpoints, destructive-git guard.
 - **Defaults:** calm opt-out AI, telemetry off, live cost meter, VS Code settings/keymap/theme import, AccessKit from the first widget, write-ahead journal.
 - **Panel layout (user decision, 2026-10-16):** T1 (kit docking: drag/snap/split/resize/close/zoom/persist) + T2 (named layouts on hotkeys, task presets, keyboard move/resize, auto-hide) now; T3 (pop-out OS windows, top dock, guide diamond, float inside window) later. `project/built/panel-layout.md`.
@@ -43,6 +43,7 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 - How much of the PIM/agent-hub scope (email, calendar, notes, shared canvas) is in v1 vs IDE parity.
 - AHP/ACP wire-format maturity and licences; MCP Apps client support.
 - Licence stance for bundled components (AGPL: PyMuPDF, SearXNG, Firecrawl; ELv2: Phoenix).
+- How extensions get language-tool binaries: config only / download on demand, PATH first / bundled per platform; compilers detected or installed on request (`documents/language-tools.md` s3; user: decide later).
 - Full list of unverified items and benchmarks to run: RESEARCH.md section 8.
 
 ## Status

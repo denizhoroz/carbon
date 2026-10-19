@@ -33,7 +33,7 @@ Docs for AI agents (and people) working on Carbon. Read the files that match you
 | `FEATURE.md` | Part 1 Carbon features by pillar; Part 2 feature catalog from other products with adoption scores (1-5) and unique flags; Part 3 market gaps |
 | `DESIGN.md` | Carbon UI and interaction rulebook (tokens, shell, pillar surfaces, components, agent UX, accessibility, budgets) |
 | `RESEARCH.md` | Landscape of alternatives, VS Code reference, comparison and synthesis, sentiment, evidence gaps, key sources |
-| `documents/` | Decision documents; `gui-framework.md` compares native Rust GUI frameworks (tables) |
+| `documents/` | Decision documents; `gui-framework.md` compares native Rust GUI frameworks (tables); `language-tools.md` compares how editors ship language servers, linters, compilers |
 | `project/built/` | One file per built feature (what, code, usage, limits, verified); index in `README.md`. Panel layout comparison + implementation: `panel-layout.md` |
 | `project/not_built/` | Index of committed features with no code yet (refs to `FEATURE.md` IDs); research/design docs for unbuilt features go here |
 | `project/` | Working knowledge for the chosen stack; `ui-framework.md` is the GPUI Kit knowledge base |

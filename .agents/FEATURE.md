@@ -151,6 +151,8 @@ Status: **Committed** (inherent to the pillar or already a decision in PROJECT.m
 | Open VSX + own gallery, signed, no silent auto-update, allow-list                                                         | EX-08, EX-09               | Committed               |
 | Optional VS Code extension host (phase 3+, no API parity)                                                                 | EX-04                      | Open                    |
 | Extension bisect / process isolation so one extension cannot stall all                                                    | PL-08                      | Proposed                |
+| Language tools (LSP, DAP, linters, formatters, compiler helpers) only via extensions; none preinstalled                   | LS-01, EX-03               | Committed (user 2026-10-19) |
+| How extensions get tool binaries: config only / download on demand, PATH first / bundled per platform (`documents/language-tools.md`) | LS-01, EX-06               | Open                    |
 | Narrow-API escape hatch (MCP) because Zed has no custom panels                                                            | EX-07                      | Proposed                |
 | Manage Extensions dialog (Section Bar bottom): official + user-added extensions/plugins, VS Code-like (compilers, linters, appearances, ...) | EX-01, EX-03               | Committed (user 2026-10-19) |
 | Workflows (= Section Bar sections): Code Editor now; Paradigm Editor, Agent Automation planned; users add custom-built workflows; Manage Workflows dialog adds/removes them | -                          | Committed (user 2026-10-19) |

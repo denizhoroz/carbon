@@ -36,7 +36,7 @@ Recipe: the core owns the buffer (text, saving, disk changes, language servers);
 |---|---|---|
 | Approach | Kit Editor + core buffer / kit Editor only / kit fork now / own Zed-style engine | **Kit Editor + core buffer** |
 | Tier 1 scope | Edit + save + tabs, syntax colours, large-file speed check, language servers | **All four** |
-| Language servers | Built in / installable language packages | Fixed table now (rust-analyzer); **installable language packages later** (user: "if people want to use rust they can install the rust packages later; or python etc.") |
+| Language servers | Built in / installable language packages | Fixed table now (rust-analyzer); **installable language packages later** (user: "if people want to use rust they can install the rust packages later; or python etc."). 2026-10-19: none preinstalled, all via Manage Extensions (`language-tools.md`) |
 
 ## 4. Sources
 

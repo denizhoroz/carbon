@@ -23,7 +23,7 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Feature | Refs |
 |---|---|
 | Editor leftovers: code folding (kit folding delays every keystroke ~25 ms and can crash on big broken files: fix or fork the kit), soft-wrap setting, find/replace UI check, format, Save As, auto save (with settings, user 2026-10-17) / hot exit, diff editor, preview tabs, signature help, references, rename, code actions, anchors + agent range edits, incremental LSP sync | ED-01..04, ED-11, LS-02 | Tier 1 built (`../built/code-editor.md`) |
-| Installable language packages: each language (rust-analyzer, Python server, ...) installed on demand instead of a fixed table; more servers and grammars | LS-01, LS-03, EX-06 | User request 2026-10-17; table is `SERVERS` in core `lsp.rs` |
+| Installable language packages: each language (rust-analyzer, Python server, ...) installed on demand instead of a fixed table; more servers and grammars | LS-01, LS-03, EX-06 | User request 2026-10-17; table is `SERVERS` in core `lsp.rs`. 2026-10-19: no preinstalled language tools, all via Manage Extensions; binary source model open (`../../documents/language-tools.md`) |
 | Tabs/splits for explorer, problems; Problems panel | WB-02, WB-03, WB-04 | Editor tabs built |
 | Language intelligence rest: navigation/refactor, semantic tokens | LS-02..04, LS-06 | Diagnostics, hover, completion, definition built |
 | Debugging: DAP, launch.json, logpoints | DB-01, DB-02 |
