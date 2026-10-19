@@ -60,6 +60,14 @@ pub struct MovePanel {
     pub side: Option<Side>,
 }
 
+/// Move the focused panel into the editor area, beside the editors (VS Code's
+/// "to the side"): a terminal or chat next to, below, left of or above the code.
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = carbon, no_json)]
+pub struct MoveBesideEditor {
+    pub direction: Direction,
+}
+
 /// Move the focused dock's inner edge one step (JetBrains-style keyboard resize).
 #[derive(Clone, PartialEq, Action)]
 #[action(namespace = carbon, no_json)]
@@ -185,6 +193,31 @@ pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
             },
         ),
         MenuItem::action("Move to Center", MovePanel { side: None }),
+        MenuItem::separator(),
+        MenuItem::action(
+            "Move Next to Editor (Right)",
+            MoveBesideEditor {
+                direction: Direction::Right,
+            },
+        ),
+        MenuItem::action(
+            "Move Next to Editor (Below)",
+            MoveBesideEditor {
+                direction: Direction::Down,
+            },
+        ),
+        MenuItem::action(
+            "Move Next to Editor (Left)",
+            MoveBesideEditor {
+                direction: Direction::Left,
+            },
+        ),
+        MenuItem::action(
+            "Move Next to Editor (Above)",
+            MoveBesideEditor {
+                direction: Direction::Up,
+            },
+        ),
     ];
 
     vec![

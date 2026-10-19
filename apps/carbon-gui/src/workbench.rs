@@ -201,8 +201,9 @@ impl Workbench {
         // dragging their edge, the View menu and Ctrl+B / Ctrl+Alt+B / Ctrl+J.
         skin.set_toggle_button_visible(false, cx);
 
-        let _layout_sub = cx.subscribe(&area, |this, _, event: &DockEvent, cx| {
+        let _layout_sub = cx.subscribe_in(&area, window, |this, _, event, window, cx| {
             if let DockEvent::LayoutChanged = event {
+                this.repair_layout(window, cx);
                 this.schedule_save(cx);
             }
         });
@@ -443,6 +444,24 @@ impl Workbench {
         }
     }
 
+    /// After any change (a drag between regions, a keyboard move): the center
+    /// never goes blank, an empty editor takes the place of a panel moved out;
+    /// a dock whose last panel left closes.
+    fn repair_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let center_empty = self
+            .area
+            .read(cx)
+            .layout(DockPlacement::Center)
+            .is_none_or(|tree| tree.panels().next().is_none());
+        if center_empty {
+            let editor = panel_handle(EditorPanel::new(cx));
+            self.area.update(cx, |area, cx| {
+                area.add_panel_view(editor, DockPlacement::Center, None, window, cx)
+            });
+        }
+        self.close_empty_docks(window, cx);
+    }
+
     /// Docks whose panels were all closed stay closed (older layouts saved
     /// them open and blank).
     fn close_empty_docks(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -549,6 +568,41 @@ impl Workbench {
                 area.toggle_dock(to, window, cx);
             }
         });
+        if let Some(view) = self.area.read(cx).panel(panel).cloned() {
+            view.focus_handle(cx).focus(window, cx);
+        }
+    }
+
+    /// Moves the focused panel into the editor area as a new group on one side
+    /// of everything there (Right: a terminal next to the code).
+    pub fn move_beside_editor(
+        &mut self,
+        direction: Direction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some((panel, from)) = self.focused_panel(window, cx) else {
+            return;
+        };
+        let Some(center) = self.area.read(cx).layout(DockPlacement::Center) else {
+            return;
+        };
+        // Alone in the editor area there is nothing to sit beside.
+        if from == DockPlacement::Center && center.panels().eq([panel]) {
+            return;
+        }
+        let target = InsertTarget::Split {
+            node: center.root().id(),
+            placement: match direction {
+                Direction::Left => Placement::Left,
+                Direction::Right => Placement::Right,
+                Direction::Up => Placement::Top,
+                Direction::Down => Placement::Bottom,
+            },
+            size: None,
+        };
+        self.area
+            .update(cx, |area, cx| area.move_panel(panel, target, window, cx));
         if let Some(view) = self.area.read(cx).panel(panel).cloned() {
             view.focus_handle(cx).focus(window, cx);
         }

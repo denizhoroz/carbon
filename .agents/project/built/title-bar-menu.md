@@ -16,7 +16,7 @@ Built 2026-10-16. User decisions: classic menu row (not hamburger), custom title
 |---|---|---|
 | File | Open Folder... (Ctrl+K Ctrl+O), Create Folder..., Close Folder, New File (Ctrl+N), Save (Ctrl+S), Exit (Ctrl+Q) | All work: folder items (`workspace-folders.md`); New File, Save and Exit (asks about unsaved files) in `code-editor.md` |
 | Edit | Undo, Redo, Cut, Copy, Paste | The kit's text actions: act on the focused editor or text box; in the Explorer, on files (2026-10-17) |
-| View | Command Palette (Ctrl+Shift+P, F1), Go to File... (Ctrl+P), Go to Line... (Ctrl+G); Section submenu; dock toggles; auto-hide toggles; Layout submenu; Panel submenu | All (palette: `command-palette.md`; see `section-bar.md`, `panel-layout.md` s8) |
+| View | Command Palette (Ctrl+Shift+P, F1), Go to File... (Ctrl+P), Go to Line... (Ctrl+G); Section submenu; dock toggles; auto-hide toggles; Layout submenu; Panel submenu (Move to dock / center, Move Next to Editor right/below/left/above) | All (palette: `command-palette.md`; see `section-bar.md`, `panel-layout.md` s8) |
 | Help | About | None |
 
 Placeholder items have no handler; they map to unbuilt features in `../not_built/README.md`.

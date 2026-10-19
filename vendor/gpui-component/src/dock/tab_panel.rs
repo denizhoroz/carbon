@@ -154,8 +154,12 @@ fn zoom_control(group: &TabGroupContext, cx: &App) -> Option<PanelControl> {
 /// nowhere to go — a dock's last group, a locked dock — draggable anyway. The
 /// old dock asked the same question, spelled `state.draggable`.
 fn tab_drag(group: &TabGroupContext, ix: usize, cx: &App) -> Option<DragPanel> {
-    group
-        .is_draggable()
+    // CARBON PATCH: a region's last panel can be dragged too, so a terminal or
+    // chat alone in its dock (or the editor alone in the center) moves beside
+    // the others; Carbon refills an emptied center and closes an emptied dock.
+    // Only a locked or zoomed group refuses. Closing still asks `is_draggable`.
+    // See `vendor/gpui-component/CARBON-PATCHES.md`.
+    (!group.is_locked())
         .then(|| group.drag_panel(ix, cx))
         .flatten()
 }
@@ -975,8 +979,9 @@ mod tests {
     /// The gate carried forward from the old `TabPanel::render`, which wrapped
     /// `on_drag` in `.when(state.draggable, ..)`. Base does not enforce it:
     /// `TabGroupContext::drag_panel` answers for any tab in range.
+    // CARBON PATCH 6: the last panel offers a drag (was `vec![false]`).
     #[gpui::test]
-    fn the_last_group_in_a_dock_offers_no_drag(cx: &mut TestAppContext) {
+    fn the_last_group_in_a_dock_offers_a_drag(cx: &mut TestAppContext) {
         let (area, log, cx) = recording_area(cx);
 
         cx.update(|window, cx| {
@@ -989,9 +994,8 @@ mod tests {
 
         assert_eq!(
             log.borrow().draggable,
-            vec![false],
-            "the only visible panel in the dock has nowhere to go, so its tab \
-             must not start a drag"
+            vec![true],
+            "the only visible panel in the dock can still move to another region"
         );
     }
 

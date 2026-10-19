@@ -264,16 +264,25 @@ impl DropPlaceholderBounds {
     }
 }
 
+/// CARBON PATCH: split zones are thin edge strips, a quarter of the side but
+/// at most this wide, so the centre zone (drop as a tab) is the big one (was
+/// 35% per edge, leaving the centre a 30% x 30% box). See
+/// `vendor/gpui-base/CARBON-PATCHES.md`.
+const SPLIT_EDGE_RATIO: f32 = 0.25;
+const SPLIT_EDGE_MAX: Pixels = px(80.);
+
 /// Which split zone `position` falls into within `bounds`, or `None` for the
 /// centre zone (merge into the tab group rather than split).
 pub fn split_placement_at(bounds: Bounds<Pixels>, position: Point<Pixels>) -> Option<Placement> {
-    if position.x < bounds.left() + bounds.size.width * 0.35 {
+    let edge_x = (bounds.size.width * SPLIT_EDGE_RATIO).min(SPLIT_EDGE_MAX);
+    let edge_y = (bounds.size.height * SPLIT_EDGE_RATIO).min(SPLIT_EDGE_MAX);
+    if position.x < bounds.left() + edge_x {
         Some(Placement::Left)
-    } else if position.x > bounds.left() + bounds.size.width * 0.65 {
+    } else if position.x > bounds.right() - edge_x {
         Some(Placement::Right)
-    } else if position.y < bounds.top() + bounds.size.height * 0.35 {
+    } else if position.y < bounds.top() + edge_y {
         Some(Placement::Top)
-    } else if position.y > bounds.top() + bounds.size.height * 0.65 {
+    } else if position.y > bounds.bottom() - edge_y {
         Some(Placement::Bottom)
     } else {
         None
@@ -336,7 +345,7 @@ mod tests {
             origin: point(px(120.), px(80.)),
             size: gpui::size(px(400.), px(300.)),
         };
-        // 35% / 65% of 400x300 from origin (120, 80).
+        // CARBON PATCH 3: edges 80 px (x) and 75 px (y) of 400x300 from (120, 80).
         let at = |x: f32, y: f32| split_placement_at(bounds, point(px(x), px(y)));
 
         assert_eq!(at(130., 230.), Some(Placement::Left));
@@ -372,9 +381,27 @@ mod tests {
         };
 
         // Comparisons are strict, so the threshold itself is the centre zone.
-        assert_eq!(split_placement_at(bounds, point(px(140.), px(150.))), None);
-        assert_eq!(split_placement_at(bounds, point(px(260.), px(150.))), None);
-        assert_eq!(split_placement_at(bounds, point(px(200.), px(105.))), None);
-        assert_eq!(split_placement_at(bounds, point(px(200.), px(195.))), None);
+        // CARBON PATCH 3: thresholds 80 / 320 (x), 75 / 225 (y).
+        assert_eq!(split_placement_at(bounds, point(px(80.), px(150.))), None);
+        assert_eq!(split_placement_at(bounds, point(px(320.), px(150.))), None);
+        assert_eq!(split_placement_at(bounds, point(px(200.), px(75.))), None);
+        assert_eq!(split_placement_at(bounds, point(px(200.), px(225.))), None);
+    }
+
+    /// CARBON PATCH 3: in a big area the edges stay 80 px, the centre takes the rest.
+    #[test]
+    fn split_edges_are_capped_so_the_centre_dominates() {
+        let bounds = gpui::Bounds {
+            origin: Point::default(),
+            size: gpui::size(px(1000.), px(600.)),
+        };
+        let at = |x: f32, y: f32| split_placement_at(bounds, point(px(x), px(y)));
+
+        assert_eq!(at(100., 100.), None);
+        assert_eq!(at(900., 500.), None);
+        assert_eq!(at(79., 300.), Some(Placement::Left));
+        assert_eq!(at(921., 300.), Some(Placement::Right));
+        assert_eq!(at(500., 79.), Some(Placement::Top));
+        assert_eq!(at(500., 521.), Some(Placement::Bottom));
     }
 }

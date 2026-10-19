@@ -24,8 +24,8 @@ use gpui_kit::component::{ActiveTheme, TitleBar, h_flex, v_flex};
 use gpui_kit::*;
 use menus::{
     AddPanel, ApplyLayout, ApplyPreset, CloseFolder, CommandPalette, CreateFolder, DeleteLayout,
-    GoToLine, MenuState, MovePanel, NewFile, OpenFolder, QuickOpen, ResetLayout, ResizeDock,
-    SaveLayoutAs, SwitchSection, ToggleAutoHide, ToggleDock,
+    GoToLine, MenuState, MoveBesideEditor, MovePanel, NewFile, OpenFolder, QuickOpen, ResetLayout,
+    ResizeDock, SaveLayoutAs, SwitchSection, ToggleAutoHide, ToggleDock,
 };
 use palette::{FileIndex, Palette};
 use section_bar::SectionBar;
@@ -218,6 +218,10 @@ impl Render for CarbonApp {
             ))
             .on_action(self.on(
                 |w, a: &ResizeDock, window, cx| w.resize_dock(a.direction, window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, a: &MoveBesideEditor, window, cx| w.move_beside_editor(a.direction, window, cx),
                 cx,
             ))
             .on_action(self.on(

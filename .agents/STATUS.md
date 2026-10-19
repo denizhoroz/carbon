@@ -51,6 +51,7 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-19 | Every panel can move into every region, both ways (terminal/chat into the editor area, editor into docks); a region's last panel is draggable (kit patch 6); emptied center refills, emptied dock closes | user request after VS Code (terminal in editor area) and Zed (center terminal) | `project/built/panel-layout.md` s8 |
 | 2026-10-19 | Command palette: Ctrl+Shift+P / F1 (Ctrl+K stays a chord prefix), Ctrl+P files, Ctrl+G line; one input with VS Code prefixes; `nucleo-matcher` fuzzy + usage tie-break; Zed look (under the title bar, no backdrop), drawn by `CarbonApp` not the kit Dialog; menus are the command source; Ctrl+P / F1 taken from the terminal's shell | user decision after comparing Superhuman, Linear, Raycast, VS Code, Retool, Warp, Zed | `project/built/command-palette.md` |
 | 2026-10-18 | Terminal = `alacritty_terminal` emulator in the core + `portable-pty` + own GPUI view; tier 1 = base, selection/copy/paste/scrollback, profiles, shell integration (OSC 633/133), links, find; Windows default PowerShell 7, else Windows PowerShell | user decision after comparing VS Code, Zed, Lapce, WezTerm, Warp, Windows Terminal, Ghostty, JetBrains | `documents/terminal.md`, `project/built/terminal.md` |
 | 2026-10-17 | Every Code Editor panel behaves like editor tabs: tab + close button alone or with others; Chat/Terminal addable many times (View > Add Panel, "..." > New); Explorer: one instance, plain "Explorer" title, not closable (user, same day). Supersedes "side panels keep their title" | user decision (changed mind) | `project/built/panel-layout.md` s8 |
@@ -134,6 +135,13 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-19 (drop zones)
+- Done: drop-as-tab zone made the big one: split strips a quarter of the side, max 80 px (gpui-base patch 3); click-tested merge vs. left split; your layout restored after the test.
+
+### 2026-10-19 (panels across regions)
+- Done: found the block (kit refuses to drag a region's last panel); gpui-component patch 6; `Workbench::repair_layout` (center refill, empty docks close) on every layout change; `MoveBesideEditor` (View > Panel > Move Next to Editor, palette). Click-tested drags both ways, refill, keyboard move, restart. 96 tests pass + 4 ignored; clippy and fmt clean.
+- Next: drop targets on closed docks / window edges (VS Code-style); commit (user).
 
 ### 2026-10-19 (command palette)
 - Done: research (Superhuman, Linear, Raycast, VS Code, Retool, Warp, Zed); core `fuzzy.rs` (nucleo-matcher) + `file_index.rs` + `files_generation`; gui `commands.rs` registry from the menus + extras, `palette.rs` (commands `>`, files, line `:`, help `?`), usage ranking file, full-chord shortcut chips, focus-restoring dispatch; View > Go to File / Go to Line; palette keys kept from the terminal. Click test found `available_actions` dropping actions with fields (fixed: per-action `is_action_available`). 96 tests pass + 4 ignored; clippy and fmt clean; click-tested with F1 (Ctrl shortcuts untested).

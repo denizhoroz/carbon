@@ -225,6 +225,10 @@ fn decorate(spec: &mut CommandSpec) {
         ),
         "ResizeDock" => (Some(IconName::Move), &["resize", "size", "width", "height"]),
         "MovePanel" => (Some(IconName::Move), &["dock", "tab"]),
+        "MoveBesideEditor" => (
+            Some(IconName::Move),
+            &["split", "side", "editor area", "terminal", "chat"],
+        ),
         "AddPanel" => (Some(IconName::Plus), &["open", "show", "tab"]),
         "SaveLayoutAs" | "ApplyLayout" | "DeleteLayout" | "ApplyPreset" | "ResetLayout" => (
             Some(IconName::LayoutDashboard),
