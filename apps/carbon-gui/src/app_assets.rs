@@ -37,7 +37,9 @@ icon_assets!(
         Eraser,
         // Section Bar Manage buttons (Settings is in the kit default set).
         Puzzle,
-        Workflow
+        Workflow,
+        // Built-in workflow icons (`workflow/*.toml` in carbon-core).
+        Network
     ]
 );
 

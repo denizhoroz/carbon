@@ -72,7 +72,7 @@ Zed-style docks with VS Code's familiar panels. **[R][N]**
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Section Bar** (user decision 2026-10-16): a vertical icon strip at the far left, like VS Code's activity bar, but it switches **sections** (Code Editor first; later paradigm, agents), each with its own remembered dock layout. It does not toggle single panels. In user-facing text a section is a **workflow** (Code Editor now; Paradigm Editor, Agent Automation planned; user-built custom workflows). **[N]**
+- **Section Bar** (user decision 2026-10-16): a vertical icon strip at the far left, like VS Code's activity bar, but it switches **sections** (Editor first; later paradigm, agents), each with its own remembered dock layout. It does not toggle single panels. In user-facing text a section is a **workflow** (Editor now; Paradigm Editor, Agent Automation planned; user-built custom workflows). **[N]**
 - **Section Bar bottom group** (user decision 2026-10-19), top to bottom: **Manage Extensions** (puzzle icon), **Manage Workflows** (workflow icon), **Manage Settings** (gear). Each opens a dialog, never a dock panel; never shown as selected. Extensions = official and user-added plugins, VS Code-like (compilers, linters, appearances); Workflows = add/remove workflows (built-in and custom); Settings = all user options (see Settings). **[N]**
 - **Docks inside a section.** Left, right and bottom docks hold panels; each panel has a status-bar toggle button with a tooltip and shortcut. Panels can be dragged between docks. **[N]**
 - **Default first screen:** left dock with file tree, editor area, thin status bar; right and bottom docks closed. **[N]**

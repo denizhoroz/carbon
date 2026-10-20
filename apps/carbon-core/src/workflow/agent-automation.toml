@@ -1,0 +1,16 @@
+# Built-in placeholder: Agent Automation. No content yet; one placeholder
+# panel to exercise the workflow system.
+id = "carbon.agent-automation"
+schema_version = 1
+version = "0.1.0"
+carbon_api = ">=0.1, <0.2"
+name = "Agent Automation"
+description = "Automated agent runs. Placeholder: not built yet."
+icon = "bot"
+order = 300
+
+[layout.center]
+panels = ["runs"]
+
+[panels]
+runs = { kind = "placeholder", title = "Agent Automation" }

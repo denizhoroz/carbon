@@ -21,6 +21,7 @@ mod marks;
 pub mod terminal;
 mod vcs;
 mod watcher;
+pub mod workflow;
 mod workspace;
 
 use std::path::{Path, PathBuf};

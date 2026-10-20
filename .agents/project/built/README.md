@@ -14,7 +14,7 @@ One file per feature that exists in code. Each says what was built, where, how t
 | Status bar (workspace, git branch, jobs) + `carbon-gui <folder>` | `status-bar.md` | `apps/carbon-gui/src/status_bar.rs`, core `vcs.rs`, `jobs.rs` | 2026-10-16 | Screenshot only |
 | Custom title bar + menu bar | `title-bar-menu.md` | `apps/carbon-gui/src/{title_bar,menus}.rs` | 2026-10-16 | No (opens, no crash) |
 | Theming and fixed styles | `theming.md` | `apps/carbon-gui/src/style/` | 2026-10-16 | No (themes load, test passes) |
-| Section Bar (vertical section switcher; Code Editor section with Explorer/Editor/Chat/Terminal; all real panels now) | `section-bar.md` | `apps/carbon-gui/src/{section_bar,app_assets}.rs`, `workbench.rs` | 2026-10-16 | No (starts, layout file checked) |
+| Section Bar (vertical workflow switcher over the workflow registry: Editor real, Paradigm Editor and Agent Automation placeholders; Manage buttons) | `section-bar.md` | `apps/carbon-core/src/workflow.rs`, `apps/carbon-gui/src/{section_bar,workflows,app_assets}.rs`, `workbench.rs` | 2026-10-16; registry 2026-10-20 | Yes (2026-10-20: switching, restart, safe mode) |
 | Panel layout T1 + T2 (docks, drag/snap, named layouts, presets, keyboard move/resize, auto-hide); any panel into any region incl. terminal/chat beside the code (2026-10-19, click-tested) | `panel-layout.md` (comparison + scope + implementation) | `apps/carbon-gui/src/{workbench,layouts,test_panel}.rs` | 2026-10-16 | No (T2 not yet run) |
 
 Platforms: built and started on Windows only; macOS and Linux untested for every row.

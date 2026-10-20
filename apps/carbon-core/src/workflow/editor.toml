@@ -1,0 +1,30 @@
+# Built-in: the Editor workflow (Explorer, editors, Chat, Terminal).
+# Mirrors the GUI's `Preset::Code`; a test checks they stay equal.
+id = "carbon.editor"
+schema_version = 1
+version = "1.0.0"
+carbon_api = ">=0.1, <0.2"
+name = "Editor"
+description = "Edit files with the Explorer, Chat and Terminal."
+icon = "code"
+order = 100
+# Key of this workflow in `layout.json` before workflows existed.
+legacy_ids = ["code"]
+
+[layout.center]
+panels = ["editor"]
+
+[layout.left]
+panels = ["explorer"]
+
+[layout.right]
+panels = ["chat"]
+
+[layout.bottom]
+panels = ["terminal"]
+
+[panels]
+explorer = { closable = false }
+editor = { multi = true }
+terminal = { multi = true }
+chat = { multi = true }

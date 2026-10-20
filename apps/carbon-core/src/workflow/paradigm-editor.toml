@@ -1,0 +1,16 @@
+# Built-in placeholder: the Paradigm Editor (diagrams as AI context, pillar 2).
+# No content yet; one placeholder panel to exercise the workflow system.
+id = "carbon.paradigm-editor"
+schema_version = 1
+version = "0.1.0"
+carbon_api = ">=0.1, <0.2"
+name = "Paradigm Editor"
+description = "Diagrams used as AI context. Placeholder: not built yet."
+icon = "network"
+order = 200
+
+[layout.center]
+panels = ["canvas"]
+
+[panels]
+canvas = { kind = "placeholder", title = "Paradigm Editor" }

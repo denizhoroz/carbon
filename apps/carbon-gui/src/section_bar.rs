@@ -1,56 +1,28 @@
 //! Section Bar: vertical icon strip on the left (like VS Code's activity bar).
-//! Each icon at the top switches the whole workbench to that section's layout;
-//! the icons at the bottom open Manage dialogs (`manage.rs`).
+//! Each icon at the top switches the whole workbench to that workflow's layout
+//! (one per entry in `workflows::registry`); the icons at the bottom open
+//! Manage dialogs (`manage.rs`).
 
-use gpui_kit::assets::IconName;
+use carbon_core::workflow::WorkflowId;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{ActiveTheme, Icon, Selectable, Sizable, Size, v_flex};
 use gpui_kit::*;
-use serde::{Deserialize, Serialize};
 
 use crate::manage::{self, Manage};
 use crate::menus::SwitchSection;
 use crate::style::fixed;
-
-/// A top-level section of the app. Each has its own layout, kept while switching.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Section {
-    Code,
-}
-
-impl Section {
-    pub const ALL: [Section; 1] = [Section::Code];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Section::Code => "Code Editor",
-        }
-    }
-
-    fn icon(self) -> IconName {
-        match self {
-            Section::Code => IconName::Code,
-        }
-    }
-
-    fn id(self) -> &'static str {
-        match self {
-            Section::Code => "section-code",
-        }
-    }
-}
+use crate::workflows;
 
 pub struct SectionBar {
-    active: Section,
+    active: WorkflowId,
 }
 
 impl SectionBar {
-    pub fn new(active: Section) -> Self {
+    pub fn new(active: WorkflowId) -> Self {
         Self { active }
     }
 
-    pub fn set_active(&mut self, active: Section, cx: &mut Context<Self>) {
+    pub fn set_active(&mut self, active: WorkflowId, cx: &mut Context<Self>) {
         self.active = active;
         cx.notify();
     }
@@ -69,27 +41,33 @@ impl Render for SectionBar {
             .bg(cx.theme().title_bar)
             .border_r_1()
             .border_color(cx.theme().title_bar_border)
-            .children(Section::ALL.map(|section| {
-                bar_button(section.id(), section.icon(), section.label())
-                    .selected(section == self.active)
-                    .on_click(move |_, window, cx| {
-                        window.dispatch_action(Box::new(SwitchSection { section }), cx)
-                    })
+            .children(workflows::registry().workflows().iter().map(|def| {
+                let id = def.id.clone();
+                bar_button(
+                    SharedString::from(format!("workflow-{id}")),
+                    workflows::icon(def),
+                    SharedString::from(def.name.clone()),
+                )
+                .selected(def.id == self.active)
+                .on_click(move |_, window, cx| {
+                    window.dispatch_action(Box::new(SwitchSection { id: id.clone() }), cx)
+                })
             }))
             // Bottom group: Manage dialogs, pushed down by the spacer.
             .child(div().flex_1())
             .children(Manage::ALL.map(|target| {
-                bar_button(target.id(), target.icon(), target.label())
+                bar_button(target.id(), Icon::new(target.icon()), target.label())
                     .on_click(move |_, window, cx| manage::open(target, window, cx))
             }))
     }
 }
 
-fn bar_button(id: &'static str, icon: IconName, label: &'static str) -> Button {
+fn bar_button(id: impl Into<ElementId>, icon: Icon, label: impl Into<SharedString>) -> Button {
+    let label = label.into();
     Button::new(id)
-        .icon(Icon::new(icon).with_size(Size::Size(fixed::SECTION_ICON_SIZE)))
+        .icon(icon.with_size(Size::Size(fixed::SECTION_ICON_SIZE)))
         .ghost()
         .with_size(Size::Size(fixed::SECTION_BUTTON_SIZE))
-        .tooltip(label)
+        .tooltip(label.clone())
         .accessibility_label(label)
 }

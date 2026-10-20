@@ -41,6 +41,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 - [ ] CI for all three platforms
 
 ## Next steps
+0. Workflow system Phase 2 (`project/not_built/workflow-system.md` s5): user workflows folder, overlay, `state.json`, crash-loop guard, missing-panel placeholder. First settle the review points (Paradigm/Agents presets beside the workflows; crash guard clearing; merge needs the old base panel set).
 1. Real backend behind `ChatBackend` (ACP or an API); `@` mentions; chat list.
 2. Language-tool install model and Manage Extensions contents (`documents/language-tools.md`).
 3. Paradigm editor research pass (pillar 2).
@@ -53,6 +54,16 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-20 | Workflow manifest format: TOML (JSON accepted for the same schema) | user answer Q1 | `project/not_built/workflow-system.md` s6 |
+| 2026-10-20 | Built-in workflows change only via overlay or Duplicate; the embedded file is never edited | user answer Q2 | `project/not_built/workflow-system.md` s6 |
+| 2026-10-20 | Q3 decided: recommended default. Patch overlay for tweaks of built-in workflows; whole-manifest copy for Duplicate | user answer Q3 | `project/not_built/workflow-system.md` s4.2, s6 |
+| 2026-10-20 | Workflows span any domain (3D, sound, automation, diagrams); the contract is not tied to code, a text buffer or a workspace folder (`requires_workspace` optional; surface panel kinds, device capabilities, background policy added to the design; surface safety is open Q11) | user knowledge | `project/not_built/workflow-system.md` s3.1 |
+| 2026-10-20 | Paradigm Editor and Agent Automation become workflows now as placeholders (empty panels, Section Bar icons) to test and design the workflow system (reverses the recommended default) | user answer Q4 | `project/not_built/workflow-system.md` s6 |
+| 2026-10-20 | Section Bar overflow: up/down arrows to scroll the list plus mouse wheel; no fixed cap (replaces overflow menu) | user answer Q5 | `project/not_built/workflow-system.md` s4.10, s6 |
+| 2026-10-20 | User workflow files in the OS config dir `Carbon/workflows/` | user answer Q6 | `project/not_built/workflow-system.md` s4.7, s6 |
+| 2026-10-20 | "Code Editor" renamed to "Editor"; id `carbon.editor`, `legacy_ids = ["code"]`; UI label and docs renamed 2026-10-20 (code: section_bar.rs, layouts.rs; ids unchanged) | user answer Q7 | `project/not_built/workflow-system.md` s6, `project/not_built/README.md` |
+| 2026-10-20 | Named layouts are per workflow; each workflow has its own layout config the user can change | user answers Q8, Q10 | `project/not_built/workflow-system.md` s4.7, s6 |
+| 2026-10-20 | Scoped keybindings deferred: workflow system ships without scoped keys, no GPUI key-context spike for now | user answer Q9 | `project/not_built/workflow-system.md` s4.6, s6 |
 | 2026-10-19 | No preinstalled language tools (servers, linters, formatters, compilers); users install them via Manage Extensions. Binary source model (config only / download PATH-first / bundled) open | user decision after research on VS Code, Zed, Neovim/Mason, Helix, JetBrains | `documents/language-tools.md`, `PROJECT.md` |
 | 2026-10-19 | Section Bar bottom group: Manage Extensions, Manage Workflows, Manage Settings (dialogs, placeholders now). Workflows = sections (Code Editor; planned Paradigm Editor, Agent Automation; user custom workflows). Extensions = official + user-added plugins, VS Code-like (compilers, linters, appearances). Settings = all user options (system, appearance, agents, ...) | user decision | `PROJECT.md`, `DESIGN.md` s4, `project/built/section-bar.md` |
 | 2026-10-19 | Chat panel v1 is GUI only: `ChatBackend` interface in the core + streaming demo agent (labelled); IDE layout; edit & retry, context chips, status label; chats saved per tab in `target/carbon-gui/chats/`; chat model separate from `AgentSession`; files kept when a tab closes | user decision (no model loader or API now) after comparing VS Code, Zed, Cursor, JetBrains | `project/built/chat.md` |
@@ -140,6 +151,19 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-20 (workflow system Phase 0-1)
+- Done: `carbon-core::workflow` (`WorkflowId`, TOML manifests, validation, `Registry` with three embedded built-ins, `LayoutFile` kept readable by older builds); GUI: Section Bar, View > Section and workbench read the registry (`Section` enum removed), `layouts::PanelKind` + `LayoutSpec`, `--safe-mode`; `toml` 1.1.8 and `semver` 1.0.28 added (both already in the lock). 14 core + 3 GUI tests; workspace tests, clippy, fmt green; click-tested in a separate target dir (state files restored, one empty test chat file removed).
+- Next: Phase 2.
+
+### 2026-10-20 (workflow decisions + Editor rename)
+- Done: Q3 decided (patch overlay; whole copy for Duplicate); workflow range (diagram, automation, 3D view, sound design, user-built) folded into `project/not_built/workflow-system.md`, `PROJECT.md`, `FEATURE.md`; "Code Editor" renamed to "Editor" in the UI label (`section_bar.rs:27`) and docs (ids and `layout.json` key unchanged). Not built or run after the rename.
+- Next: workflow system Phase 0-1.
+
+### 2026-10-20 (workflow system design)
+- Done: design doc `project/not_built/workflow-system.md` (alternatives survey, manifest, layers, registry/lifecycle, panel kinds, safe mode, 6-phase migration from the `Section` enum); `project/not_built/README.md` rows. No code changed.
+- Decisions (user answers, same day): Q1-Q2, Q4-Q10 decided (see Decision log); Q3 decided as the recommended default (patch overlay; whole manifest for Duplicate). New user knowledge: workflows range over diagram editing, automation, 3D display and sound design, so the design gained s3.1 (range, requirements W1-W7) and open Q11-Q14. Doc status: design accepted.
+- Next: start Phase 0-1 (id adapter, then registry with three built-ins).
 
 ### 2026-10-20 (docs refresh)
 - Done: read the project state; fixed stale docs (`PROJECT.md` status, sequencing, open question and docs map; `STATUS.md` focus, next steps, Agents pillar row; `README.md` git note and file table); removed `research_notes/` (staged `git rm`, user commits).

@@ -27,9 +27,9 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 - **Safety defaults:** OS sandbox on, tiered approvals + classifier + hooks, side-effect-aware checkpoints, destructive-git guard.
 - **Defaults:** calm opt-out AI, telemetry off, live cost meter, VS Code settings/keymap/theme import, AccessKit from the first widget, write-ahead journal.
 - **Panel layout (user decision, 2026-10-16):** T1 (kit docking: drag/snap/split/resize/close/zoom/persist) + T2 (named layouts on hotkeys, task presets, keyboard move/resize, auto-hide) now; T3 (pop-out OS windows, top dock, guide diamond, float inside window) later. `project/built/panel-layout.md`.
-- **Section Bar (user decision, 2026-10-16):** left vertical bar of section icons; each section has its own layout; first section Code Editor (`< >` icon). `project/built/section-bar.md`.
+- **Section Bar (user decision, 2026-10-16):** left vertical bar of section icons; each section has its own layout; first section Editor (`< >` icon). `project/built/section-bar.md`.
 - **Manage dialogs (user decision, 2026-10-19):** bottom of the Section Bar, top to bottom: Manage Extensions, Manage Workflows, Manage Settings; each opens a dialog (placeholders now).
-  - **Workflows:** a workflow is a workspace mode with its own layout; the code calls it a `Section` (one Section Bar icon each). Now: Code Editor. Planned: Paradigm Editor (pillar 2), Agent Automation. Users can add their own custom-built workflows. Manage Workflows adds and removes them.
+  - **Workflows:** a workflow is a workspace mode with its own layout; the code calls it a `Section` (one Section Bar icon each). Now: Editor (renamed from Editor 2026-10-20, id `carbon.editor`). Paradigm Editor (pillar 2) and Agent Automation are placeholder workflows now (empty panels, Section Bar icons) used to test and design the workflow system (user decision 2026-10-20). Users can add their own custom-built workflows. Workflows span any domain (user knowledge 2026-10-20): editor, paradigm editor, automation, 3D graphics viewer, sound design, user-built; the contract is not tied to code or a workspace folder (`requires_workspace` is optional). Manage Workflows adds and removes them. Workflows are manifest-defined (TOML) and modular, each with its own layout and named layouts, per `project/not_built/workflow-system.md` (design accepted incl. Q3: patch overlay for built-in tweaks, whole manifest for Duplicate; scoped keys deferred).
   - **Extensions:** works like VS Code. Official (bundled) and user-added extensions/plugins: compilers, linters, appearances (themes), and more (pillar 6). Manage Extensions lists, adds and removes them.
   - **Settings:** every user-changeable option: system, appearance, agents, etc. (`DESIGN.md` Settings).
 - **Core first, in-process (user decision, 2026-10-16, option a):** `apps/carbon-core` holds workspace, file tree, buffers, terminals, agent sessions as plain Rust; the GUI calls it directly; daemon split later keeps the same API. `project/built/carbon-core.md`.
@@ -44,6 +44,7 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 - AHP/ACP wire-format maturity and licences; MCP Apps client support.
 - Licence stance for bundled components (AGPL: PyMuPDF, SearXNG, Firecrawl; ELv2: Phoenix).
 - How extensions get language-tool binaries: config only / download on demand, PATH first / bundled per platform; compilers detected or installed on request (`documents/language-tools.md` s3; user: decide later).
+- Workflow surfaces (Q11): how extension-backed workflows get GPU, audio and canvas surfaces safely (WASM plus host surface handles vs native first-party only); default: first-party and manifest-only first, heavy surfaces behind capabilities later (`project/not_built/workflow-system.md` s3.1, s4.4, s6).
 - Full list of unverified items and benchmarks to run: RESEARCH.md section 8.
 
 ## Status

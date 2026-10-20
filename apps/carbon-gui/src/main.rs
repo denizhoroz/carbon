@@ -16,6 +16,7 @@ mod terminal_panel;
 mod test_panel;
 mod title_bar;
 mod workbench;
+mod workflows;
 mod workspace_ops;
 
 use std::path::PathBuf;
@@ -125,7 +126,7 @@ impl CarbonApp {
     fn refresh_menus(&self, cx: &mut App) {
         let state = self.menu_state(cx);
         self.section_bar
-            .update(cx, |bar, cx| bar.set_active(state.section, cx));
+            .update(cx, |bar, cx| bar.set_active(state.section.clone(), cx));
         menus::refresh(&state, cx);
         self.title_bar
             .update(cx, |title_bar, cx| title_bar.reload_menus(cx));
@@ -236,7 +237,7 @@ impl Render for CarbonApp {
                 cx,
             ))
             .on_action(self.on(
-                |w, a: &SwitchSection, window, cx| w.switch_section(a.section, window, cx),
+                |w, a: &SwitchSection, window, cx| w.switch_section(&a.id, window, cx),
                 cx,
             ))
             .on_action(self.on(
@@ -328,26 +329,39 @@ impl Render for CarbonApp {
     }
 }
 
-/// Usage: `carbon-gui [folder]` opens `folder` as the workspace.
+/// Usage: `carbon-gui [--safe-mode] [folder]` opens `folder` as the workspace.
+/// `--safe-mode`: every workflow opens with its default layout and saved
+/// layouts are left untouched.
 fn main() {
-    let folder = std::env::args_os().nth(1).map(PathBuf::from);
-    application().with_assets(app_assets::AppAssets).run(|cx| {
-        init(cx);
-        style::theme::init(cx);
-        menus::init(cx);
-        test_panel::register(cx);
-        explorer_panel::register(cx);
-        editor_panel::register(cx);
-        terminal_panel::register(cx);
-        chat_panel::register(cx);
-        palette::register(cx);
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(style::fixed::WINDOW_SIZE, cx)),
-            ..TitleBar::window_options()
-        };
-        open_window(options, cx, move |window, cx| {
-            cx.new(|cx| CarbonApp::new(folder.clone(), window, cx))
-        })
-        .expect("failed to open window");
-    });
+    let mut safe_mode = false;
+    let mut folder = None;
+    for arg in std::env::args_os().skip(1) {
+        if arg == "--safe-mode" {
+            safe_mode = true;
+        } else if folder.is_none() {
+            folder = Some(PathBuf::from(arg));
+        }
+    }
+    application()
+        .with_assets(app_assets::AppAssets)
+        .run(move |cx| {
+            init(cx);
+            cx.set_global(workflows::SafeMode(safe_mode));
+            style::theme::init(cx);
+            menus::init(cx);
+            test_panel::register(cx);
+            explorer_panel::register(cx);
+            editor_panel::register(cx);
+            terminal_panel::register(cx);
+            chat_panel::register(cx);
+            palette::register(cx);
+            let options = WindowOptions {
+                window_bounds: Some(WindowBounds::centered(style::fixed::WINDOW_SIZE, cx)),
+                ..TitleBar::window_options()
+            };
+            open_window(options, cx, move |window, cx| {
+                cx.new(|cx| CarbonApp::new(folder.clone(), window, cx))
+            })
+            .expect("failed to open window");
+        });
 }

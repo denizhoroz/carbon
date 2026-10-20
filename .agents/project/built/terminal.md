@@ -6,7 +6,7 @@ Built 2026-10-18. User request: plan and build the terminal after comparing alte
 
 | Input | Result |
 |---|---|
-| Code Editor section start, View > Add Panel > Terminal | A terminal tab with the default shell (PowerShell 7, else Windows PowerShell; `$SHELL` on macOS/Linux) in the open folder, or in the folder of the last focused terminal |
+| Editor section start, View > Add Panel > Terminal | A terminal tab with the default shell (PowerShell 7, else Windows PowerShell; `$SHELL` on macOS/Linux) in the open folder, or in the folder of the last focused terminal |
 | Terminal "..." menu | New <shell> for every installed shell (Windows: PowerShell, Windows PowerShell, Command Prompt, Git Bash, WSL; Unix: `$SHELL`, `/etc/shells` bash/zsh/fish/sh), Find, Restart, Zoom, Close |
 | Tab name | The shell's name, numbered for more of the same ("Git Bash 2") |
 | Typing | Text (IME, AltGr included) through the platform text input; Enter, Tab, Backspace, arrows (app cursor mode), Home/End, PgUp/PgDn, Insert/Delete, F1-F12, Ctrl+letter, Alt+key as xterm sends them |

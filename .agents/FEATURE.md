@@ -155,7 +155,8 @@ Status: **Committed** (inherent to the pillar or already a decision in PROJECT.m
 | How extensions get tool binaries: config only / download on demand, PATH first / bundled per platform (`documents/language-tools.md`) | LS-01, EX-06               | Open                    |
 | Narrow-API escape hatch (MCP) because Zed has no custom panels                                                            | EX-07                      | Proposed                |
 | Manage Extensions dialog (Section Bar bottom): official + user-added extensions/plugins, VS Code-like (compilers, linters, appearances, ...) | EX-01, EX-03               | Committed (user 2026-10-19) |
-| Workflows (= Section Bar sections): Code Editor now; Paradigm Editor, Agent Automation planned; users add custom-built workflows; Manage Workflows dialog adds/removes them | -                          | Committed (user 2026-10-19) |
+| Workflows (= Section Bar sections): Editor now; Paradigm Editor, Agent Automation planned; users add custom-built workflows; Manage Workflows dialog adds/removes them | -                          | Committed (user 2026-10-19) |
+| Workflows of any kind (diagram, automation, 3D view, sound design, user-built); contract not tied to code or a folder; design in `project/not_built/workflow-system.md` s3.1 | EX-05, EX-06, EX-07 | Committed (user 2026-10-20) |
 | Manage Settings dialog (Section Bar bottom): every user option (system, appearance, agents, ...) | ST-01                      | Committed (user 2026-10-19) |
 
 ## 1.3 Cross-cutting decisions and constraints

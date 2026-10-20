@@ -7,8 +7,10 @@ use gpui_kit::*;
 
 use crate::editor_panel::SaveFile;
 
+use carbon_core::workflow::WorkflowId;
+
 use crate::layouts::{MAX_SAVED, Preset, Side};
-use crate::section_bar::Section;
+use crate::workflows;
 
 // About is a placeholder: it has no handler yet.
 actions!(
@@ -83,11 +85,11 @@ pub enum Direction {
     Down,
 }
 
-/// Switch the workbench to a section (Section Bar icon or View > Section).
+/// Switch the workbench to a workflow (Section Bar icon or View > Section).
 #[derive(Clone, PartialEq, Action)]
 #[action(namespace = carbon, no_json)]
 pub struct SwitchSection {
-    pub section: Section,
+    pub id: WorkflowId,
 }
 
 #[derive(Clone, PartialEq, Action)]
@@ -111,7 +113,8 @@ pub struct DeleteLayout {
 
 /// What the dynamic part of the menus shows.
 pub struct MenuState {
-    pub section: Section,
+    /// The active workflow.
+    pub section: WorkflowId,
     pub has_workspace: bool,
     pub saved: Vec<String>,
     pub auto_hide: Vec<Side>,
@@ -120,7 +123,7 @@ pub struct MenuState {
 impl Default for MenuState {
     fn default() -> Self {
         Self {
-            section: Section::Code,
+            section: WorkflowId::editor(),
             has_workspace: false,
             saved: Vec::new(),
             auto_hide: Vec::new(),
@@ -129,9 +132,9 @@ impl Default for MenuState {
 }
 
 pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
-    let sections = Section::ALL.map(|section| {
-        MenuItem::action(section.label(), SwitchSection { section })
-            .checked(section == state.section)
+    let sections = workflows::registry().workflows().iter().map(|def| {
+        MenuItem::action(def.name.clone(), SwitchSection { id: def.id.clone() })
+            .checked(def.id == state.section)
     });
     let toggles = Side::ALL
         .map(|side| MenuItem::action(format!("Toggle {} Dock", side.label()), ToggleDock { side }));

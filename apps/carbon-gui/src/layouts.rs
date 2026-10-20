@@ -1,6 +1,7 @@
 //! Layout tier T2 data: built-in task presets and the user's named layouts.
 //! Named layouts and auto-hide flags live in `layouts.json` beside the current layout.
 
+use carbon_core::workflow::{Region, WorkflowDef};
 use gpui_kit::component::dock::{DockAreaState, DockLayout, DockPlacement, panel_handle};
 use gpui_kit::*;
 use serde::{Deserialize, Serialize};
@@ -91,15 +92,8 @@ impl Preset {
             fixed::BOTTOM_DOCK_SIZE,
         );
         match self {
-            // Also the Code Editor section's default layout.
-            Preset::Code => (
-                tabs(&["Editor"], cx),
-                vec![
-                    (Side::Left, tabs(&["Explorer"], cx), left, true),
-                    (Side::Right, tabs(&["Chat"], cx), right, true),
-                    (Side::Bottom, tabs(&["Terminal"], cx), bottom, true),
-                ],
-            ),
+            // Same as the Editor workflow's default layout (tested below).
+            Preset::Code => LayoutSpec::code().build(cx),
             Preset::Paradigm => (
                 tabs(&["Paradigm Canvas"], cx),
                 vec![
@@ -124,6 +118,138 @@ impl Preset {
                 ],
             ),
         }
+    }
+}
+
+/// What a layout slot builds. Workflow manifests name kinds
+/// (`workflows::PANEL_KINDS`); presets below still name titles (`tabs`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum PanelKind {
+    Explorer,
+    Editor,
+    Terminal,
+    Chat,
+    /// No content; shows its title.
+    Placeholder(SharedString),
+}
+
+impl PanelKind {
+    /// A manifest kind with its rule's title. A kind this build cannot make
+    /// (validation should have rejected it) becomes a placeholder.
+    pub fn from_manifest(kind: &str, title: Option<&str>) -> Self {
+        match kind {
+            "explorer" => PanelKind::Explorer,
+            "editor" => PanelKind::Editor,
+            "terminal" => PanelKind::Terminal,
+            "chat" => PanelKind::Chat,
+            _ => PanelKind::Placeholder(title.unwrap_or(kind).to_string().into()),
+        }
+    }
+
+    fn add_to(&self, layout: DockLayout, cx: &mut App) -> DockLayout {
+        let panel = match self {
+            PanelKind::Explorer => panel_handle(ExplorerPanel::new(cx)),
+            PanelKind::Editor => panel_handle(EditorPanel::new(cx)),
+            PanelKind::Terminal => panel_handle(TerminalPanel::new(None, None, None, cx)),
+            PanelKind::Chat => panel_handle(crate::chat_panel::ChatPanel::new("Chat", cx)),
+            PanelKind::Placeholder(title) => panel_handle(TestPanel::new(title.clone(), cx)),
+        };
+        layout.panel_view(panel, cx)
+    }
+}
+
+/// One dock of a [`LayoutSpec`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct DockSpec {
+    pub side: Side,
+    pub panels: Vec<PanelKind>,
+    pub size: Pixels,
+    pub open: bool,
+}
+
+/// A default layout as data: the center's tabs and all three docks (an
+/// unused dock is empty and closed, so nothing stays from the previous layout).
+#[derive(Clone, Debug, PartialEq)]
+pub struct LayoutSpec {
+    pub center: Vec<PanelKind>,
+    pub docks: Vec<DockSpec>,
+}
+
+impl LayoutSpec {
+    /// The Code preset: Explorer left, editors center, Chat right, Terminal below.
+    pub fn code() -> Self {
+        let dock = |side: Side, panel| DockSpec {
+            side,
+            panels: vec![panel],
+            size: side.default_size(),
+            open: true,
+        };
+        Self {
+            center: vec![PanelKind::Editor],
+            docks: vec![
+                dock(Side::Left, PanelKind::Explorer),
+                dock(Side::Right, PanelKind::Chat),
+                dock(Side::Bottom, PanelKind::Terminal),
+            ],
+        }
+    }
+
+    /// A workflow's default layout from its manifest.
+    pub fn of_workflow(def: &WorkflowDef) -> Self {
+        let kinds = |region: &Region| {
+            region
+                .panels
+                .iter()
+                .map(|name| {
+                    let title = def.panels.get(name).and_then(|rule| rule.title.as_deref());
+                    PanelKind::from_manifest(def.panel_kind(name), title)
+                })
+                .collect::<Vec<_>>()
+        };
+        let docks = Side::ALL
+            .into_iter()
+            .map(|side| {
+                let region = match side {
+                    Side::Left => &def.layout.left,
+                    Side::Right => &def.layout.right,
+                    Side::Bottom => &def.layout.bottom,
+                };
+                match region {
+                    Some(region) => DockSpec {
+                        side,
+                        panels: kinds(region),
+                        size: region.size.map(px).unwrap_or(side.default_size()),
+                        open: region.open,
+                    },
+                    None => DockSpec {
+                        side,
+                        panels: Vec::new(),
+                        size: side.default_size(),
+                        open: false,
+                    },
+                }
+            })
+            .collect();
+        Self {
+            center: def.layout.center.as_ref().map(kinds).unwrap_or_default(),
+            docks,
+        }
+    }
+
+    /// Center layout plus each dock's panels, size and open state.
+    pub fn build(&self, cx: &mut App) -> (DockLayout, Vec<(Side, DockLayout, Pixels, bool)>) {
+        let tabs = |panels: &[PanelKind], cx: &mut App| {
+            panels
+                .iter()
+                .fold(DockLayout::tabs(), |layout, kind| kind.add_to(layout, cx))
+        };
+        let center = tabs(&self.center, cx);
+        let docks = self
+            .docks
+            .iter()
+            .map(|dock| (dock.side, tabs(&dock.panels, cx), dock.size, dock.open))
+            .collect();
+        (center, docks)
     }
 }
 
@@ -192,7 +318,41 @@ impl LayoutStore {
 #[cfg(test)]
 mod tests {
     // Named imports only: the `gpui_kit::*` glob would shadow the test macro.
-    use super::{DockAreaState, LayoutStore, SavedLayout, Side};
+    use carbon_core::workflow::WorkflowId;
+
+    use super::{DockAreaState, LayoutSpec, LayoutStore, PanelKind, SavedLayout, Side};
+    use crate::workflows::registry;
+
+    /// The Editor workflow keeps the layout the Code preset always had.
+    #[test]
+    fn editor_workflow_layout_is_the_code_preset() {
+        let editor = registry().get(&WorkflowId::editor()).unwrap();
+        assert_eq!(LayoutSpec::of_workflow(editor), LayoutSpec::code());
+    }
+
+    #[test]
+    fn placeholder_workflows_have_one_panel_and_closed_docks() {
+        let def = registry()
+            .get(&WorkflowId::new("carbon.paradigm-editor"))
+            .unwrap();
+        let spec = LayoutSpec::of_workflow(def);
+        assert_eq!(
+            spec.center,
+            [PanelKind::Placeholder("Paradigm Editor".into())]
+        );
+        assert_eq!(spec.docks.len(), 3);
+        assert!(
+            spec.docks
+                .iter()
+                .all(|dock| dock.panels.is_empty() && !dock.open)
+        );
+    }
+
+    #[test]
+    fn every_builtin_loads() {
+        assert!(registry().rejected().is_empty());
+        assert_eq!(registry().workflows().len(), 3);
+    }
 
     #[test]
     fn layout_store_round_trips() {
