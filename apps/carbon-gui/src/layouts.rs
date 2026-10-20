@@ -3,7 +3,7 @@
 //! `state.json` (`workflows.md`); the old global `layouts.json` is read once
 //! as the Editor's.
 
-use carbon_core::workflow::{Region, WorkflowDef};
+use carbon_core::workflow::{Region, VIEW_KIND, WorkflowDef, WorkflowId};
 use gpui_kit::component::dock::{DockAreaState, DockLayout, DockPlacement, panel_handle};
 use gpui_kit::*;
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,7 @@ use crate::explorer_panel::ExplorerPanel;
 use crate::style::fixed;
 use crate::terminal_panel::TerminalPanel;
 use crate::test_panel::TestPanel;
+use crate::view_panel::ViewPanel;
 
 /// Named layouts from before they were per workflow; read once, never written.
 const LEGACY_STORE_FILE: &str = concat!(
@@ -102,6 +103,12 @@ pub enum PanelKind {
     Chat,
     /// No content; shows its title.
     Placeholder(SharedString),
+    /// A declarative view of a workflow: tab title, workflow, view name.
+    View(SharedString, WorkflowId, String),
+    /// A web page (experimental, `webview` feature): tab title, and the
+    /// package page (`None`: the spike's test page).
+    #[cfg(feature = "webview")]
+    Webview(SharedString, Option<crate::webview_panel::PageSource>),
 }
 
 impl PanelKind {
@@ -115,6 +122,8 @@ impl PanelKind {
             "terminal" => PanelKind::Terminal,
             "chat" => PanelKind::Chat,
             "placeholder" => PanelKind::Placeholder(title.unwrap_or(kind).to_string().into()),
+            #[cfg(feature = "webview")]
+            "webview" => PanelKind::Webview(title.unwrap_or("Web").to_string().into(), None),
             _ => PanelKind::Placeholder(format!("Panel `{kind}` is not available").into()),
         }
     }
@@ -126,6 +135,16 @@ impl PanelKind {
             PanelKind::Terminal => panel_handle(TerminalPanel::new(None, None, None, cx)),
             PanelKind::Chat => panel_handle(crate::chat_panel::ChatPanel::new("Chat", cx)),
             PanelKind::Placeholder(title) => panel_handle(TestPanel::new(title.clone(), cx)),
+            PanelKind::View(title, workflow, view) => panel_handle(ViewPanel::new(
+                title.clone(),
+                workflow.clone(),
+                view.clone(),
+                cx,
+            )),
+            #[cfg(feature = "webview")]
+            PanelKind::Webview(title, source) => panel_handle(
+                crate::webview_panel::WebviewPanel::new(title.clone(), source.clone(), cx),
+            ),
         };
         layout.panel_view(panel, cx)
     }
@@ -174,8 +193,24 @@ impl LayoutSpec {
                 .panels
                 .iter()
                 .map(|name| {
-                    let title = def.panels.get(name).and_then(|rule| rule.title.as_deref());
-                    PanelKind::from_manifest(def.panel_kind(name), title)
+                    let rule = def.panels.get(name);
+                    let title = rule.and_then(|rule| rule.title.as_deref());
+                    let kind = PanelKind::from_manifest(def.panel_kind(name), title);
+                    if def.panel_kind(name) == VIEW_KIND
+                        && let Some(view) = rule.and_then(|rule| rule.view.clone())
+                    {
+                        let title = title.unwrap_or(name).to_string().into();
+                        return PanelKind::View(title, def.id.clone(), view);
+                    }
+                    #[cfg(feature = "webview")]
+                    if let PanelKind::Webview(title, _) = &kind
+                        && let Some(page) = rule.and_then(|rule| rule.page.clone())
+                    {
+                        let workflow = def.id.clone();
+                        let source = crate::webview_panel::PageSource { workflow, page };
+                        return PanelKind::Webview(title.clone(), Some(source));
+                    }
+                    kind
                 })
                 .collect::<Vec<_>>()
         };
@@ -316,6 +351,35 @@ mod tests {
         assert_eq!(
             PanelKind::from_manifest("placeholder", Some("Canvas")),
             PanelKind::Placeholder("Canvas".into())
+        );
+    }
+
+    #[test]
+    fn view_panels_name_their_workflow_and_view() {
+        let (def, _) = carbon_core::workflow::WorkflowDef::parse(
+            r#"
+id = "test.views"
+schema_version = 1
+version = "1.0.0"
+carbon_api = ">=0.1, <0.2"
+name = "Views"
+[layout.center]
+panels = ["home"]
+[panels]
+home = { kind = "view", view = "start" }
+[[views.start]]
+type = "heading"
+text = "Hi"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            LayoutSpec::of_workflow(&def).center,
+            [PanelKind::View(
+                "home".into(),
+                WorkflowId::new("test.views"),
+                "start".into()
+            )]
         );
     }
 

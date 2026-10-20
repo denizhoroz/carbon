@@ -9,16 +9,35 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use carbon_core::workflow::{
-    Registry, StateFile, WorkflowDef, WorkflowDirs, WorkflowId, take_unfinished,
+    CommandDef, Registry, StateFile, WorkflowDef, WorkflowDirs, WorkflowId, take_unfinished,
 };
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
-use gpui_kit::{Action, App, AssetSource, SharedString};
+use gpui_kit::{Action, ActionBuildError, App, AssetSource, SharedString};
 
 use crate::app_assets::AppAssets;
 
 /// Panel kinds a manifest may name; `layouts::PanelKind` builds them.
-pub const PANEL_KINDS: [&str; 5] = ["editor", "explorer", "terminal", "chat", "placeholder"];
+#[cfg(not(feature = "webview"))]
+pub const PANEL_KINDS: &[&str] = &[
+    "editor",
+    "explorer",
+    "terminal",
+    "chat",
+    "placeholder",
+    "view",
+];
+/// Panel kinds a manifest may name; `layouts::PanelKind` builds them.
+#[cfg(feature = "webview")]
+pub const PANEL_KINDS: &[&str] = &[
+    "editor",
+    "explorer",
+    "terminal",
+    "chat",
+    "placeholder",
+    "view",
+    "webview",
+];
 
 pub struct Workflows {
     registry: RwLock<Arc<Registry>>,
@@ -41,7 +60,7 @@ pub fn init(safe_mode: bool) {
 fn get() -> &'static Workflows {
     // Without `init` (unit tests): built-ins only, no folder.
     WORKFLOWS.get_or_init(|| Workflows {
-        registry: RwLock::new(Arc::new(Registry::builtin(&PANEL_KINDS))),
+        registry: RwLock::new(Arc::new(Registry::builtin(PANEL_KINDS))),
         dirs: None,
         notices: Vec::new(),
         state: Mutex::new(None),
@@ -58,7 +77,7 @@ fn load(mut safe_mode: bool) -> Workflows {
         && !safe_mode
     {
         safe_mode = true;
-        let builtins = Registry::builtin(&PANEL_KINDS);
+        let builtins = Registry::builtin(PANEL_KINDS);
         let name = builtins
             .get(id)
             .map_or(id.as_str(), |def| def.name.as_str());
@@ -68,7 +87,7 @@ fn load(mut safe_mode: bool) -> Workflows {
         ));
     }
     let dirs = if safe_mode { None } else { found };
-    let mut registry = Registry::load(dirs.as_ref(), &PANEL_KINDS);
+    let mut registry = Registry::load(dirs.as_ref(), PANEL_KINDS);
 
     let mut state = None;
     if let Some(dirs) = &dirs {
@@ -164,7 +183,7 @@ pub fn registry() -> Arc<Registry> {
 /// Reads the workflow files again and blocks what `state` turns off. Safe
 /// mode keeps Carbon's own workflows only.
 pub fn reload(state: &StateFile) {
-    let mut registry = Registry::load(dirs(), &PANEL_KINDS);
+    let mut registry = Registry::load(dirs(), PANEL_KINDS);
     block(&mut registry, state);
     log(&registry);
     let registry = Arc::new(registry);
@@ -192,11 +211,13 @@ pub fn take_state() -> Option<StateFile> {
 
 /// The workflow's Lucide icon if the app embeds it, else a generic one.
 pub fn icon(def: &WorkflowDef) -> Icon {
-    let path = def.icon.as_ref().map(|name| format!("icons/{name}.svg"));
-    match path {
-        Some(path) if matches!(AppAssets.load(&path), Ok(Some(_))) => Icon::empty().path(path),
-        _ => Icon::new(IconName::LayoutDashboard),
-    }
+    named_icon(def.icon.as_deref()).unwrap_or_else(|| Icon::new(IconName::LayoutDashboard))
+}
+
+/// A Lucide icon by name (`file-plus`) if the app embeds it.
+pub fn named_icon(name: Option<&str>) -> Option<Icon> {
+    let path = format!("icons/{}.svg", name?);
+    matches!(AppAssets.load(&path), Ok(Some(_))).then(|| Icon::empty().path(path))
 }
 
 /// A workflow command ready for the menus and the palette.
@@ -230,33 +251,47 @@ pub fn commands(id: &WorkflowId, cx: &App) -> Vec<WorkflowCommand> {
     };
     def.commands
         .iter()
-        .filter_map(|command| {
-            let args = command
-                .args
-                .as_ref()
-                .and_then(|args| serde_json::to_value(args).ok());
-            match cx.build_action(&command.run, args) {
-                Ok(action) => Some(WorkflowCommand {
-                    group: def.name.clone().into(),
-                    label: command.label.clone().into(),
-                    menus: def
-                        .menus
-                        .iter()
-                        .filter(|item| item.command == command.id)
-                        .map(|item| item.menu.clone().into())
-                        .collect(),
-                    action,
-                }),
-                Err(err) => {
-                    let key = format!("{id}/{}", command.id);
-                    if let Ok(mut logged) = LOGGED.lock()
-                        && logged.get_or_insert_with(HashSet::new).insert(key)
-                    {
-                        eprintln!("workflow {id}: command `{}` left out: {err}", command.id);
-                    }
-                    None
+        .filter_map(|command| match build_action(command, cx) {
+            Ok(action) => Some(WorkflowCommand {
+                group: def.name.clone().into(),
+                label: command.label.clone().into(),
+                menus: def
+                    .menus
+                    .iter()
+                    .filter(|item| item.command == command.id)
+                    .map(|item| item.menu.clone().into())
+                    .collect(),
+                action,
+            }),
+            Err(err) => {
+                let key = format!("{id}/{}", command.id);
+                if let Ok(mut logged) = LOGGED.lock()
+                    && logged.get_or_insert_with(HashSet::new).insert(key)
+                {
+                    eprintln!("workflow {id}: command `{}` left out: {err}", command.id);
                 }
+                None
             }
         })
         .collect()
+}
+
+/// The action of workflow `id`'s command `command` (a view's button or list
+/// row), if it exists and builds.
+pub fn command_action(id: &WorkflowId, command: &str, cx: &App) -> Option<Box<dyn Action>> {
+    let registry = registry();
+    let command = registry
+        .get(id)?
+        .commands
+        .iter()
+        .find(|c| c.id == command)?;
+    build_action(command, cx).ok()
+}
+
+fn build_action(command: &CommandDef, cx: &App) -> Result<Box<dyn Action>, ActionBuildError> {
+    let args = command
+        .args
+        .as_ref()
+        .and_then(|args| serde_json::to_value(args).ok());
+    cx.build_action(&command.run, args)
 }

@@ -10,18 +10,22 @@
 
 mod dirs;
 mod overlay;
+mod package;
 mod state;
+mod view;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
 pub use dirs::{SHIPPED_ENV, WorkflowDirs, shipped_dir};
 pub use overlay::{Overlay, RegionPatch};
+pub use package::{MAX_PACKAGE_PATH, check_package_path, resolve_package_file};
 pub use state::{SavedWorkflow, StateFile, finish_entering, start_entering, take_unfinished};
+pub use view::{Align, ButtonStyle, ListItem, MAX_VIEW_DEPTH, MAX_VIEW_WIDGETS, Widget};
 
 /// Manifest format version this build reads.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -33,6 +37,10 @@ pub const EDITOR: &str = "carbon.editor";
 const BUILTIN_PREFIX: &str = "carbon.";
 /// Panel kind with no content of its own: shows its `title`.
 pub const PLACEHOLDER_KIND: &str = "placeholder";
+/// Panel kind showing a web page from the workflow's package (`page`).
+pub const WEBVIEW_KIND: &str = "webview";
+/// Panel kind drawing one of the manifest's declarative `views` (`view`).
+pub const VIEW_KIND: &str = "view";
 /// Top-level menus a workflow may add items to.
 pub const MENUS: [&str; 4] = ["File", "Edit", "View", "Help"];
 /// Layout regions, as named in manifests and overlays.
@@ -125,6 +133,9 @@ pub struct WorkflowDef {
     /// Places for those commands in the top-level menus.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub menus: Vec<MenuDef>,
+    /// Declarative views by name, for `view` panels (`view.rs`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub views: BTreeMap<String, Vec<Widget>>,
     /// Every other top-level key: reserved ones are ignored, the rest warned about.
     #[serde(flatten)]
     other: toml::Table,
@@ -199,6 +210,13 @@ pub struct PanelRule {
     /// The user may close it (not enforced yet).
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub closable: bool,
+    /// Webview panels: the page, a path inside the workflow's package
+    /// (`check_package_path` rules).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
+    /// View panels: a name in the manifest's `views`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view: Option<String>,
 }
 
 fn yes() -> bool {
@@ -385,6 +403,25 @@ impl WorkflowDef {
             {
                 problems.push(format!("panel `{name}`: a placeholder needs a title"));
             }
+            if let Some(page) = &rule.page {
+                if self.panel_kind(name) != WEBVIEW_KIND {
+                    problems.push(format!(
+                        "panel `{name}`: `page` is only for `{WEBVIEW_KIND}` panels"
+                    ));
+                } else if let Err(problem) = check_package_path(page) {
+                    problems.push(format!("panel `{name}`: page {problem}"));
+                }
+            }
+            match (&rule.view, self.panel_kind(name) == VIEW_KIND) {
+                (Some(_), false) => problems.push(format!(
+                    "panel `{name}`: `view` is only for `{VIEW_KIND}` panels"
+                )),
+                (None, true) => problems.push(format!("panel `{name}`: a view panel needs `view`")),
+                (Some(view), true) if !self.views.contains_key(view) => {
+                    problems.push(format!("panel `{name}`: no view `{view}` in [views]"))
+                }
+                _ => {}
+            }
         }
         let mut command_ids = HashSet::new();
         for command in &self.commands {
@@ -412,6 +449,9 @@ impl WorkflowDef {
             if !command_ids.contains(item.command.as_str()) {
                 problems.push(format!("menu item: no command `{}`", item.command));
             }
+        }
+        for (name, widgets) in &self.views {
+            problems.extend(view::check_view(name, widgets, &command_ids));
         }
         problems
     }
@@ -475,6 +515,9 @@ pub struct Registry {
     warnings: Vec<(String, String)>,
     /// Ids and legacy ids taken, by source.
     keys: HashMap<String, String>,
+    /// Package folder of each workflow loaded from one (pages and assets
+    /// resolve inside it); none for the compiled-in Editor.
+    packages: HashMap<WorkflowId, PathBuf>,
 }
 
 impl Registry {
@@ -491,7 +534,11 @@ impl Registry {
             let source = path.display().to_string();
             match text {
                 Ok(text) => {
-                    registry.add(&source, &text, panel_kinds, Origin::Builtin);
+                    if let Some(id) = registry.add(&source, &text, panel_kinds, Origin::Builtin)
+                        && let Some(dir) = path.parent()
+                    {
+                        registry.packages.insert(id, dir.to_path_buf());
+                    }
                 }
                 Err(err) => registry.reject(&source, vec![err]),
             }
@@ -566,12 +613,20 @@ impl Registry {
         registry
     }
 
-    fn add(&mut self, source: &str, text: &str, panel_kinds: &[&str], origin: Origin) -> bool {
+    /// Adds a manifest; its id when it loaded. A user or installed workflow's
+    /// package folder is the manifest's folder.
+    fn add(
+        &mut self,
+        source: &str,
+        text: &str,
+        panel_kinds: &[&str],
+        origin: Origin,
+    ) -> Option<WorkflowId> {
         let (def, warnings) = match WorkflowDef::parse(text) {
             Ok(parsed) => parsed,
             Err(err) => {
                 self.reject(source, vec![err]);
-                return false;
+                return None;
             }
         };
         let mut problems = def.validate(origin == Origin::Builtin);
@@ -583,16 +638,22 @@ impl Registry {
         }
         if !problems.is_empty() {
             self.reject(source, problems);
-            return false;
+            return None;
         }
         for key in std::iter::once(def.id.to_string()).chain(def.legacy_ids.iter().cloned()) {
             self.keys.insert(key, source.to_string());
         }
         self.warn(source, warnings);
         self.warn_unavailable(source, &def, panel_kinds);
+        if let Origin::Installed(manifest) | Origin::User(manifest) = &origin
+            && let Some(dir) = manifest.parent().filter(|dir| !dir.as_os_str().is_empty())
+        {
+            self.packages.insert(def.id.clone(), dir.to_path_buf());
+        }
+        let id = def.id.clone();
         self.origins.insert(def.id.clone(), origin);
         self.workflows.push(def);
-        true
+        Some(id)
     }
 
     /// Patches a shipped or installed workflow with an overlay file. A bad
@@ -717,6 +778,11 @@ impl Registry {
 
     pub fn origin(&self, id: &WorkflowId) -> Option<&Origin> {
         self.origins.get(id)
+    }
+
+    /// The folder `id`'s package files resolve in (`resolve_package_file`).
+    pub fn package_dir(&self, id: &WorkflowId) -> Option<&Path> {
+        self.packages.get(id).map(PathBuf::as_path)
     }
 
     /// The overlay file applied to `id`, if any.

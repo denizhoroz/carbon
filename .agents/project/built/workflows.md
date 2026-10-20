@@ -1,6 +1,6 @@
-# Workflow system (Phase 0-3)
+# Workflow system (Phase 0-3, views, webview panels)
 
-Built 2026-10-20. Design and later phases: `../not_built/workflow-system.md` (s5.1 and s5.2 list where the build differs from the plan). A workflow is a switchable app mode, one Section Bar icon each (`section-bar.md`), described by a `workflow.toml` manifest. Built-ins: Editor (real), Paradigm Editor and Agent Automation (placeholders). Users add their own workflows and patch built-ins from a folder, and manage them in the Manage Workflows dialog (Phase 3, below).
+Built 2026-10-20 (Phase 0-3) and 2026-10-21 (package files, declarative views, webview panels). What is left, its design and the decisions: `../not_built/workflow-system.md` (s1 To do; s4.4 webview research). A workflow is a switchable app mode, one Section Bar icon each (`section-bar.md`), described by a `workflow.toml` manifest. Built-ins: Editor (real), Paradigm Editor and Agent Automation (placeholders). Users add their own workflows and patch built-ins from a folder, and manage them in the Manage Workflows dialog (Phase 3, below).
 
 ## Where files live
 
@@ -8,7 +8,7 @@ Three locations (user decision 2026-10-20, Q15-Q16; built the same day). Users w
 
 | Location | Default | Override | Contents |
 |---|---|---|---|
-| Shipped packages (Carbon's own, read-only) | `carbon-workflow/` next to the binary, else the repo's `apps/carbon-workflow/` (development) | `CARBON_SHIPPED_WORKFLOWS_DIR` | `editor/`, `paradigm/`, `agent/`, each `workflow.toml` (+ assets later) |
+| Shipped packages (Carbon's own, read-only) | `carbon-workflow/` next to the binary, else the repo's `apps/carbon-workflow/` (development) | `CARBON_SHIPPED_WORKFLOWS_DIR` | `editor/`, `paradigm/`, `agent/`, each a package: `workflow.toml` at its root plus any files it names (Package files below) |
 | Installed packages (downloaded) | `<OS local data dir>/Carbon/workflows/installed/` (Windows `%LOCALAPPDATA%`) | `CARBON_INSTALLED_WORKFLOWS_DIR`; under `CARBON_WORKFLOWS_DIR` when only that is set | `<id>/<version>/workflow.toml`; the highest semver folder wins. Nothing installs them yet (Phase 4) |
 | Preferences and workflow list | `<OS config dir>/Carbon/workflows/` (Windows `%APPDATA%`) | `CARBON_WORKFLOWS_DIR` | Table below |
 
@@ -19,7 +19,7 @@ Preferences root:
 | Path | Layer | Contents |
 |---|---|---|
 | (shipped) `carbon-workflow/<name>/workflow.toml` | L0 Carbon's own | `carbon.editor`, `carbon.paradigm-editor`, `carbon.agent-automation`; changed only through an overlay |
-| `user/<folder>/workflow.toml` | L2 user | A whole workflow, by hand (Duplicate comes in Phase 3) |
+| `user/<folder>/workflow.toml` | L2 user | A whole workflow, by hand or from Manage Workflows > Duplicate |
 | `overlay/<id>.toml` | L3 overlay | Patch of a built-in; delete the file to reset |
 | `state/state.json` | L4 state | Active workflow, each workflow's last layout + fingerprint of the default it came from, `disabled`, `quarantined` (id -> reason) |
 | `state/entering` | crash guard | Id of the workflow being opened; deleted 2 s after it opened |
@@ -50,6 +50,8 @@ editor = { multi = true }
 chat = {}
 terminal = {}
 notes = { kind = "placeholder", title = "Notes" }
+home = { kind = "view", title = "Home", view = "home" }          # declarative view (below)
+web = { kind = "webview", title = "Web", page = "ui/index.html" } # webview (below, experimental)
 
 [[commands]]                   # palette commands while this workflow is active
 id = "new-file"
@@ -58,9 +60,56 @@ run = "carbon::NewFile"        # an existing action; `args = { ... }` for action
 [[menus]]                      # optional: also at the end of File / Edit / View / Help
 menu = "File"
 command = "new-file"
+
+[[views.home]]                 # declarative view `home`: a list of widgets
+type = "heading"
+text = "Review"
 ```
 
-Panel kinds: `editor`, `explorer`, `terminal`, `chat`, `placeholder` (needs `title`). Another kind loads as a "Panel `x` is not available" placeholder (warning, not an error). Unknown top-level keys warn; reserved keys (`keybindings`, `requires`, `capabilities`, `[agent]`, ...) are ignored; unknown keys inside `layout`, `panels`, `commands`, `menus` reject the file. A leading UTF-8 BOM is fine.
+Panel kinds: `editor`, `explorer`, `terminal`, `chat`, `placeholder` (needs `title`), `view` (needs `view`), and `webview` (needs a build with the `webview` cargo feature; `page` optional). Another kind loads as a "Panel `x` is not available" placeholder (warning, not an error). Unknown top-level keys warn; reserved keys (`keybindings`, `requires`, `capabilities`, `[agent]`, ...) are ignored; unknown keys inside `layout`, `panels`, `commands`, `menus` reject the file. A leading UTF-8 BOM is fine.
+
+## Package files (Q22, 2026-10-21)
+
+A package is its folder; only `workflow.toml` at the root is fixed, every other file is named by a path in the manifest (today: a webview `page`). Carbon never looks for files by folder name. Rules, checked when the manifest loads (`check_package_path`) and again when a file is read (`resolve_package_file`):
+
+| Rule | Why |
+|---|---|
+| Relative, `/` separators; no `.`, `..`, `//`, absolute or drive paths | The same reference works everywhere and cannot leave the package |
+| Each name matches the file on disk exactly, case included | Works on case-sensitive Linux too |
+| No symbolic links followed | A link could point outside the package |
+| No Windows reserved names (`CON`, `NUL`, `COM1`, ...), no `< > : " \ | ? *`, no name ending in `.` or space | Installs on Windows |
+| At most 160 bytes | Windows path length, with room for the install folders |
+
+`Registry::package_dir(id)` is each workflow's folder (the manifest's folder for user and installed workflows, `carbon-workflow/<name>/` for shipped ones; none for the compiled-in Editor).
+
+## Declarative views (tier 1, 2026-10-21)
+
+A `view` panel draws a widget list from the manifest's `[[views.<name>]]` with Carbon's own widgets; no code runs. Every build, every platform.
+
+| Widget | Fields |
+|---|---|
+| `heading` | `text` |
+| `text` | `text`, `muted` |
+| `markdown` | `text` (links open in the system browser) |
+| `button` | `label`, `command`, `icon` (embedded icon name), `style` = `secondary` (default) / `primary` / `ghost` |
+| `row` / `column` | `children`; `column` also `align` = `start` / `center` (a view that is one centered column is centered vertically: empty states) |
+| `divider` | none |
+| `list` | `items`: `label`, `description`, `icon`, `command` (rows with a command are clickable) |
+
+Buttons and list rows run the workflow's `[[commands]]`, so a view can do only what a command can. Load-time checks reject unknown widget types or fields, commands not in `[[commands]]`, nesting over 8 levels, more than 500 widgets in one view, a `view` panel without an existing `view`, and `view` on another kind. A command whose action this Carbon lacks shows "Command `x` is not available" when clicked. The view is read at each render: Manage Workflows > Reload shows manifest edits without a restart.
+
+## Webview panels (experimental, `webview` cargo feature, 2026-10-21)
+
+Off by default: `cargo run -p carbon-gui --features webview`. Windows and macOS only (the kit's `gpui-wry` 0.7.3 over `lb-wry` 0.53.3); no Linux webview yet. On Windows the feature sets `GPUI_DISABLE_DIRECT_COMPOSITION` at start, which switches GPUI to the classic window swap chain for the whole app (needed for a child webview window; no visible difference seen, speed not measured).
+
+| Topic | Behaviour |
+|---|---|
+| Page | `page` = a package file, served by the custom protocol `carbon-page`: one origin per workflow (host = id with `.` written `--`; WebView2 shows `http://carbon-page.<host>`), `GET` only, files only through `resolve_package_file`. Without `page`: a built-in test page |
+| Limits on the page | CSP: own files plus inline/data/blob content, no network (waits for the `net` capability, Q19); navigation only inside its origin; `window.open` refused |
+| Bridge | Page to Carbon: `window.carbon.send({...})` (IPC, JSON, max 64 KB, known types only: `ping`, `focus`, `key`). Carbon to page: `window.carbon.onMessage`. Theme colours as CSS variables (`--carbon-background`, `--carbon-foreground`, `--carbon-muted-foreground`, `--carbon-border`, `--carbon-primary`, `--carbon-primary-foreground`), updated when the theme changes |
+| Shortcuts | While the page has focus, Carbon's reserved keys (the terminal's `app_keeps` list: palette, dock toggles, quit, saved layouts) are caught by an injected script and run in Carbon; other keys stay in the page |
+| Covering | The page is a native window above GPUI, so it is hidden when its tab is in the background, its dock is closed, another group is zoomed, or a dialog, the palette, a title-bar menu or a tab menu holds focus. Tooltips and notifications can be covered |
+| Lifetime | Built after the panel's first render inside the panel's task (WebView2 creation runs the message loop; inside an update it panicked), hidden until loaded, kept while the panel moves between docks (no reload), restored after restart (`workflow` + `page` in the saved layout) |
 
 ## Overlay
 
@@ -128,6 +177,10 @@ When the workflows do not fit, the list scrolls (mouse wheel) and up/down arrows
 | `apps/carbon-gui/src/layouts.rs` | `PanelKind` (unknown kind -> placeholder), `LayoutSpec`; only `Preset::Code` left |
 | `apps/carbon-gui/src/menus.rs`, `commands.rs` | Workflow items appended per menu; palette-only workflow commands |
 | `apps/carbon-gui/src/main.rs` | `workflows::init(--safe-mode)`, start-up notifications, active workflow's commands in `MenuState` |
+| `apps/carbon-core/src/workflow/{package,view}.rs` | `check_package_path`, `resolve_package_file`; `Widget`, `ListItem`, `check_view` (limits) |
+| `apps/carbon-gui/src/view_panel.rs` | `ViewPanel`: draws a view, runs commands (`workflows::command_action`), saved as `workflow` + `view` |
+| `apps/carbon-gui/src/webview_panel.rs`, `webview_panel/protocol.rs`, `webview_panel/spike.html` | `WebviewPanel` (feature `webview`): build, IPC, theme, keys, show/hide; `carbon-page` protocol, CSP, navigation rule; test page |
+| `apps/carbon-gui/src/workbench.rs` `sync_webviews` | Every frame: which webview pages may show (dock open, no zoom elsewhere, no overlay) |
 
 ## Verified (2026-10-20)
 
@@ -138,6 +191,8 @@ When the workflows do not fit, the list scrolls (mouse wheel) and up/down arrows
 
 - Phase 3 (same day): 155 workspace tests (new: manifest -> TOML -> manifest round trip for Duplicate, free user ids, create folder `-2` suffix, remove user/installed with path checks (never the user folder itself or anything outside), named layouts in `state.json`, `LayoutStore` as a state value). Click-tested with 16 user workflows in a scratch folder: arrows appear, step down to the end (down disabled, up enabled); dialog lists all rows and the broken file; Turn Off on Paradigm Editor (tag Off, gone from the bar, still off after restart); Duplicate of the Editor (folder `user/editor-copy`, row "Editor (copy)", notification); Remove with confirm (folder deleted, row gone); the Editor got the old global named layouts. Not clicked: Reset, Turn On after a quarantine, Reload, Open Folder, per-workflow named layouts via the Save dialog (unit-tested).
 
+- Package files, views, webviews (2026-10-21): 166 workspace tests (new: path rules, exact-case and outside-package resolving, `page` and `view` rules, package folders, view parsing/validation/limits/round trip, view panel layout, reserved keys, page messages, page origins). Clippy and fmt clean with and without `webview` (44 GUI tests with it). Click-tested in a scratch folder: a View Demo workflow (every widget; New File, Palette and a list row run; a missing action shows the notice; restart restores; Reload shows an edited heading); a Web Spike workflow (package page with its JS/CSS/JSON, network blocked, link away and `window.open` blocked, two webviews at once, palette/menus/dialog/tab menu hide pages, zoom (bug found and fixed), move to the bottom dock without reload, restart, dock close and window resize follow). Real keypresses in a page (F1, Ctrl+P, Ctrl+Shift+P, Ctrl+B) checked by the user.
+
 ## Limits
 
 - No hide/show in the dialog; no Repair/Remove buttons on a "not available" placeholder; no diff of a copy against its parent (`derived_from` is stored).
@@ -145,4 +200,7 @@ When the workflows do not fit, the list scrolls (mouse wheel) and up/down arrows
 - `multi` / `closable` are parsed but not enforced; no scoped key bindings (Q9); `requires_workspace` stored only.
 - A placeholder for an unknown kind is saved as a plain placeholder; when the kind later exists, that workflow keeps the placeholder until Reset Layout.
 - The crash mark covers 2 s after opening; a crash later is not tied to a workflow. Killing Carbon within 2 s of start (e.g. while debugging) triggers safe mode once.
-- Registry is loaded once at start; file changes need a restart.
+- Registry is loaded at start and on Manage Workflows > Reload; nothing watches the folders.
+- Duplicate copies only `workflow.toml`, so a duplicated workflow loses its package files (a webview page).
+- Views have no state: no inputs, toggles, forms, tables or trees (tier 2 or host data later).
+- Webview: off by default, Windows/macOS only; a tab click does not focus the panel (a click in the page does); no page-to-Carbon API beyond the test messages; workflow ids `a-.b` and `a.-b` (rare) map to the same page origin; not tested: auto-hide docks over a page, flicker during an edge drag, memory per page.

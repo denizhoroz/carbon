@@ -1143,8 +1143,56 @@ fn insert_target(tree: &PaneTree) -> InsertTarget {
     }
 }
 
+#[cfg(feature = "webview")]
+impl Workbench {
+    /// Shows each webview panel only where nothing GPUI draws must cover it
+    /// (a native page sits above GPUI): its dock is open, no other group is
+    /// zoomed, and no overlay holds focus. An overlay is a dialog, or focus outside every panel and
+    /// not at the window root: the palette, a title-bar or tab menu.
+    /// Background tabs hide themselves (`set_active`). Runs every frame.
+    fn sync_webviews(&self, window: &mut Window, cx: &mut Context<Self>) {
+        use crate::webview_panel::WebviewPanel;
+        let mut panels = Vec::new();
+        {
+            let area = self.area.read(cx);
+            // A zoomed group fills the area: only its own pages stay.
+            let zoomed = area.zoomed_group();
+            for placement in CENTER_AND_DOCKS {
+                let Some(tree) = area.layout(placement) else {
+                    continue;
+                };
+                let open = placement == DockPlacement::Center || area.is_dock_open(placement);
+                for id in tree.panels() {
+                    if let Some(panel) = area
+                        .panel(id)
+                        .and_then(|view| view.view().downcast::<WebviewPanel>().ok())
+                    {
+                        let shown =
+                            zoomed.is_none_or(|group| tree.find_panel_node(id) == Some(group));
+                        panels.push((panel, open && shown));
+                    }
+                }
+            }
+        }
+        if panels.is_empty() {
+            return;
+        }
+        let overlay = window.has_active_dialog(cx)
+            || window.has_active_sheet(cx)
+            || window.focused(cx).is_some_and(|focused| {
+                let area = self.area.read(cx).focus_handle(cx);
+                !focused.contains(&area, window) && self.focused_panel(window, cx).is_none()
+            });
+        for (panel, open) in panels {
+            panel.update(cx, |panel, cx| panel.sync(open && !overlay, cx));
+        }
+    }
+}
+
 impl Render for Workbench {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(feature = "webview")]
+        self.sync_webviews(_window, _cx);
         div().size_full().child(self.area.clone())
     }
 }

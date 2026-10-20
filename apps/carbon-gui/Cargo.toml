@@ -10,3 +10,10 @@ serde.workspace = true
 serde_json.workspace = true
 async-channel.workspace = true
 anyhow.workspace = true
+gpui-wry = { workspace = true, optional = true }
+wry = { workspace = true, optional = true }
+
+[features]
+# Webview panel kind (experimental spike, workflow-system.md s4.4). Off by default:
+# on Windows it switches GPUI to the classic swap chain for the whole app.
+webview = ["dep:gpui-wry", "dep:wry"]

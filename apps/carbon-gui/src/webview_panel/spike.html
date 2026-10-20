@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Webview spike</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0;
+    padding: 16px;
+    font: 13px system-ui, sans-serif;
+    background: var(--carbon-background, #1e1e1e);
+    color: var(--carbon-foreground, #ddd);
+  }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  p { color: var(--carbon-muted-foreground, #999); margin: 0 0 12px; }
+  .row { display: flex; gap: 8px; margin-bottom: 12px; }
+  input {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid var(--carbon-border, #444);
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+  }
+  button {
+    padding: 4px 12px;
+    border: 0;
+    border-radius: 4px;
+    background: var(--carbon-primary, #3b82f6);
+    color: var(--carbon-primary-foreground, #fff);
+  }
+  #log {
+    border-top: 1px solid var(--carbon-border, #444);
+    padding-top: 8px;
+    white-space: pre-wrap;
+    font-family: ui-monospace, monospace;
+  }
+</style>
+</head>
+<body>
+<h1>Webview spike</h1>
+<p>A page inside a Carbon dock tab. Ping sends a message to Rust and shows the reply.
+Typing goes to the page; Ctrl+P, Ctrl+Shift+P, F1 and Ctrl+B still reach Carbon.</p>
+<div class="row">
+  <input id="text" value="hello from the page" aria-label="Message">
+  <button id="ping">Ping Carbon</button>
+</div>
+<div id="log"></div>
+<script>
+  const log = document.getElementById("log");
+  const write = (line) => { log.textContent = line + "\n" + log.textContent; };
+  window.carbon.onMessage = (message) => {
+    write("Rust replied #" + message.count + ": " + message.text);
+  };
+  document.getElementById("ping").addEventListener("click", () => {
+    const text = document.getElementById("text").value;
+    write("sent: " + text);
+    window.carbon.send({ type: "ping", text });
+  });
+</script>
+</body>
+</html>

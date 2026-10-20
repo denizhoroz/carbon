@@ -16,6 +16,9 @@ mod style;
 mod terminal_panel;
 mod test_panel;
 mod title_bar;
+mod view_panel;
+#[cfg(feature = "webview")]
+mod webview_panel;
 mod workbench;
 mod workflows;
 mod workspace_ops;
@@ -344,6 +347,8 @@ impl Render for CarbonApp {
 /// `--safe-mode`: every workflow opens with its default layout and saved
 /// layouts are left untouched.
 fn main() {
+    #[cfg(feature = "webview")]
+    webview_panel::prepare();
     let mut safe_mode = false;
     let mut folder = None;
     for arg in std::env::args_os().skip(1) {
@@ -365,6 +370,9 @@ fn main() {
             editor_panel::register(cx);
             terminal_panel::register(cx);
             chat_panel::register(cx);
+            view_panel::register(cx);
+            #[cfg(feature = "webview")]
+            webview_panel::register(cx);
             palette::register(cx);
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::centered(style::fixed::WINDOW_SIZE, cx)),

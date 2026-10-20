@@ -145,7 +145,7 @@ Status: **Committed** (inherent to the pillar or already a decision in PROJECT.m
 | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------- |
 | WASM extensions (WIT, versioned API) with user-granted capability grants                                                  | EX-06                      | Committed (PROJECT.md) |
 | MCP servers / skills / hooks as native extension types                                                                    | EX-02, MS-01, MS-02, MS-04 | Committed               |
-| Custom editors/viewers and webview-like panels; MCP Apps (`ui://` sandboxed iframes)                                      | EX-05, EX-07, MS-03        | Proposed; for workflows Committed: declarative UI (manifest or WASM) + webview panels (user 2026-10-20, `project/not_built/workflow-system.md` Q17-Q18) |
+| Custom editors/viewers and webview-like panels; MCP Apps (`ui://` sandboxed iframes)                                      | EX-05, EX-07, MS-03        | Proposed; for workflows Committed (Q17-Q18): declarative views tier 1 built, webview panels built as experimental `webview` feature (2026-10-21, `project/built/workflows.md`) |
 | Viewer registry: file glob/MIME -> viewer (SVG, 3D model glTF, PDF, CSV, image) installable without rebuilding Carbon (?) | EX-05, DA-01               | Proposed (?)            |
 | Declarative VSIX tier (themes, grammars, snippets, keymaps), LSP/DAP launchers                                            | EX-01, EX-03               | Committed               |
 | Open VSX + own gallery, signed, no silent auto-update, allow-list                                                         | EX-08, EX-09               | Committed               |
@@ -156,7 +156,7 @@ Status: **Committed** (inherent to the pillar or already a decision in PROJECT.m
 | Narrow-API escape hatch (MCP) because Zed has no custom panels                                                            | EX-07                      | Proposed                |
 | Manage Extensions dialog (Section Bar bottom): official + user-added extensions/plugins, VS Code-like (compilers, linters, appearances, ...) | EX-01, EX-03               | Committed (user 2026-10-19) |
 | Workflows (= Section Bar sections): Editor now; Paradigm Editor, Agent Automation planned; users add custom-built workflows; Manage Workflows dialog adds/removes them | -                          | Committed (user 2026-10-19) |
-| Workflows of any kind (diagram, automation, 3D view, sound design, user-built); contract not tied to code or a folder; design in `project/not_built/workflow-system.md` s3.1 | EX-05, EX-06, EX-07 | Committed (user 2026-10-20) |
+| Workflows of any kind (diagram, automation, 3D view, sound design, user-built); contract not tied to code or a folder; design in `project/not_built/workflow-system.md` s3 | EX-05, EX-06, EX-07 | Committed (user 2026-10-20) |
 | Manage Settings dialog (Section Bar bottom): every user option (system, appearance, agents, ...) | ST-01                      | Committed (user 2026-10-19) |
 
 ## 1.3 Cross-cutting decisions and constraints

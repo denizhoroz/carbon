@@ -2,11 +2,11 @@
 
 Living tracker for Carbon. Update it at the end of each work session. Newest entries first in logs. Scope lives in `FEATURE.md`, decisions and open questions in `PROJECT.md`, evidence in `RESEARCH.md`.
 
-**Last updated:** 2026-10-20
+**Last updated:** 2026-10-21
 
 ## Current focus
 
-Core panels work on Windows (shell, layout, Explorer, editor with rust-analyzer, terminal, command palette, chat GUI with a demo agent). Next: a real chat backend (ACP/API), Manage dialog contents (Extensions, Workflows, Settings), paradigm editor research, then macOS/Linux builds and CI.
+Core panels work on Windows (shell, layout, Explorer, editor with rust-analyzer, terminal, command palette, chat GUI with a demo agent). Workflow system built through Phase 3 plus declarative views and experimental webview panels (`project/built/workflows.md`). Next: workflow Phase 4 (install), a real chat backend (ACP/API), Manage Extensions and Settings contents, paradigm editor research, then macOS/Linux builds and CI.
 
 ## Progress
 
@@ -30,7 +30,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 | 3 Agents tab | [~] | Chat panel v1 GUI with demo agent (`project/built/chat.md`); no real backend, sessions or approvals yet |
 | 4 Multi-platform (Win/macOS/Linux) | [ ] | |
 | 5 Lightweight | [ ] | Design focus, not first priority |
-| 6 Modular extension sections | [ ] | |
+| 6 Modular extension sections | [~] | Workflow system built (Phase 0-3, package files, declarative views tier 1, experimental webview panels: `project/built/workflows.md`); next Phase 4 install; Manage Extensions empty |
 
 ### Infrastructure
 - [x] Rust workspace scaffold (`apps/carbon-core` lib + `apps/carbon-gui` bin)
@@ -41,7 +41,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 - [ ] CI for all three platforms
 
 ## Next steps
-0. Workflow system Phase 4 (`project/not_built/workflow-system.md` s5): install from folder/zip/git with a pinned hash, capability prompt, update diff; release packaging of `carbon-workflow/`; changing the three locations in Settings (Q16).
+0. Workflow system Phase 4 (`project/not_built/workflow-system.md` s1, s4.5): install from folder/zip/git with a pinned hash, capability prompt, update diff; release packaging of `carbon-workflow/`; changing the three locations in Settings (Q16).
 1. Real backend behind `ChatBackend` (ACP or an API); `@` mentions; chat list.
 2. Language-tool install model and Manage Extensions contents (`documents/language-tools.md`).
 3. Paradigm editor research pass (pillar 2).
@@ -54,19 +54,22 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
-| 2026-10-20 | Workflow storage: shipped packages `apps/carbon-workflow/{editor,paradigm,agent}/` (read-only next to the binary; Editor not removable), downloads in the OS local data dir, preferences and workflow list in the OS config dir; all three locations user-changeable in installer/Settings (docs only until Settings exists) | user decision | `project/not_built/workflow-system.md` s4.7, Q15-Q16; `PROJECT.md` |
-| 2026-10-20 | Contributed workflow UI: declarative UI for simple workflows (tier 1 tree + actions in the manifest, tier 2 WASM) + webview panels for advanced views (JS, capability-gated bridge); no native plugins. Capabilities granted at install, update asks for new ones only; background declared + visible, deniable; missing `requires` = disabled + Install button; free package folder with root `workflow.toml` and path rules; Q11 superseded, Q14 default accepted | user answers Q17-Q22 | `project/not_built/workflow-system.md` s4.1, s4.4, s6 |
-| 2026-10-20 | View > Layout presets Paradigm and Agents removed; the Paradigm Editor and Agent Automation workflows replace them | user answer (review point 5) | `project/built/workflows.md`, `project/not_built/workflow-system.md` s5.2 |
-| 2026-10-20 | Workflow manifest format: TOML (JSON accepted for the same schema) | user answer Q1 | `project/not_built/workflow-system.md` s6 |
-| 2026-10-20 | Built-in workflows change only via overlay or Duplicate; the embedded file is never edited | user answer Q2 | `project/not_built/workflow-system.md` s6 |
-| 2026-10-20 | Q3 decided: recommended default. Patch overlay for tweaks of built-in workflows; whole-manifest copy for Duplicate | user answer Q3 | `project/not_built/workflow-system.md` s4.2, s6 |
-| 2026-10-20 | Workflows span any domain (3D, sound, automation, diagrams); the contract is not tied to code, a text buffer or a workspace folder (`requires_workspace` optional; surface panel kinds, device capabilities, background policy added to the design; surface safety is open Q11) | user knowledge | `project/not_built/workflow-system.md` s3.1 |
-| 2026-10-20 | Paradigm Editor and Agent Automation become workflows now as placeholders (empty panels, Section Bar icons) to test and design the workflow system (reverses the recommended default) | user answer Q4 | `project/not_built/workflow-system.md` s6 |
-| 2026-10-20 | Section Bar overflow: up/down arrows to scroll the list plus mouse wheel; no fixed cap (replaces overflow menu) | user answer Q5 | `project/not_built/workflow-system.md` s4.10, s6 |
-| 2026-10-20 | User workflow files in the OS config dir `Carbon/workflows/` | user answer Q6 | `project/not_built/workflow-system.md` s4.7, s6 |
-| 2026-10-20 | "Code Editor" renamed to "Editor"; id `carbon.editor`, `legacy_ids = ["code"]`; UI label and docs renamed 2026-10-20 (code: section_bar.rs, layouts.rs; ids unchanged) | user answer Q7 | `project/not_built/workflow-system.md` s6, `project/not_built/README.md` |
-| 2026-10-20 | Named layouts are per workflow; each workflow has its own layout config the user can change | user answers Q8, Q10 | `project/not_built/workflow-system.md` s4.7, s6 |
-| 2026-10-20 | Scoped keybindings deferred: workflow system ships without scoped keys, no GPUI key-context spike for now | user answer Q9 | `project/not_built/workflow-system.md` s4.6, s6 |
+| 2026-10-21 | Declarative views tier 1: `[[views.<name>]]` widget lists (heading, text, markdown, button, row, column, divider, list) in `view` panels; buttons and list rows run `[[commands]]` only | user asked to build tier 1; widget set and syntax my design | `project/built/workflows.md`, `project/not_built/workflow-system.md` s4.4 |
+| 2026-10-21 | Webview pages come only from the workflow's package (`page`), one origin per workflow, no network, navigation kept inside, no new windows; network later via the `net` capability | my default when continuing the webview; not objected | `project/built/workflows.md`, `project/not_built/workflow-system.md` s4.4 |
+| 2026-10-20 | Webview panels use the kit's `gpui-wry`, behind cargo feature `webview` (off by default); pages hidden under GPUI overlays, shortcuts forwarded from the page | user accepted the researched recommendations | `project/not_built/workflow-system.md` s4.4 |
+| 2026-10-20 | Workflow storage: shipped packages `apps/carbon-workflow/{editor,paradigm,agent}/` (read-only next to the binary; Editor not removable), downloads in the OS local data dir, preferences and workflow list in the OS config dir; all three locations user-changeable in installer/Settings (docs only until Settings exists) | user decision | `project/not_built/workflow-system.md` s4.2, Q15-Q16; `PROJECT.md` |
+| 2026-10-20 | Contributed workflow UI: declarative UI for simple workflows (tier 1 tree + actions in the manifest, tier 2 WASM) + webview panels for advanced views (JS, capability-gated bridge); no native plugins. Capabilities granted at install, update asks for new ones only; background declared + visible, deniable; missing `requires` = disabled + Install button; free package folder with root `workflow.toml` and path rules; Q11 superseded, Q14 default accepted | user answers Q17-Q22 | `project/not_built/workflow-system.md` s4.1, s4.4, s5 |
+| 2026-10-20 | View > Layout presets Paradigm and Agents removed; the Paradigm Editor and Agent Automation workflows replace them | user answer (review point 5) | `project/built/workflows.md` |
+| 2026-10-20 | Workflow manifest format: TOML (JSON accepted for the same schema) | user answer Q1 | `project/not_built/workflow-system.md` s5 |
+| 2026-10-20 | Built-in workflows change only via overlay or Duplicate; the embedded file is never edited | user answer Q2 | `project/not_built/workflow-system.md` s5 |
+| 2026-10-20 | Q3 decided: recommended default. Patch overlay for tweaks of built-in workflows; whole-manifest copy for Duplicate | user answer Q3 | `project/not_built/workflow-system.md` s4.2, s5 |
+| 2026-10-20 | Workflows span any domain (3D, sound, automation, diagrams); the contract is not tied to code, a text buffer or a workspace folder (`requires_workspace` optional; surface panel kinds, device capabilities, background policy added to the design; surface safety is open Q11) | user knowledge | `project/not_built/workflow-system.md` s3 |
+| 2026-10-20 | Paradigm Editor and Agent Automation become workflows now as placeholders (empty panels, Section Bar icons) to test and design the workflow system (reverses the recommended default) | user answer Q4 | `project/not_built/workflow-system.md` s5 |
+| 2026-10-20 | Section Bar overflow: up/down arrows to scroll the list plus mouse wheel; no fixed cap (replaces overflow menu) | user answer Q5 | `project/not_built/workflow-system.md` s5 (Q5) |
+| 2026-10-20 | User workflow files in the OS config dir `Carbon/workflows/` | user answer Q6 | `project/not_built/workflow-system.md` s5 |
+| 2026-10-20 | "Code Editor" renamed to "Editor"; id `carbon.editor`, `legacy_ids = ["code"]`; UI label and docs renamed 2026-10-20 (code: section_bar.rs, layouts.rs; ids unchanged) | user answer Q7 | `project/not_built/workflow-system.md` s5, `project/not_built/README.md` |
+| 2026-10-20 | Named layouts are per workflow; each workflow has its own layout config the user can change | user answers Q8, Q10 | `project/not_built/workflow-system.md` s5 |
+| 2026-10-20 | Scoped keybindings deferred: workflow system ships without scoped keys, no GPUI key-context spike for now | user answer Q9 | `project/not_built/workflow-system.md` s4.1, s5 |
 | 2026-10-19 | No preinstalled language tools (servers, linters, formatters, compilers); users install them via Manage Extensions. Binary source model (config only / download PATH-first / bundled) open | user decision after research on VS Code, Zed, Neovim/Mason, Helix, JetBrains | `documents/language-tools.md`, `PROJECT.md` |
 | 2026-10-19 | Section Bar bottom group: Manage Extensions, Manage Workflows, Manage Settings (dialogs, placeholders now). Workflows = sections (Code Editor; planned Paradigm Editor, Agent Automation; user custom workflows). Extensions = official + user-added plugins, VS Code-like (compilers, linters, appearances). Settings = all user options (system, appearance, agents, ...) | user decision | `PROJECT.md`, `DESIGN.md` s4, `project/built/section-bar.md` |
 | 2026-10-19 | Chat panel v1 is GUI only: `ChatBackend` interface in the core + streaming demo agent (labelled); IDE layout; edit & retry, context chips, status label; chats saved per tab in `target/carbon-gui/chats/`; chat model separate from `AgentSession`; files kept when a tab closes | user decision (no model loader or API now) after comparing VS Code, Zed, Cursor, JetBrains | `project/built/chat.md` |
@@ -154,6 +157,22 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-21 (review and docs)
+- Done: reviewed the work since Phase 3 against the docs; `project/built/workflows.md` gained package files, declarative views and webview panels (and lost three stale lines); `workflow-system.md` compacted from 466 to about 180 lines with the to-do list first (built history now only in the built doc and git); references, indexes, `PROJECT.md`, `FEATURE.md`, decision log updated.
+- Next: Phase 4 install.
+
+### 2026-10-21 (declarative views, tier 1)
+- Done: `views` in manifests and the `view` panel kind (core `workflow/view.rs`: widgets heading, text, markdown, button, row, column, divider, list; validation, limits, 6 tests; GUI `view_panel.rs`); buttons and list rows run the workflow's `[[commands]]`; live reload via Manage Workflows > Reload; restored after restart. Click-tested with a scratch "View Demo" workflow. 166 tests (default), 44 GUI tests with `webview`; clippy, fmt green. Details: `project/not_built/workflow-system.md` s4.4.
+- Next: user picks: stateful widgets / tier 2 design, page-to-Carbon API for webviews, Phase 4, or real Paradigm/Agent views.
+
+### 2026-10-21 (webview package pages)
+- Done: `page` on `webview` panel rules (core: `check_package_path`, `resolve_package_file`, `Registry::package_dir`, 4 tests); custom protocol `carbon-page` serving only the package (one origin per workflow, CSP without network, navigation kept inside, no new windows); pages restored after restart; zoom bug fixed (pages outside a zoomed group hide). Click-tested: package JS/CSS/JSON, network blocked, two webviews, zoom, move to bottom dock, restart. 159 tests (default), 43 GUI tests with `webview`; clippy, fmt green. Details: `project/not_built/workflow-system.md` s4.4.
+- Next: real keypress check in a page; then declarative UI tier 1, Phase 4, or page-to-Carbon API (theme events, commands) for webviews.
+
+### 2026-10-20 (webview spike)
+- Done: contributed-UI decisions Q17-Q22 (declarative UI + webview, logic tiers, capabilities, background, requires, free package folder); webview research (kit's `gpui-wry` chosen); webview panel spike behind cargo feature `webview` (`webview_panel.rs`, `Workbench::sync_webviews`): page in a dock tab, IPC round trip, hidden under palette/menus/dialogs and for background tabs, bounds follow docks and window, theme colours. Fixed WebView2 creation re-entrancy (async build in the panel's task). Results: `project/not_built/workflow-system.md` s4.4.
+- Next: user checks a real keypress in the page (F1, Ctrl+P); then decide: keep `webview` feature and design the page source in manifests, or declarative UI tier 1, or Phase 4.
 
 ### 2026-10-20 (workflow system Phase 3)
 - Done: Manage Workflows dialog (`manage_workflows.rs`: rows with origin/status tags, Turn On/Off incl. quarantine, Duplicate, Reset and Remove with confirm, did-not-load list, Open Folder, Reload); reloadable registry (`Arc` snapshot + `workflows::reload`); per-workflow named layouts and auto-hide in `state.json` (old `layouts.json` -> Editor once); Section Bar scroll with up/down arrows; core: manifests serialize (Duplicate), `free_user_id`, `create_user_workflow`, `remove_workflow` with path checks. 155 tests, clippy, fmt green; click-tested with 16 user workflows in a scratch folder (state files compared).
