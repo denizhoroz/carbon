@@ -41,7 +41,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 - [ ] CI for all three platforms
 
 ## Next steps
-0. Workflow system Phase 2 (`project/not_built/workflow-system.md` s5): user workflows folder, overlay, `state.json`, crash-loop guard, missing-panel placeholder. First settle the review points (Paradigm/Agents presets beside the workflows; crash guard clearing; merge needs the old base panel set).
+0. Workflow system Phase 3 (`project/not_built/workflow-system.md` s5): Manage Workflows dialog (list with status/reasons, enable/disable, re-enable quarantined, hide, duplicate, reset, remove, open folder), per-workflow named layouts, Section Bar scroll arrows.
 1. Real backend behind `ChatBackend` (ACP or an API); `@` mentions; chat list.
 2. Language-tool install model and Manage Extensions contents (`documents/language-tools.md`).
 3. Paradigm editor research pass (pillar 2).
@@ -54,6 +54,8 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-20 | Workflow storage: shipped packages `apps/carbon-workflow/{editor,paradigm,agent}/` (read-only next to the binary; Editor not removable), downloads in the OS local data dir, preferences and workflow list in the OS config dir; all three locations user-changeable in installer/Settings (docs only until Settings exists) | user decision | `project/not_built/workflow-system.md` s4.7, Q15-Q16; `PROJECT.md` |
+| 2026-10-20 | View > Layout presets Paradigm and Agents removed; the Paradigm Editor and Agent Automation workflows replace them | user answer (review point 5) | `project/built/workflows.md`, `project/not_built/workflow-system.md` s5.2 |
 | 2026-10-20 | Workflow manifest format: TOML (JSON accepted for the same schema) | user answer Q1 | `project/not_built/workflow-system.md` s6 |
 | 2026-10-20 | Built-in workflows change only via overlay or Duplicate; the embedded file is never edited | user answer Q2 | `project/not_built/workflow-system.md` s6 |
 | 2026-10-20 | Q3 decided: recommended default. Patch overlay for tweaks of built-in workflows; whole-manifest copy for Duplicate | user answer Q3 | `project/not_built/workflow-system.md` s4.2, s6 |
@@ -151,6 +153,14 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-20 (workflow packages)
+- Done: Carbon's own workflows moved to package folders `apps/carbon-workflow/{editor,paradigm,agent}/` (loaded from `carbon-workflow/` next to the binary or the repo; Editor compiled in as fallback with a notification); installed packages load from `%LOCALAPPDATA%\Carbon\workflows\installed\<id>\<version>\` (newest semver); env overrides for all three locations; `removable` / `can_turn_off` rules, Editor never blocked. 150 tests, clippy, fmt green; click-tested (repo packages, empty shipped folder).
+- Next: release packaging must copy `apps/carbon-workflow/`; Phase 3.
+
+### 2026-10-20 (workflow system Phase 2)
+- Done: user workflows from `<config>/Carbon/workflows/user/`, overlays for built-ins, `state/state.json` (migrated once from `layout.json`, which is no longer written), fingerprint reset of stale layouts, unknown panel kind as placeholder, `[[commands]]`/`[[menus]]`, crash-loop guard with quarantine and automatic safe mode, BOM-tolerant parsing, presets Paradigm/Agents removed; `dirs` 6.0.0 added (already in the lock). 146 workspace tests, clippy, fmt green; click-tested with `CARBON_WORKFLOWS_DIR` (state files compared, two empty test chats removed). Doc: `project/built/workflows.md`.
+- Next: Phase 3.
 
 ### 2026-10-20 (workflow system Phase 0-1)
 - Done: `carbon-core::workflow` (`WorkflowId`, TOML manifests, validation, `Registry` with three embedded built-ins, `LayoutFile` kept readable by older builds); GUI: Section Bar, View > Section and workbench read the registry (`Section` enum removed), `layouts::PanelKind` + `LayoutSpec`, `--safe-mode`; `toml` 1.1.8 and `semver` 1.0.28 added (both already in the lock). 14 core + 3 GUI tests; workspace tests, clippy, fmt green; click-tested in a separate target dir (state files restored, one empty test chat file removed).

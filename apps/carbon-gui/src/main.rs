@@ -23,7 +23,7 @@ use std::path::PathBuf;
 
 use carbon_core::{Core, FsChanges};
 use editor_panel::{CloseEditor, SaveFile};
-use gpui_kit::component::{ActiveTheme, TitleBar, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme, TitleBar, WindowExt, h_flex, v_flex};
 use gpui_kit::*;
 use menus::{
     AddPanel, ApplyLayout, ApplyPreset, CloseFolder, CommandPalette, CreateFolder, DeleteLayout,
@@ -114,12 +114,22 @@ impl CarbonApp {
         };
         this.refresh_menus(cx);
         this.sync_watch(cx);
+        // Start-up messages (safe mode, files that did not load, reset layouts)
+        // once the window can show notifications.
+        cx.defer_in(window, |this, window, cx| {
+            let mut notices = workflows::notices().to_vec();
+            notices.extend(this.workbench.update(cx, |w, _| w.take_notices()));
+            for notice in notices {
+                window.push_notification(notice, cx);
+            }
+        });
         this
     }
 
     fn menu_state(&self, cx: &App) -> MenuState {
         let mut state = self.workbench.read(cx).menu_state();
         state.has_workspace = self.core.read(cx).workspace().is_some();
+        state.workflow_commands = workflows::commands(&state.section, cx);
         state
     }
 
@@ -346,7 +356,7 @@ fn main() {
         .with_assets(app_assets::AppAssets)
         .run(move |cx| {
             init(cx);
-            cx.set_global(workflows::SafeMode(safe_mode));
+            workflows::init(safe_mode);
             style::theme::init(cx);
             menus::init(cx);
             test_panel::register(cx);

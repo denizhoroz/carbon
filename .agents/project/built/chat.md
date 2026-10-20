@@ -63,7 +63,7 @@ Implement `carbon_core::chat::ChatBackend` and call `core.chats.set_backend(Arc:
 
 - `cargo test --workspace`: 116 pass, 4 ignored (was 96). New: core `tests/chat.rs` (15: send/refusals, deltas/finish/title, stop/fail, retry, edit truncation, clear, serde + Stopped after load, store save/reload, id uniqueness and path safety, context caps/labels/dedupe, chunks, demo stream = canned text with context count, cancel, `/fail`); gui `context.rs` (4), `transcript.rs` (1). Clippy and fmt clean.
 - Click-tested 2026-10-19 (separate test build, window messages; your layout restored and test chat files removed afterwards): add Chat (right dock, narrow) → empty state; moved to the editor area → centred column; send → streaming, Responding, Stop button, Markdown + highlighted code with copy, Retry/Copy; Esc mid-reply → Stopped footer and label; `/fail` → Failed with reason; restart → chat restored (title, messages, Failed); Retry (button and palette); palette lists Chat commands only when they apply; Clear → confirmation → empty; open a file, "Chat: Attach Current File" → chip in draft, on the sent message, demo says "1 context item: `context.rs` (file)"; scroll up → Jump to latest; Edit → highlighted box, banner, text + chip back, resend replaced the turn (caret now at the end, fixed during the test); the hidden user-message actions took a row of space (fixed: overlay in the box corner).
-- Not tested: attach Selection (selecting by keyboard needs Shift, which window messages cannot send), Ctrl+L, hover visuals, the Agents preset's two chats, light themes, macOS/Linux.
+- Not tested: attach Selection (selecting by keyboard needs Shift, which window messages cannot send), Ctrl+L, hover visuals, light themes, macOS/Linux.
 
 ## Limits
 

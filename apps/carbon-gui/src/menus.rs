@@ -10,7 +10,7 @@ use crate::editor_panel::SaveFile;
 use carbon_core::workflow::WorkflowId;
 
 use crate::layouts::{MAX_SAVED, Preset, Side};
-use crate::workflows;
+use crate::workflows::{self, WorkflowCommand};
 
 // About is a placeholder: it has no handler yet.
 actions!(
@@ -118,6 +118,8 @@ pub struct MenuState {
     pub has_workspace: bool,
     pub saved: Vec<String>,
     pub auto_hide: Vec<Side>,
+    /// The active workflow's commands (`workflows::commands`).
+    pub workflow_commands: Vec<WorkflowCommand>,
 }
 
 impl Default for MenuState {
@@ -127,12 +129,36 @@ impl Default for MenuState {
             has_workspace: false,
             saved: Vec::new(),
             auto_hide: Vec::new(),
+            workflow_commands: Vec::new(),
         }
     }
 }
 
+/// The active workflow's items for one top-level menu, after a separator.
+fn workflow_items(state: &MenuState, menu: &str) -> Vec<MenuItem> {
+    let items: Vec<MenuItem> = state
+        .workflow_commands
+        .iter()
+        .filter(|command| command.menus.iter().any(|name| name == menu))
+        .map(|command| MenuItem::Action {
+            name: command.label.clone(),
+            action: command.action.boxed_clone(),
+            os_action: None,
+            checked: false,
+            disabled: false,
+        })
+        .collect();
+    if items.is_empty() {
+        items
+    } else {
+        std::iter::once(MenuItem::separator())
+            .chain(items)
+            .collect()
+    }
+}
+
 pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
-    let sections = workflows::registry().workflows().iter().map(|def| {
+    let sections = workflows::registry().available().map(|def| {
         MenuItem::action(def.name.clone(), SwitchSection { id: def.id.clone() })
             .checked(def.id == state.section)
     });
@@ -223,7 +249,7 @@ pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
         ),
     ];
 
-    vec![
+    let menus = vec![
         Menu::new("File").items([
             MenuItem::action("Open Folder...", OpenFolder),
             MenuItem::action("Create Folder...", CreateFolder),
@@ -263,7 +289,14 @@ pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
             ]),
         ),
         Menu::new("Help").items([MenuItem::action("About", About)]),
-    ]
+    ];
+    menus
+        .into_iter()
+        .map(|mut menu| {
+            menu.items.extend(workflow_items(state, &menu.name));
+            menu
+        })
+        .collect()
 }
 
 /// Registers the quit action and all key bindings, and sets the initial menus.

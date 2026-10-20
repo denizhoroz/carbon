@@ -26,7 +26,7 @@ editor = {{}}
 
 fn problems(text: &str) -> Vec<String> {
     let (def, _) = WorkflowDef::parse(text).expect("parses");
-    def.validate(&KINDS, false)
+    def.validate(false)
 }
 
 fn has(problems: &[String], part: &str) -> bool {
@@ -118,9 +118,16 @@ fn bad_ids_are_rejected() {
 }
 
 #[test]
-fn unknown_panel_kind_and_missing_reference_are_rejected() {
+fn unknown_panel_kind_warns_and_missing_reference_is_rejected() {
     let text = manifest("").replace("editor = {}", "editor = { kind = \"spreadsheet\" }");
-    assert!(has(&problems(&text), "kind `spreadsheet` is not available"));
+    assert!(problems(&text).is_empty(), "an unknown kind only warns");
+    let registry = Registry::from_sources(&[("s.toml", &text)], &KINDS, false);
+    assert_eq!(registry.workflows().len(), 1);
+    assert!(
+        registry.warnings()[0]
+            .1
+            .contains("kind `spreadsheet` is not available")
+    );
     let text = manifest("").replace("panels = [\"editor\"]", "panels = [\"editor\", \"nope\"]");
     assert!(has(&problems(&text), "panel `nope` is not in [panels]"));
 }

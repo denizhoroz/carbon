@@ -1,6 +1,6 @@
 # Workflow system (design, not built)
 
-Status: design accepted (user answers 2026-10-20 incl. Q3, see s6; workflow range widened the same day, s3.1). **Phase 0-1 built 2026-10-20** (s5.1, `../built/section-bar.md`); Phase 2+ not built. Evidence: `research_notes/Modular workflow systems/{workspace_mode_systems,plugin_architectures,agent_workflow_packages}.md`. Labels: sourced = URL in s7; **[BG]** = background knowledge, not verified; **(inf)** = my inference/design choice.
+Status: design accepted (user answers 2026-10-20 incl. Q3, see s6; workflow range widened the same day, s3.1). **Phase 0-2 built 2026-10-20** (s5.1, s5.2, `../built/workflows.md`); Phase 3+ not built. Evidence: `research_notes/Modular workflow systems/{workspace_mode_systems,plugin_architectures,agent_workflow_packages}.md`. Labels: sourced = URL in s7; **[BG]** = background knowledge, not verified; **(inf)** = my inference/design choice.
 
 ## 1. Goal, scope, non-goals
 
@@ -168,8 +168,8 @@ chat     = { multi = true }
 
 | Layer | Location | Owner | Writable by user | Contents |
 |---|---|---|---|---|
-| L0 built-in | embedded in the binary (`include_str!` of manifests) | Carbon | no | Editor (real), Paradigm Editor and Agent Automation (placeholders) |
-| L1 installed | `<user>/workflows/installed/<id>/<version>/` | package | no (replaced on update) | manifest + assets |
+| L0 built-in / shipped | package folders `apps/carbon-workflow/<name>/` shipped read-only next to the binary (built 2026-10-20); the Editor also compiled in as fallback | Carbon | no | Editor (real, not removable), Paradigm Editor and Agent Automation (placeholders) |
+| L1 installed | `<local data>/Carbon/workflows/installed/<id>/<version>/` (loaded since 2026-10-20; installing is Phase 4) | package | no (replaced on update) | manifest + assets |
 | L2 user-authored | `<user>/workflows/user/<id>/workflow.toml` | user | yes | whole workflow created by hand or Duplicate |
 | L3 overlay (Q3 decided) | `<user>/workflows/overlay/<id>.toml` | user | yes | small patch of an L0/L1 base: `name`, `icon`, `order`, `hidden`, `layout` replace or add/remove panels, `keybindings` add/disable. Not allowed: id, capabilities, requires |
 | L4 dock state | `<user>/workflows/state/state.json` | app | auto | last `DockAreaState` per id + `active` + `base_fingerprint` |
@@ -231,6 +231,19 @@ Pseudo-signatures, illustrative only: `registry.workflows() -> &[Effective]`; `r
 
 ### 4.7 Storage and migration of `layout.json`
 
+**Storage locations (user decision 2026-10-20, Q15-Q16; built the same day except the installer/Settings controls, `../built/workflows.md`):**
+
+| What | Where (default) | Writable | Notes |
+|---|---|---|---|
+| Shipped workflow packages (Carbon's own) | Repo `apps/carbon-workflow/<name>/` (`editor/`, `paradigm/`, `agent/`), installed read-only next to the binary (`<install dir>/carbon-workflow/<name>/`) | no | One folder per workflow: `workflow.toml` + assets, later its own code. Folder names are short; ids stay `carbon.editor`, `carbon.paradigm-editor`, `carbon.agent-automation` (they key saved state) |
+| Installed packages (downloaded by the user) | `%LOCALAPPDATA%\Carbon\workflows\installed\<id>\<version>\` (OS local data dir) | app | Large and re-downloadable, so not in the roaming profile; survives app reinstall |
+| Preferences and the workflow list (metadata) | `%APPDATA%\Carbon\workflows\` (OS config dir): `user/`, `overlay/`, `state/` | user/app | As built in Phase 2 |
+
+- All three locations are user-changeable, in the installer and later in Settings (Manage Settings is not built: until then only `CARBON_WORKFLOWS_DIR` overrides the preferences root).
+- Editor, Paradigm Editor and Agent Automation are packages; the Editor cannot be removed (it is the default and safe-mode workflow). A copy of the Editor manifest stays compiled in, so Carbon still opens if the shipped folder is missing or moved (recommended; to confirm at build time).
+- Program folders are read-only for normal users (Windows `Program Files`, macOS signed `.app`, Linux `/usr`) and are replaced on update, so downloaded packages never go there.
+
+
 | Today | New |
 |---|---|
 | `target/carbon-gui/layout.json` = `{ active: "code", sections: { "code": DockAreaState } }` (serde lowercase enum names; docks `version == LAYOUT_VERSION` or dropped) | `<user>/workflows/state/state.json` = `{ schema, active, enabled, quarantined, workflows: { <id>: { dock: DockAreaState, base_fingerprint } } }` |
@@ -271,7 +284,7 @@ Touched code found by grep: `section_bar.rs` (enum `Section`, `label/icon/id`, `
 |---|---|---|---|---|
 | 0 Id adapter (built 2026-10-20) | Add `WorkflowId(String)` newtype; `Section::id_str()`; `LayoutFile` keys become strings via an adapter; `SwitchSection` carries the id; behaviour identical | `section_bar.rs`, `menus.rs`, `workbench.rs` (`LayoutFile`, `switch_section`, `restore`), `main.rs` | old `layout.json` (`"code"`) loads; save round-trips byte-compatible keys; palette tests (`commands.rs`: every menu action once, bound actions have commands) stay green | revert commit; file format unchanged |
 | 1 Built-in via registry (built 2026-10-20) | New `carbon-core::workflow` (types, TOML parse, validate, no UI); three embedded manifests: `carbon.editor` (real) plus placeholder `carbon.paradigm-editor` and `carbon.agent-automation` (placeholder panel, Section Bar icons); GUI registry feeds Section Bar, View > Section, `section_preset`; panel-kind registry replaces title match in `layouts.rs::tabs()` (title match kept as fallback); `legacy_ids` | core `workflow/`, `layouts.rs`, `workbench.rs`, `section_bar.rs`, `menus.rs` | golden test: layout built from manifest == `Preset::Code` layout dump; manifest validation unit tests (bad id, unknown kind, bad range); registry lists exactly the three built-ins in `order`; switching to a placeholder and back keeps each layout; old layout file restores; `--safe-mode` flag test | revert the commit; `layout.json` stays readable by the old build (s4.7); `Preset::Code` kept |
-| 2 User workflows from folder | Scan `<user>/workflows/user/*`; overlay L3; dock state in `state.json`; placeholder panel; scoped commands/menus (no keys, Q9); crash-loop guard | core discovery + overlay + state; GUI placeholder panel, `refresh_menus` | invalid manifest skipped, others load; id collision; overlay apply/reset; missing panel -> placeholder; corrupt state -> base layout; entering-flag quarantine; two workflows keep separate layouts across restart | delete `workflows/` dir; Phase 1 behaviour remains |
+| 2 User workflows from folder (built 2026-10-20) | Scan `<user>/workflows/user/*`; overlay L3; dock state in `state.json`; placeholder panel; scoped commands/menus (no keys, Q9); crash-loop guard | core discovery + overlay + state; GUI placeholder panel, `refresh_menus` | invalid manifest skipped, others load; id collision; overlay apply/reset; missing panel -> placeholder; corrupt state -> base layout; entering-flag quarantine; two workflows keep separate layouts across restart | delete `workflows/` dir; Phase 1 behaviour remains |
 | 3 Manage Workflows dialog | List (status, reason), enable/disable, hide, duplicate, reset, remove (user ones), open folder; in `manage.rs`; per-workflow named layouts (Q8); Section Bar scroll arrows + wheel (s4.10) | `manage.rs`, `layouts.rs` `LayoutStore`, `section_bar.rs`, registry events | dialog actions drive registry (core-level tests); reset deletes L3/L4 only; built-in cannot be removed | dialog is additive; hide the buttons' content |
 | 4 Packages / install | Install from folder/zip/git (pinned hash/tag), `installed/<id>/<version>/`, catalog JSON, capability prompt, update diff, scoped keybindings (deferred, Q9; only if later wanted) | core `install`, GUI install flow | hash mismatch refused; update keeps overlay; downgrade/`carbon_api` mismatch disabled; no script executed on install | uninstall removes `installed/`; user layers untouched |
 | 5 Extension-backed panels, agent behaviour | WASM host + declarative UI vocabulary; `[agent]` loads AGENTS.md/SKILL.md/.mcp.json; capability enforcement | new extension host crate, chat/agent code | fault -> quarantine; denied capability returns typed error; panel crash shows error card, window survives | disable extension feature |
@@ -296,6 +309,24 @@ Phase 0 and 1 were built together (no separate id-adapter commit). What differs 
 
 Tests: core `tests/workflow.rs` (14), GUI `layouts.rs` (3, incl. golden Editor manifest == `Preset::Code`). Click test results in `../built/section-bar.md`.
 
+### 5.2 Built: Phase 2 (2026-10-20)
+
+Details and verification: `../built/workflows.md`. Differences from the plan and the review points settled:
+
+| Plan / review point | Built |
+|---|---|
+| Presets Paradigm/Agents beside the workflows (review 5) | Removed (user, 2026-10-20); View > Layout > Preset keeps Code |
+| State location (s4.7) | `<config>/Carbon/workflows/state/state.json` (or `CARBON_WORKFLOWS_DIR`); `layout.json` migrated once, never written again |
+| Crash-loop guard clearing (review 2) | Mark file `state/entering`, deleted 2 s after a workflow opened. Unfinished user workflow -> quarantined; unfinished built-in -> next start in safe mode; built-ins never quarantined |
+| Merge after a base update (review 3) | `base_fingerprint` (layout + panels only, not name/icon/order) and `base_panels` saved; on mismatch the layout resets with a notice. Merge itself not built |
+| Safe mode and saved state (review 6) | Safe mode reads no user files and no `state.json` (base layouts), writes nothing |
+| User ids (review 7) | Any `publisher.name` not under `carbon.*`; a duplicate of a built-in or earlier file is rejected. No installed layer yet, so no L1/L2 clash |
+| Missing panel kind | Unknown kinds are a warning, not a rejection; they show as "Panel `x` is not available" (`TestPanel`). The kit's own `InvalidPanel` still covers unknown panel names inside saved dock state. No Repair/Remove buttons yet |
+| Overlay ops | `name`, `icon`, `order`, `hidden`, per region `panels`/`add`/`remove`/`size`/`open`, new `[panels]`; only for built-ins. Key bindings not allowed (Q9) |
+| Scoped commands/menus | `[[commands]]` (`id`, `label`, `run` = action name, optional `args`) and `[[menus]]` (`menu` = File/Edit/View/Help, `command`). Built at menu refresh with `build_action`; unknown actions left out and logged once |
+| Quarantine counters (N faults in M minutes) | One unfinished opening quarantines; re-enable by editing `state.json` until Phase 3 |
+| Registry events / live reload | Loaded once at start; changes need a restart |
+
 ## 6. Decisions, risks and open questions
 
 | # | Question / risk | Status and answer |
@@ -306,6 +337,8 @@ Tests: core `tests/workflow.rs` (14), GUI `layouts.rs` (3, incl. golden Editor m
 | Q4 | Should Paradigm/Agents become workflows now? | Decided 2026-10-20: yes (reverses the earlier default). Placeholder workflows `carbon.paradigm-editor`, `carbon.agent-automation` with placeholder panels and Section Bar icons, used to test and design the system; real content later |
 | Q5 | Cap on Section Bar entries / overflow? | Decided 2026-10-20: no cap; scroll arrows (up/down) plus mouse wheel when entries exceed the bar (s4.10); replaces the overflow menu |
 | Q6 | Where do user files live? | Decided 2026-10-20: OS config dir `Carbon/workflows/`; moving the whole app state dir is its own decision |
+| Q15 | Where do workflow packages live? | Decided 2026-10-20: shipped ones in repo `apps/carbon-workflow/<name>/` (editor, paradigm, agent), installed read-only next to the binary; downloaded ones in the OS local data dir `Carbon/workflows/installed/`; preferences and the workflow list stay in the config dir (s4.7). Built 2026-10-20 |
+| Q16 | Can users move these locations? | Decided 2026-10-20: yes, all three (shipped, installed, preferences), in the installer or in Settings. Settings is not built: environment variables `CARBON_SHIPPED_WORKFLOWS_DIR`, `CARBON_INSTALLED_WORKFLOWS_DIR`, `CARBON_WORKFLOWS_DIR` meanwhile |
 | Q7 | Id for the Code Editor workflow? | Decided 2026-10-20: user-facing name is now "Editor", id `carbon.editor`, `legacy_ids = ["code"]` for the `layout.json` key; no other aliases. Follow-up: rename the UI label/docs from Code Editor to Editor (`README.md` in this folder) |
 | Q8 | Per-workflow named layouts? | Decided 2026-10-20: yes (s4.7, Phase 3) |
 | Q9 | Scoped keybindings | Decided 2026-10-20: skip the spike for now; ship without scoped keys (s4.6) |

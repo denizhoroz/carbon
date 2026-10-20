@@ -105,8 +105,8 @@ Legend: **Y** yes, **P** partial, **N** no, **build** = Carbon must build it, `=
 |---|---|---|
 | Drag tabs between groups, docks, center; split on edge drop; resize; close; zoom | Kit `DockArea` + `DockSkin` (close buttons on) | Mouse |
 | Toggle docks | `area.toggle_dock`; no collapse buttons in tab bars (`set_toggle_button_visible(false)`, user 2026-10-18) | Ctrl+B left, Ctrl+Alt+B right, Ctrl+J bottom; View menu |
-| Persist current layout | Per section (`section-bar.md`): `dump` on `LayoutChanged`, 500 ms debounce, `load` on start, fallback section default | `target/carbon-gui/layout.json` |
-| Task presets | `Preset::{Code, Paradigm, Agents}` (`layouts.rs`) | View > Layout > Preset |
+| Persist current layout | Per workflow (`workflows.md`, `state.json` since 2026-10-20): `dump` on `LayoutChanged`, 500 ms debounce, `load` on start, fallback workflow default | `target/carbon-gui/layout.json` |
+| Task presets | `Preset::Code` (`layouts.rs`); Paradigm and Agents removed 2026-10-20, replaced by workflows (`workflows.md`) | View > Layout > Preset |
 | Reset layout | Active section's default (Editor = Code preset), reopens docks | View > Layout > Reset Layout |
 | Named layouts (max 9) | `LayoutStore` (`target/carbon-gui/layouts.json`): `DockAreaState` + auto-hide flags | View > Layout > Save Layout As... (dialog), Apply (Ctrl+Alt+1..9), Delete |
 | Keyboard move focused panel | `area.move_panel` into first tab group of target | Ctrl+K then left/right/down (docks), up (center); View > Panel |

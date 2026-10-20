@@ -41,7 +41,7 @@ impl Render for SectionBar {
             .bg(cx.theme().title_bar)
             .border_r_1()
             .border_color(cx.theme().title_bar_border)
-            .children(workflows::registry().workflows().iter().map(|def| {
+            .children(workflows::registry().available().map(|def| {
                 let id = def.id.clone();
                 bar_button(
                     SharedString::from(format!("workflow-{id}")),

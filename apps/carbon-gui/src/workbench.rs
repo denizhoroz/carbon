@@ -2,7 +2,6 @@
 //! persist) plus T2: named layouts, task presets, keyboard move/resize, auto-hide docks.
 //! Files live in the build dir for now; they move to the OS user dir later.
 
-use std::collections::HashMap;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -19,7 +18,9 @@ use gpui_kit::component::{WindowExt, h_flex};
 use gpui_kit::*;
 
 use carbon_core::BufferId;
-use carbon_core::workflow::{LayoutFile, WorkflowId};
+use carbon_core::workflow::{
+    LayoutFile, SavedWorkflow, StateFile, WorkflowId, finish_entering, start_entering,
+};
 use gpui_kit::component::dock::panel_handle;
 
 use crate::chat_panel::ChatPanel;
@@ -30,18 +31,20 @@ use crate::menus::{Direction, MenuState};
 use crate::style::fixed;
 use crate::terminal_panel::TerminalPanel;
 use crate::test_panel::TestPanel;
-use crate::workflows::{self, SafeMode};
+use crate::workflows;
 use carbon_core::terminal::shells;
 
 /// Saved-layout schema version; bump when old layouts can no longer load.
 /// 2: Explorer is a real panel (v1 layouts hold a placeholder "Explorer").
 const LAYOUT_VERSION: usize = 2;
-const LAYOUT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/carbon-gui");
 const LAYOUT_FILE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../target/carbon-gui/layout.json"
 );
 const SAVE_DELAY: Duration = Duration::from_millis(500);
+/// How long a workflow must stay open before its opening counts as finished
+/// (crash-loop guard, `workflow-system.md` s4.8).
+const ENTER_CONFIRM_DELAY: Duration = Duration::from_secs(2);
 const CENTER_AND_DOCKS: [DockPlacement; 4] = [
     DockPlacement::Center,
     DockPlacement::Left,
@@ -185,12 +188,16 @@ pub struct Workbench {
     area: Entity<DockArea>,
     /// The active workflow.
     section: WorkflowId,
-    /// Layouts of workflows other than the active one (the active one lives in
-    /// `area`), including ones the registry no longer has.
-    section_layouts: HashMap<WorkflowId, DockAreaState>,
+    /// What `state.json` holds: every workflow's last layout (the active one's
+    /// current layout lives in `area` until saved), disabled and quarantined
+    /// workflows, including ids the registry no longer has.
+    state: StateFile,
     store: LayoutStore,
+    /// Messages from restoring, shown once the window is up.
+    notices: Vec<String>,
     _layout_sub: Subscription,
     _save_task: Task<()>,
+    _enter_task: Task<()>,
 }
 
 impl EventEmitter<MenusChanged> for Workbench {}
@@ -213,14 +220,14 @@ impl Workbench {
         let mut this = Self {
             area,
             section: default_workflow(),
-            section_layouts: HashMap::new(),
+            state: StateFile::default(),
             store: LayoutStore::load(),
+            notices: Vec::new(),
             _layout_sub,
             _save_task: Task::ready(()),
+            _enter_task: Task::ready(()),
         };
-        if !this.restore(window, cx) {
-            this.apply_workflow_default(window, cx);
-        }
+        this.restore(window, cx);
         this.close_empty_docks(window, cx);
         // Auto-hide docks start hidden, like JetBrains unpinned tool windows.
         for side in this.store.auto_hide.clone() {
@@ -407,6 +414,7 @@ impl Workbench {
             has_workspace: false,
             saved: self.store.names(),
             auto_hide: self.store.auto_hide.clone(),
+            workflow_commands: Vec::new(),
         }
     }
 
@@ -415,22 +423,97 @@ impl Workbench {
     /// Keeps the current workflow's layout, then shows the target's last layout
     /// (or its default the first time).
     pub fn switch_section(&mut self, id: &WorkflowId, window: &mut Window, cx: &mut Context<Self>) {
-        if *id == self.section || workflows::registry().get(id).is_none() {
+        if *id == self.section || !workflows::registry().is_available(id) {
             return;
         }
-        let current = self.area.read(cx).dump(cx);
-        let previous = std::mem::replace(&mut self.section, id.clone());
-        self.section_layouts.insert(previous, current);
-        let loaded = self.section_layouts.remove(id).is_some_and(|state| {
-            self.area
-                .update(cx, |area, cx| area.load(state, window, cx))
-                .is_ok()
-        });
-        if !loaded {
-            self.apply_workflow_default(window, cx);
+        self.park_current(cx);
+        self.section = id.clone();
+        self.enter(window, cx);
+        for notice in std::mem::take(&mut self.notices) {
+            window.push_notification(notice, cx);
         }
         self.schedule_save(cx);
         cx.emit(MenusChanged);
+    }
+
+    /// Messages from start-up (a reset or unreadable layout) for the window.
+    pub fn take_notices(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.notices)
+    }
+
+    /// Records the active workflow's current layout in `state`.
+    fn park_current(&mut self, cx: &App) {
+        let Some(def) = workflows::registry().get(&self.section) else {
+            return;
+        };
+        match serde_json::to_value(self.area.read(cx).dump(cx)) {
+            Ok(dock) => {
+                self.state
+                    .workflows
+                    .insert(self.section.clone(), SavedWorkflow::new(def, dock));
+            }
+            Err(err) => eprintln!("cannot keep the layout of {}: {err}", self.section),
+        }
+    }
+
+    /// Shows the active workflow: its saved layout, else its default. Marks
+    /// the opening for the crash-loop guard until it has lasted a moment.
+    fn enter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let dirs = workflows::dirs();
+        if let Some(dirs) = dirs
+            && let Err(err) = start_entering(dirs, &self.section)
+        {
+            eprintln!("crash guard: {err}");
+        }
+        if !self.load_saved(window, cx) {
+            self.apply_workflow_default(window, cx);
+        }
+        if let Some(dirs) = dirs.cloned() {
+            self._enter_task = cx.spawn(async move |_, cx| {
+                cx.background_executor().timer(ENTER_CONFIRM_DELAY).await;
+                finish_entering(&dirs);
+            });
+        }
+    }
+
+    /// Loads the active workflow's saved layout; false when there is none or
+    /// it cannot be used (then the default applies). A layout saved from an
+    /// older default is dropped with a notice (no merge yet).
+    fn load_saved(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let (Some(def), Some(saved)) = (
+            workflows::registry().get(&self.section),
+            self.state.workflows.get(&self.section),
+        ) else {
+            return false;
+        };
+        if !saved.matches(def) {
+            self.notices.push(format!(
+                "The default layout of \"{}\" changed, so its layout was reset.",
+                def.name
+            ));
+            self.state.workflows.remove(&self.section);
+            return false;
+        }
+        let dock = match serde_json::from_value::<DockAreaState>(saved.dock.clone()) {
+            Ok(dock) if dock.version == Some(LAYOUT_VERSION) => dock,
+            // An older dock format: silently the default, as before workflows.
+            Ok(_) => return false,
+            Err(err) => {
+                eprintln!("saved layout of {} is broken: {err}", self.section);
+                self.notices.push(format!(
+                    "The saved layout of \"{}\" was broken, so it was reset.",
+                    def.name
+                ));
+                return false;
+            }
+        };
+        match self.area.update(cx, |area, cx| area.load(dock, window, cx)) {
+            Ok(()) => true,
+            Err(err) => {
+                eprintln!("failed to load the layout of {}: {err}", self.section);
+                false
+            }
+        }
     }
 
     pub fn reset_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -802,62 +885,66 @@ impl Workbench {
         });
     }
 
-    fn save(&self, cx: &App) {
-        // Safe mode leaves the saved layouts as they were.
-        if cx.try_global::<SafeMode>().is_some_and(|safe| safe.0) {
+    /// Writes `state.json`. Safe mode (no workflow folder) writes nothing.
+    fn save(&mut self, cx: &App) {
+        let Some(dirs) = workflows::dirs() else {
             return;
-        }
-        let mut states = self.section_layouts.clone();
-        states.insert(self.section.clone(), self.area.read(cx).dump(cx));
-        let file = LayoutFile::new(workflows::registry(), &self.section, states);
-        let result = serde_json::to_string_pretty(&file)
-            .map_err(|err| err.to_string())
-            .and_then(|json| {
-                std::fs::create_dir_all(LAYOUT_DIR)
-                    .and_then(|_| std::fs::write(LAYOUT_FILE, json))
-                    .map_err(|err| err.to_string())
-            });
-        if let Err(err) = result {
-            eprintln!("failed to save layout to {LAYOUT_FILE}: {err}");
+        };
+        self.park_current(cx);
+        self.state.active = Some(self.section.clone());
+        if let Err(err) = self.state.save(&dirs.state_file()) {
+            eprintln!("failed to save workflow layouts: {err}");
         }
     }
 
-    /// Loads the saved workflow layouts and shows the active one; false (fall
-    /// back to the workflow default) when missing, invalid or in safe mode.
-    fn restore(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        if cx.try_global::<SafeMode>().is_some_and(|safe| safe.0) {
-            return false;
+    /// Takes the state read at start (or, the first time, migrates the Phase 1
+    /// `layout.json`, which stays untouched for older builds), then shows the
+    /// active workflow.
+    fn restore(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if workflows::dirs().is_some() {
+            self.state = workflows::take_state().unwrap_or_else(migrate_layout_file);
         }
-        let Ok(text) = std::fs::read_to_string(LAYOUT_FILE) else {
-            return false;
-        };
-        let file: LayoutFile<DockAreaState> = match serde_json::from_str(&text) {
-            Ok(file) => file,
-            Err(err) => {
-                eprintln!("invalid layout {LAYOUT_FILE}: {err}; using default");
-                return false;
-            }
-        };
-        let (active, mut states) = file.into_parts(workflows::registry());
-        self.section = active.unwrap_or_else(default_workflow);
-        // Layouts from an older schema are dropped; workflows fall back to defaults.
-        states.retain(|_, state| state.version == Some(LAYOUT_VERSION));
-        let state = states.remove(&self.section);
-        self.section_layouts = states;
-        let Some(state) = state else {
-            return false;
-        };
-        match self
-            .area
-            .update(cx, |area, cx| area.load(state, window, cx))
-        {
-            Ok(()) => true,
-            Err(err) => {
-                eprintln!("failed to load layout {LAYOUT_FILE}: {err}; using default");
-                false
-            }
-        }
+        self.section = self
+            .state
+            .active
+            .clone()
+            .filter(|id| workflows::registry().is_available(id))
+            .unwrap_or_else(default_workflow);
+        self.enter(window, cx);
     }
+}
+
+/// `state.json` from the Phase 1 `layout.json`, if there is one. Layouts are
+/// taken as made from today's defaults.
+fn migrate_layout_file() -> StateFile {
+    let mut state = StateFile::default();
+    let Ok(text) = std::fs::read_to_string(LAYOUT_FILE) else {
+        return state;
+    };
+    let file: LayoutFile<serde_json::Value> = match serde_json::from_str(&text) {
+        Ok(file) => file,
+        Err(err) => {
+            eprintln!("invalid layout {LAYOUT_FILE}: {err}; not migrated");
+            return state;
+        }
+    };
+    let registry = workflows::registry();
+    let (active, docks) = file.into_parts(registry);
+    state.active = active;
+    for (id, dock) in docks {
+        let saved = match registry.get(&id) {
+            Some(def) => SavedWorkflow::new(def, dock),
+            // Unknown workflow: kept; its fingerprint never matches, so it
+            // starts from its default if it ever comes back.
+            None => SavedWorkflow {
+                dock,
+                base_fingerprint: String::new(),
+                base_panels: Vec::new(),
+            },
+        };
+        state.workflows.insert(id, saved);
+    }
+    state
 }
 
 /// Where a panel kind goes when none of its kind is open.

@@ -1,5 +1,6 @@
-# Built-in placeholder: Agent Automation. No content yet; one placeholder
-# panel to exercise the workflow system.
+# Carbon's own package (placeholder): Agent Automation. Shipped read-only next
+# to the binary. No content yet; one placeholder panel to exercise the
+# workflow system.
 id = "carbon.agent-automation"
 schema_version = 1
 version = "0.1.0"

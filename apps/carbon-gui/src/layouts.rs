@@ -65,64 +65,33 @@ impl Side {
     }
 }
 
-/// Built-in task layouts (Eclipse perspectives / Blender workspaces).
+/// Built-in task layouts (Eclipse perspectives / Blender workspaces). The
+/// Paradigm and Agents presets became workflows (2026-10-20, user).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Preset {
     Code,
-    Paradigm,
-    Agents,
 }
 
 impl Preset {
-    pub const ALL: [Preset; 3] = [Preset::Code, Preset::Paradigm, Preset::Agents];
+    pub const ALL: [Preset; 1] = [Preset::Code];
 
     pub fn label(self) -> &'static str {
         match self {
             Preset::Code => "Code",
-            Preset::Paradigm => "Paradigm",
-            Preset::Agents => "Agents",
         }
     }
 
     /// Center layout plus each dock's panels, size and open state.
     pub fn build(self, cx: &mut App) -> (DockLayout, Vec<(Side, DockLayout, Pixels, bool)>) {
-        let (left, right, bottom) = (
-            fixed::LEFT_DOCK_SIZE,
-            fixed::RIGHT_DOCK_SIZE,
-            fixed::BOTTOM_DOCK_SIZE,
-        );
         match self {
             // Same as the Editor workflow's default layout (tested below).
             Preset::Code => LayoutSpec::code().build(cx),
-            Preset::Paradigm => (
-                tabs(&["Paradigm Canvas"], cx),
-                vec![
-                    (Side::Left, tabs(&["Paradigms", "Outline"], cx), left, true),
-                    (Side::Right, tabs(&["Agent"], cx), right, true),
-                    (Side::Bottom, tabs(&["Problems"], cx), bottom, false),
-                ],
-            ),
-            Preset::Agents => (
-                DockLayout::h_split()
-                    .child(tabs(&["Agent Chat 1"], cx), None)
-                    .child(tabs(&["Agent Chat 2"], cx), None),
-                vec![
-                    (Side::Left, tabs(&["Files"], cx), left, false),
-                    (Side::Right, tabs(&["Diff Review"], cx), right, true),
-                    (
-                        Side::Bottom,
-                        tabs(&["Agent Logs", "Terminal"], cx),
-                        bottom,
-                        true,
-                    ),
-                ],
-            ),
         }
     }
 }
 
-/// What a layout slot builds. Workflow manifests name kinds
-/// (`workflows::PANEL_KINDS`); presets below still name titles (`tabs`).
+/// What a layout slot builds; workflow manifests name kinds
+/// (`workflows::PANEL_KINDS`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum PanelKind {
     Explorer,
@@ -135,14 +104,16 @@ pub enum PanelKind {
 
 impl PanelKind {
     /// A manifest kind with its rule's title. A kind this build cannot make
-    /// (validation should have rejected it) becomes a placeholder.
+    /// (from a newer Carbon or a missing extension) becomes a placeholder
+    /// saying so; the rest of the layout still loads.
     pub fn from_manifest(kind: &str, title: Option<&str>) -> Self {
         match kind {
             "explorer" => PanelKind::Explorer,
             "editor" => PanelKind::Editor,
             "terminal" => PanelKind::Terminal,
             "chat" => PanelKind::Chat,
-            _ => PanelKind::Placeholder(title.unwrap_or(kind).to_string().into()),
+            "placeholder" => PanelKind::Placeholder(title.unwrap_or(kind).to_string().into()),
+            _ => PanelKind::Placeholder(format!("Panel `{kind}` is not available").into()),
         }
     }
 
@@ -253,22 +224,6 @@ impl LayoutSpec {
     }
 }
 
-fn tabs(titles: &[&str], cx: &mut App) -> DockLayout {
-    titles.iter().fold(DockLayout::tabs(), |layout, title| {
-        // Real panels by title; everything else is still a placeholder.
-        let panel = match *title {
-            "Explorer" => panel_handle(ExplorerPanel::new(cx)),
-            "Editor" => panel_handle(EditorPanel::new(cx)),
-            "Terminal" => panel_handle(TerminalPanel::new(None, None, None, cx)),
-            t if crate::chat_panel::is_chat_title(t) => {
-                panel_handle(crate::chat_panel::ChatPanel::new(t.to_string(), cx))
-            }
-            _ => panel_handle(TestPanel::new(*title, cx)),
-        };
-        layout.panel_view(panel, cx)
-    })
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SavedLayout {
     pub name: String,
@@ -345,6 +300,18 @@ mod tests {
             spec.docks
                 .iter()
                 .all(|dock| dock.panels.is_empty() && !dock.open)
+        );
+    }
+
+    #[test]
+    fn unknown_kind_becomes_a_not_available_placeholder() {
+        assert_eq!(
+            PanelKind::from_manifest("spreadsheet", Some("Sheet")),
+            PanelKind::Placeholder("Panel `spreadsheet` is not available".into())
+        );
+        assert_eq!(
+            PanelKind::from_manifest("placeholder", Some("Canvas")),
+            PanelKind::Placeholder("Canvas".into())
         );
     }
 

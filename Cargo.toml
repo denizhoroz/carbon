@@ -49,6 +49,8 @@ nucleo-matcher = "0.3.1"
 # Workflow manifests (`workflow.toml`, workflow-system.md Q1) and their version ranges.
 toml = "1.1.8"
 semver = "1.0.28"
+# OS config dir for user workflows (workflow-system.md Q6).
+dirs = "6.0.0"
 gix = { version = "0.89.0", default-features = false, features = ["status", "sha1", "parallel"] }
 
 # Optimise GPUI, layout and text in dev builds so the window is usable.

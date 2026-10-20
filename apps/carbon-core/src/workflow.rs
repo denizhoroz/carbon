@@ -2,15 +2,26 @@
 //! `workflow.toml` manifest (`project/not_built/workflow-system.md`).
 //!
 //! A manifest names its default layout in panel *kinds* (`editor`, `chat`,
-//! ...); the GUI turns kinds into panels. Built-in workflows are embedded in
-//! the binary. User and installed workflows, overlays and the Manage Workflows
-//! dialog come later (phases 2-4); this module is plain data with no UI types.
+//! ...); the GUI turns kinds into panels. Layers: Carbon's own workflows as
+//! shipped package folders (`apps/carbon-workflow/<name>/`, read-only),
+//! installed packages, user workflows, and overlays that patch a shipped or
+//! installed one (`overlay.rs`). Saved layouts and flags live in `state.rs`;
+//! folders in `dirs.rs`. Plain data with no UI types.
 
-use std::collections::{BTreeMap, HashMap};
+mod dirs;
+mod overlay;
+mod state;
+
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
+use std::path::PathBuf;
 
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
+
+pub use dirs::{SHIPPED_ENV, WorkflowDirs, shipped_dir};
+pub use overlay::{Overlay, RegionPatch};
+pub use state::{SavedWorkflow, StateFile, finish_entering, start_entering, take_unfinished};
 
 /// Manifest format version this build reads.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -22,25 +33,20 @@ pub const EDITOR: &str = "carbon.editor";
 const BUILTIN_PREFIX: &str = "carbon.";
 /// Panel kind with no content of its own: shows its `title`.
 pub const PLACEHOLDER_KIND: &str = "placeholder";
+/// Top-level menus a workflow may add items to.
+pub const MENUS: [&str; 4] = ["File", "Edit", "View", "Help"];
+/// Layout regions, as named in manifests and overlays.
+pub const REGIONS: [&str; 4] = ["center", "left", "right", "bottom"];
 
-/// Built-in manifests as (file name, text), in no particular order.
-const BUILTINS: [(&str, &str); 3] = [
-    ("editor.toml", include_str!("workflow/editor.toml")),
-    (
-        "paradigm-editor.toml",
-        include_str!("workflow/paradigm-editor.toml"),
-    ),
-    (
-        "agent-automation.toml",
-        include_str!("workflow/agent-automation.toml"),
-    ),
-];
+/// The Editor's shipped manifest, also compiled in: Carbon still opens when
+/// the shipped folder is missing or moved.
+const EDITOR_FALLBACK: &str = include_str!("../../carbon-workflow/editor/workflow.toml");
+/// Source name of the compiled-in Editor in warnings and `origin`.
+const EDITOR_FALLBACK_SOURCE: &str = "built-in Editor";
 
 /// Manifest keys from the design that this build accepts but does not use yet.
-const RESERVED_KEYS: [&str; 11] = [
+const RESERVED_KEYS: [&str; 9] = [
     "derived_from",
-    "commands",
-    "menus",
     "keybindings",
     "activation",
     "file_types",
@@ -68,6 +74,11 @@ impl WorkflowId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Under `carbon.*`: only built-ins may use it.
+    pub fn is_builtin(&self) -> bool {
+        self.0.starts_with(BUILTIN_PREFIX)
+    }
 }
 
 impl fmt::Display for WorkflowId {
@@ -94,6 +105,9 @@ pub struct WorkflowDef {
     /// Section Bar position, ascending.
     #[serde(default = "default_order")]
     pub order: i32,
+    /// Not shown in the Section Bar or View > Section.
+    #[serde(default)]
+    pub hidden: bool,
     /// Keys this workflow had in saved files before it became a workflow.
     #[serde(default)]
     pub legacy_ids: Vec<String>,
@@ -105,6 +119,12 @@ pub struct WorkflowDef {
     /// Panels by reference name; layout regions list these names.
     #[serde(default)]
     pub panels: BTreeMap<String, PanelRule>,
+    /// Commands shown in the palette while this workflow is active.
+    #[serde(default)]
+    pub commands: Vec<CommandDef>,
+    /// Places for those commands in the top-level menus.
+    #[serde(default)]
+    pub menus: Vec<MenuDef>,
     /// Every other top-level key: reserved ones are ignored, the rest warned about.
     #[serde(flatten)]
     other: toml::Table,
@@ -122,6 +142,19 @@ pub struct Layout {
     pub left: Option<Region>,
     pub right: Option<Region>,
     pub bottom: Option<Region>,
+}
+
+impl Layout {
+    /// A region by name (`REGIONS`).
+    pub fn region_mut(&mut self, name: &str) -> Option<&mut Option<Region>> {
+        match name {
+            "center" => Some(&mut self.center),
+            "left" => Some(&mut self.left),
+            "right" => Some(&mut self.right),
+            "bottom" => Some(&mut self.bottom),
+            _ => None,
+        }
+    }
 }
 
 /// One region of the layout: its panels as tabs, in order.
@@ -157,10 +190,34 @@ fn yes() -> bool {
     true
 }
 
+/// A workflow command: runs an existing host action, so it cannot add behaviour.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommandDef {
+    /// Unique within the workflow; `menus` refer to it.
+    pub id: String,
+    /// Palette and menu text.
+    pub label: String,
+    /// Host action name, e.g. `carbon::NewFile`.
+    pub run: String,
+    /// Arguments for actions that take them (as the keymap would pass them).
+    pub args: Option<toml::Table>,
+}
+
+/// A command placed at the end of a top-level menu.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MenuDef {
+    /// One of `MENUS`.
+    pub menu: String,
+    /// A `commands` id.
+    pub command: String,
+}
+
 impl WorkflowDef {
     /// Parses a manifest. Warnings name top-level keys this build does not know.
     pub fn parse(text: &str) -> Result<(Self, Vec<String>), String> {
-        let def: Self = toml::from_str(text).map_err(|err| err.to_string())?;
+        let def: Self = toml::from_str(strip_bom(text)).map_err(|err| err.to_string())?;
         let warnings = def
             .other
             .keys()
@@ -190,9 +247,46 @@ impl WorkflowDef {
         .filter_map(|(name, region)| region.as_ref().map(|region| (name, region)))
     }
 
+    /// `region:kind` for every panel of the default layout, in order. Saved
+    /// with a layout so a later change of the default can be detected.
+    pub fn base_panels(&self) -> Vec<String> {
+        self.regions()
+            .flat_map(|(region_name, region)| {
+                region
+                    .panels
+                    .iter()
+                    .map(move |name| format!("{region_name}:{}", self.panel_kind(name)))
+            })
+            .collect()
+    }
+
+    /// Hash of the default layout and panel rules (FNV-1a, hex). Changes when
+    /// the default layout changes, not when the name, icon or order do.
+    pub fn layout_fingerprint(&self) -> String {
+        let text = format!("{:?}{:?}", self.layout, self.panels);
+        let hash = text.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        });
+        format!("{hash:016x}")
+    }
+
+    /// Panel kinds the layout uses that this host cannot build; those panels
+    /// show as "not available" placeholders.
+    pub fn unavailable_kinds(&self, panel_kinds: &[&str]) -> Vec<String> {
+        let mut kinds: Vec<String> = self
+            .panels
+            .keys()
+            .map(|name| self.panel_kind(name))
+            .filter(|kind| !panel_kinds.contains(kind))
+            .map(str::to_string)
+            .collect();
+        kinds.dedup();
+        kinds
+    }
+
     /// Problems that keep this workflow from loading; empty when valid.
-    /// `panel_kinds`: kinds the host can build. `builtin`: may use `carbon.*`.
-    pub fn validate(&self, panel_kinds: &[&str], builtin: bool) -> Vec<String> {
+    /// `builtin`: may use `carbon.*`.
+    pub fn validate(&self, builtin: bool) -> Vec<String> {
         let mut problems = Vec::new();
         if self.schema_version != SCHEMA_VERSION {
             problems.push(format!(
@@ -202,7 +296,7 @@ impl WorkflowDef {
         }
         if let Err(problem) = check_id(self.id.as_str()) {
             problems.push(problem);
-        } else if self.id.as_str().starts_with(BUILTIN_PREFIX) && !builtin {
+        } else if self.id.is_builtin() && !builtin {
             problems.push(format!("id `{}`: `carbon.*` is reserved", self.id));
         }
         if self.name.trim().is_empty() {
@@ -248,29 +342,60 @@ impl WorkflowDef {
             }
         }
         for (name, rule) in &self.panels {
-            let kind = self.panel_kind(name);
-            if !panel_kinds.contains(&kind) {
-                problems.push(format!("panel `{name}`: kind `{kind}` is not available"));
-            }
-            if kind == PLACEHOLDER_KIND && rule.title.as_deref().is_none_or(str::is_empty) {
+            if self.panel_kind(name) == PLACEHOLDER_KIND
+                && rule.title.as_deref().is_none_or(str::is_empty)
+            {
                 problems.push(format!("panel `{name}`: a placeholder needs a title"));
+            }
+        }
+        let mut command_ids = HashSet::new();
+        for command in &self.commands {
+            if !is_word(&command.id) {
+                problems.push(format!(
+                    "command id `{}` must use lowercase letters, digits, `-`",
+                    command.id
+                ));
+            }
+            if !command_ids.insert(command.id.as_str()) {
+                problems.push(format!("command id `{}` is used twice", command.id));
+            }
+            if command.label.trim().is_empty() || command.run.trim().is_empty() {
+                problems.push(format!("command `{}` needs a label and run", command.id));
+            }
+        }
+        for item in &self.menus {
+            if !MENUS.contains(&item.menu.as_str()) {
+                problems.push(format!(
+                    "menu `{}` is not one of {}",
+                    item.menu,
+                    MENUS.join(", ")
+                ));
+            }
+            if !command_ids.contains(item.command.as_str()) {
+                problems.push(format!("menu item: no command `{}`", item.command));
             }
         }
         problems
     }
 }
 
-/// `publisher.name`: two or more dot-separated parts of `a-z`, `0-9`, `-`,
-/// each starting with a letter or digit.
+/// Text without a leading UTF-8 byte order mark (some Windows editors write one).
+fn strip_bom(text: &str) -> &str {
+    text.strip_prefix('\u{feff}').unwrap_or(text)
+}
+
+/// Lowercase letters, digits and `-`, starting with a letter or digit.
+fn is_word(part: &str) -> bool {
+    part.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && part
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// `publisher.name`: two or more dot-separated words.
 fn check_id(id: &str) -> Result<(), String> {
     let parts: Vec<&str> = id.split('.').collect();
-    let part_ok = |part: &&str| {
-        part.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
-            && part
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-    };
-    if parts.len() >= 2 && parts.iter().all(part_ok) {
+    if parts.len() >= 2 && parts.iter().all(|part| is_word(part)) {
         Ok(())
     } else {
         Err(format!(
@@ -279,10 +404,22 @@ fn check_id(id: &str) -> Result<(), String> {
     }
 }
 
-/// A manifest that did not load, with why.
+/// Where a workflow came from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Origin {
+    /// Carbon's own: a shipped package folder (read-only), or the compiled-in
+    /// Editor. Changed only through an overlay; never removed.
+    Builtin,
+    /// A downloaded package in the installed folder (Phase 4 installs them).
+    Installed(PathBuf),
+    /// A user `workflow.toml` at this path.
+    User(PathBuf),
+}
+
+/// A manifest or overlay that did not load, with why.
 #[derive(Clone, Debug)]
 pub struct Rejected {
-    /// File name of the manifest.
+    /// File name or path of the manifest or overlay.
     pub source: String,
     pub problems: Vec<String>,
 }
@@ -291,14 +428,87 @@ pub struct Rejected {
 #[derive(Clone, Debug, Default)]
 pub struct Registry {
     workflows: Vec<WorkflowDef>,
+    origins: HashMap<WorkflowId, Origin>,
+    /// Overlay file applied to a workflow.
+    overlays: HashMap<WorkflowId, String>,
+    /// Disabled or quarantined: kept but not offered.
+    blocked: HashSet<WorkflowId>,
     rejected: Vec<Rejected>,
     warnings: Vec<(String, String)>,
+    /// Ids and legacy ids taken, by source.
+    keys: HashMap<String, String>,
 }
 
 impl Registry {
-    /// The built-in workflows.
+    /// Carbon's own workflows from the shipped folder (`shipped_dir`).
     pub fn builtin(panel_kinds: &[&str]) -> Self {
-        Self::from_sources(&BUILTINS, panel_kinds, true)
+        Self::shipped(shipped_dir().as_deref(), panel_kinds)
+    }
+
+    /// Carbon's own workflows from `<dir>/<name>/workflow.toml`. The Editor is
+    /// added from the compiled-in copy when the folder lacks it.
+    pub fn shipped(dir: Option<&std::path::Path>, panel_kinds: &[&str]) -> Self {
+        let mut registry = Self::default();
+        for (path, text) in dir.map(dirs::package_manifests).unwrap_or_default() {
+            let source = path.display().to_string();
+            match text {
+                Ok(text) => {
+                    registry.add(&source, &text, panel_kinds, Origin::Builtin);
+                }
+                Err(err) => registry.reject(&source, vec![err]),
+            }
+        }
+        if registry.get(&WorkflowId::editor()).is_none() {
+            let source = EDITOR_FALLBACK_SOURCE;
+            registry.add(source, EDITOR_FALLBACK, panel_kinds, Origin::Builtin);
+            let place = dir.map_or("(none)".into(), |dir| dir.display().to_string());
+            registry.warn(
+                source,
+                vec![format!(
+                    "shipped workflows not found in {place}; using the built-in Editor"
+                )],
+            );
+        }
+        registry.sort();
+        registry
+    }
+
+    /// Carbon's own workflows, then (with `dirs`) installed packages, user
+    /// workflows and overlays. Without `dirs` (safe mode) only Carbon's own.
+    pub fn load(dirs: Option<&WorkflowDirs>, panel_kinds: &[&str]) -> Self {
+        let mut registry = Self::builtin(panel_kinds);
+        let Some(dirs) = dirs else {
+            return registry;
+        };
+        for (path, text) in dirs.installed_manifests() {
+            let source = path.display().to_string();
+            match text {
+                Ok(text) => {
+                    registry.add(&source, &text, panel_kinds, Origin::Installed(path));
+                }
+                Err(err) => registry.reject(&source, vec![err]),
+            }
+        }
+        for (path, text) in dirs.user_manifests() {
+            let source = path.display().to_string();
+            match text {
+                Ok(text) => {
+                    registry.add(&source, &text, panel_kinds, Origin::User(path));
+                }
+                Err(err) => registry.reject(&source, vec![err]),
+            }
+        }
+        for (path, id, text) in dirs.overlays() {
+            let source = path.display().to_string();
+            match text {
+                Ok(text) => {
+                    registry.apply_overlay(&source, &WorkflowId::new(id), &text, panel_kinds)
+                }
+                Err(err) => registry.reject(&source, vec![err]),
+            }
+        }
+        registry.sort();
+        registry
     }
 
     /// Loads manifests given as (file name, text). A bad one is rejected with
@@ -306,56 +516,181 @@ impl Registry {
     /// rejects the later file.
     pub fn from_sources(sources: &[(&str, &str)], panel_kinds: &[&str], builtin: bool) -> Self {
         let mut registry = Self::default();
-        let mut keys: HashMap<String, String> = HashMap::new();
         for (source, text) in sources {
-            let reject = |problems| Rejected {
-                source: source.to_string(),
-                problems,
+            let origin = if builtin {
+                Origin::Builtin
+            } else {
+                Origin::User(PathBuf::from(source))
             };
-            let (def, warnings) = match WorkflowDef::parse(text) {
-                Ok(parsed) => parsed,
-                Err(err) => {
-                    registry.rejected.push(reject(vec![err]));
-                    continue;
-                }
-            };
-            let mut problems = def.validate(panel_kinds, builtin);
-            for key in
-                std::iter::once(def.id.as_str()).chain(def.legacy_ids.iter().map(String::as_str))
-            {
-                if let Some(owner) = keys.get(key) {
-                    problems.push(format!("id `{key}` is already used by {owner}"));
-                }
-            }
-            if !problems.is_empty() {
-                registry.rejected.push(reject(problems));
-                continue;
-            }
-            for key in std::iter::once(def.id.to_string()).chain(def.legacy_ids.iter().cloned()) {
-                keys.insert(key, source.to_string());
-            }
-            registry.warnings.extend(
-                warnings
-                    .into_iter()
-                    .map(|warning| (source.to_string(), warning)),
-            );
-            registry.workflows.push(def);
+            registry.add(source, text, panel_kinds, origin);
         }
-        registry
-            .workflows
-            .sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.id.cmp(&b.id)));
+        registry.sort();
         registry
     }
 
+    fn add(&mut self, source: &str, text: &str, panel_kinds: &[&str], origin: Origin) -> bool {
+        let (def, warnings) = match WorkflowDef::parse(text) {
+            Ok(parsed) => parsed,
+            Err(err) => {
+                self.reject(source, vec![err]);
+                return false;
+            }
+        };
+        let mut problems = def.validate(origin == Origin::Builtin);
+        for key in std::iter::once(def.id.as_str()).chain(def.legacy_ids.iter().map(String::as_str))
+        {
+            if let Some(owner) = self.keys.get(key) {
+                problems.push(format!("id `{key}` is already used by {owner}"));
+            }
+        }
+        if !problems.is_empty() {
+            self.reject(source, problems);
+            return false;
+        }
+        for key in std::iter::once(def.id.to_string()).chain(def.legacy_ids.iter().cloned()) {
+            self.keys.insert(key, source.to_string());
+        }
+        self.warn(source, warnings);
+        self.warn_unavailable(source, &def, panel_kinds);
+        self.origins.insert(def.id.clone(), origin);
+        self.workflows.push(def);
+        true
+    }
+
+    /// Patches a shipped or installed workflow with an overlay file. A bad
+    /// overlay is rejected and the workflow keeps its base definition.
+    pub fn apply_overlay(
+        &mut self,
+        source: &str,
+        id: &WorkflowId,
+        text: &str,
+        panel_kinds: &[&str],
+    ) {
+        let Some(index) = self.workflows.iter().position(|def| &def.id == id) else {
+            self.reject(source, vec![format!("no workflow `{id}` to change")]);
+            return;
+        };
+        if matches!(self.origins.get(id), Some(Origin::User(_))) {
+            self.reject(
+                source,
+                vec![format!(
+                    "`{id}` is a user workflow: edit its workflow.toml instead"
+                )],
+            );
+            return;
+        }
+        let overlay = match Overlay::parse(text) {
+            Ok(overlay) => overlay,
+            Err(err) => {
+                self.reject(source, vec![err]);
+                return;
+            }
+        };
+        let (patched, notices) = match overlay.apply(&self.workflows[index]) {
+            Ok(patched) => patched,
+            Err(problems) => {
+                self.reject(source, problems);
+                return;
+            }
+        };
+        let problems = patched.validate(self.origins.get(id) == Some(&Origin::Builtin));
+        if !problems.is_empty() {
+            self.reject(source, problems);
+            return;
+        }
+        self.warn(source, notices);
+        self.warn_unavailable(source, &patched, panel_kinds);
+        self.workflows[index] = patched;
+        self.overlays.insert(id.clone(), source.to_string());
+        self.sort();
+    }
+
+    fn reject(&mut self, source: &str, problems: Vec<String>) {
+        self.rejected.push(Rejected {
+            source: source.to_string(),
+            problems,
+        });
+    }
+
+    fn warn(&mut self, source: &str, warnings: Vec<String>) {
+        self.warnings
+            .extend(warnings.into_iter().map(|w| (source.to_string(), w)));
+    }
+
+    fn warn_unavailable(&mut self, source: &str, def: &WorkflowDef, panel_kinds: &[&str]) {
+        let warnings = def
+            .unavailable_kinds(panel_kinds)
+            .into_iter()
+            .map(|kind| format!("panel kind `{kind}` is not available; shown as a placeholder"))
+            .collect();
+        self.warn(source, warnings);
+    }
+
+    fn sort(&mut self) {
+        self.workflows
+            .sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.id.cmp(&b.id)));
+    }
+
+    /// Keeps these workflows out of `available` (disabled or quarantined).
+    /// The Editor is never blocked: it is the default and safe-mode workflow.
+    pub fn block(&mut self, ids: impl IntoIterator<Item = WorkflowId>) {
+        let editor = WorkflowId::editor();
+        self.blocked
+            .extend(ids.into_iter().filter(|id| *id != editor));
+    }
+
+    /// Its files can be deleted: user and installed workflows. Carbon's own
+    /// packages are read-only; they can only be hidden or turned off.
+    pub fn removable(&self, id: &WorkflowId) -> bool {
+        matches!(
+            self.origins.get(id),
+            Some(Origin::User(_) | Origin::Installed(_))
+        )
+    }
+
+    /// May be hidden or turned off: every workflow but the Editor.
+    pub fn can_turn_off(&self, id: &WorkflowId) -> bool {
+        *id != WorkflowId::editor() && self.get(id).is_some()
+    }
+
+    /// The shipped folder was missing or had no Editor, so the compiled-in
+    /// Editor is used.
+    pub fn uses_editor_fallback(&self) -> bool {
+        self.warnings
+            .iter()
+            .any(|(source, _)| source == EDITOR_FALLBACK_SOURCE)
+    }
+
+    /// Every loaded workflow, including hidden and blocked ones.
     pub fn workflows(&self) -> &[WorkflowDef] {
         &self.workflows
+    }
+
+    /// The workflows the Section Bar and View > Section offer.
+    pub fn available(&self) -> impl Iterator<Item = &WorkflowDef> {
+        self.workflows
+            .iter()
+            .filter(|def| !def.hidden && !self.blocked.contains(&def.id))
+    }
+
+    pub fn is_available(&self, id: &WorkflowId) -> bool {
+        self.available().any(|def| &def.id == id)
+    }
+
+    pub fn origin(&self, id: &WorkflowId) -> Option<&Origin> {
+        self.origins.get(id)
+    }
+
+    /// The overlay file applied to `id`, if any.
+    pub fn overlay(&self, id: &WorkflowId) -> Option<&str> {
+        self.overlays.get(id).map(String::as_str)
     }
 
     pub fn rejected(&self) -> &[Rejected] {
         &self.rejected
     }
 
-    /// (file name, warning) for keys that were ignored.
+    /// (source, warning): ignored keys, unavailable panel kinds, overlay notices.
     pub fn warnings(&self) -> &[(String, String)] {
         &self.warnings
     }
@@ -371,21 +706,25 @@ impl Registry {
             .find(|def| def.id.as_str() == key || def.legacy_ids.iter().any(|id| id == key))
     }
 
-    /// The Editor if loaded, else the first workflow.
+    /// The Editor if available, else the first available workflow, else the
+    /// Editor anyway (it is never quarantined).
     pub fn default_workflow(&self) -> Option<&WorkflowDef> {
-        self.get(&WorkflowId::editor())
-            .or_else(|| self.workflows.first())
+        let editor = WorkflowId::editor();
+        self.available()
+            .find(|def| def.id == editor)
+            .or_else(|| self.available().next())
+            .or_else(|| self.get(&editor))
     }
 }
 
-/// `layout.json`: the active workflow and each visited workflow's last layout
-/// (`S` is the GUI's dock state).
+/// `layout.json` from before `state.json` (Phase 1): the active workflow and
+/// each visited workflow's last layout (`S` is the GUI's dock state). Read
+/// once to migrate; never written any more, so older builds keep reading it.
 ///
 /// Builds from before workflows read `active` and `sections` only, keyed by
 /// legacy ids, and fail on keys they do not know. So workflows with a legacy
 /// id are written there under it, `active` always names one, and every other
 /// workflow goes in `workflows` / `active_workflow`, which those builds ignore.
-/// Going back to an older build keeps the Editor's layout.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default, bound(deserialize = "S: Deserialize<'de>"))]
 pub struct LayoutFile<S> {

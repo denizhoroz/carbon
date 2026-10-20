@@ -1,4 +1,5 @@
-# Built-in placeholder: the Paradigm Editor (diagrams as AI context, pillar 2).
+# Carbon's own package (placeholder): the Paradigm Editor (diagrams as AI
+# context, pillar 2). Shipped read-only next to the binary.
 # No content yet; one placeholder panel to exercise the workflow system.
 id = "carbon.paradigm-editor"
 schema_version = 1

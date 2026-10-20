@@ -772,6 +772,7 @@ version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
  "async-channel",
+ "dirs 6.0.0",
  "dunce",
  "gix",
  "ignore",

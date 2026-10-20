@@ -1,4 +1,6 @@
-# Built-in: the Editor workflow (Explorer, editors, Chat, Terminal).
+# Carbon's own package: the Editor workflow (Explorer, editors, Chat, Terminal).
+# Shipped read-only next to the binary (carbon-workflow/editor/) and also
+# compiled into carbon-core as the fallback; never removable.
 # Mirrors the GUI's `Preset::Code`; a test checks they stay equal.
 id = "carbon.editor"
 schema_version = 1

@@ -68,6 +68,20 @@ impl CommandSpec {
 /// has no handler where focus was (`Window::available_actions`).
 pub fn all(state: &MenuState) -> Vec<CommandSpec> {
     let mut commands = from_menus(menus::app_menus(state));
+    // Workflow commands in no menu are palette-only, grouped by workflow.
+    commands.extend(
+        state
+            .workflow_commands
+            .iter()
+            .filter(|command| command.menus.is_empty())
+            .map(|command| {
+                CommandSpec::new(
+                    &command.group,
+                    format!("{}: {}", command.group, command.label),
+                    command.action.boxed_clone(),
+                )
+            }),
+    );
     commands.extend(extras());
     commands
 }
@@ -287,15 +301,62 @@ mod tests {
 
     use super::{all, profile_names};
     use crate::layouts::Side;
-    use crate::menus::{self, MenuState};
+    use crate::menus::{self, ApplyLayout, MenuState};
+    use crate::workflows::WorkflowCommand;
 
     fn full_state() -> MenuState {
+        let command = |label: &str, menus: &[&str], action: Box<dyn Action>| WorkflowCommand {
+            group: "Review".into(),
+            label: label.to_string().into(),
+            menus: menus.iter().map(|m| m.to_string().into()).collect(),
+            action,
+        };
         MenuState {
             has_workspace: true,
             saved: vec!["Mine".into(), "Review".into()],
             auto_hide: vec![Side::Left],
+            // Actions no other menu item uses, so the parity tests stay exact.
+            workflow_commands: vec![
+                command(
+                    "New Review File",
+                    &["File"],
+                    Box::new(ApplyLayout { index: 5 }),
+                ),
+                command(
+                    "Open Review Folder",
+                    &[],
+                    Box::new(ApplyLayout { index: 6 }),
+                ),
+            ],
             ..MenuState::default()
         }
+    }
+
+    #[test]
+    fn workflow_commands_reach_menus_and_palette_once() {
+        let state = full_state();
+        let file = menus::app_menus(&state)
+            .into_iter()
+            .find(|menu| menu.name.as_ref() == "File")
+            .unwrap();
+        assert!(file.items.iter().any(
+            |item| matches!(item, MenuItem::Action { name, .. } if name.as_ref() == "New Review File")
+        ));
+        let labels: Vec<String> = all(&state).iter().map(|c| c.label.to_string()).collect();
+        assert_eq!(
+            labels
+                .iter()
+                .filter(|l| *l == "File: New Review File")
+                .count(),
+            1
+        );
+        assert_eq!(
+            labels
+                .iter()
+                .filter(|l| *l == "Review: Open Review Folder")
+                .count(),
+            1
+        );
     }
 
     fn menu_actions(menus: Vec<Menu>) -> Vec<Box<dyn Action>> {
