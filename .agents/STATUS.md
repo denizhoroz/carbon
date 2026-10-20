@@ -2,11 +2,11 @@
 
 Living tracker for Carbon. Update it at the end of each work session. Newest entries first in logs. Scope lives in `FEATURE.md`, decisions and open questions in `PROJECT.md`, evidence in `RESEARCH.md`.
 
-**Last updated:** 2026-10-19
+**Last updated:** 2026-10-20
 
 ## Current focus
 
-Research complete. Next: decide open questions, then start the Rust daemon scaffold.
+Core panels work on Windows (shell, layout, Explorer, editor with rust-analyzer, terminal, command palette, chat GUI with a demo agent). Next: a real chat backend (ACP/API), Manage dialog contents (Extensions, Workflows, Settings), paradigm editor research, then macOS/Linux builds and CI.
 
 ## Progress
 
@@ -27,7 +27,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 |---|---|---|
 | 1 Code editor | [~] | Tier 1 built: tabs, save, colours, rust-analyzer (`project/built/code-editor.md`); terminal tier 1 (`project/built/terminal.md`) |
 | 2 Paradigm editor | [ ] | Needs research first |
-| 3 Agents tab | [ ] | |
+| 3 Agents tab | [~] | Chat panel v1 GUI with demo agent (`project/built/chat.md`); no real backend, sessions or approvals yet |
 | 4 Multi-platform (Win/macOS/Linux) | [ ] | |
 | 5 Lightweight | [ ] | Design focus, not first priority |
 | 6 Modular extension sections | [ ] | |
@@ -41,10 +41,12 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 - [ ] CI for all three platforms
 
 ## Next steps
-1. Answer open questions in `PROJECT.md` (native framework spikes, v1 scope, licence stance).
-2. Run the paradigm editor research pass.
-3. Define daemon crate layout and protocol (state-first, snapshot plus ordered actions).
-4. Prototype GPUI Kit shell: window, theme tokens from `DESIGN.md`, dock layout, editor component; check unverified items in `project/ui/ui-framework.md` (LSP trait, editor latency, IME, screen readers, multi-window docking).
+1. Real backend behind `ChatBackend` (ACP or an API); `@` mentions; chat list.
+2. Language-tool install model and Manage Extensions contents (`documents/language-tools.md`).
+3. Paradigm editor research pass (pillar 2).
+4. Build and test on macOS and Linux; CI for all three platforms.
+5. Answer remaining open questions in `PROJECT.md` (v1 scope, licence stance, CRDT); check unverified items in `project/ui/ui-framework.md` (IME, screen readers, multi-window docking).
+6. Later: daemon split with a state-first protocol.
 
 ## Decision log
 Format: date | decision | reason | where recorded.
@@ -138,6 +140,10 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-20 (docs refresh)
+- Done: read the project state; fixed stale docs (`PROJECT.md` status, sequencing, open question and docs map; `STATUS.md` focus, next steps, Agents pillar row; `README.md` git note and file table); removed `research_notes/` (staged `git rm`, user commits).
+- Next: see Next steps. `FEATURE.md` is 88 KB and could be compacted.
 
 ### 2026-10-19 (chat panel)
 - Done: core `chat` module (model, backend interface, demo agent, store) + 15 tests; GUI `chat_panel` (transcript, composer, chips, stop/retry/edit/clear, persistence, palette commands); placeholders and presets migrate. Click-tested in a test build (fixed: user-message action row gap, edit caret). 116 tests pass + 4 ignored; clippy and fmt clean.
@@ -250,7 +256,7 @@ Newest first. One short entry per session: what was done, what is next.
 - Next: prototype shell; verify the (?) items in the knowledge base.
 
 ### 2026-10-16 (GUI framework)
-- Done: researched Rust GUI frameworks; wrote `documents/gui-framework.md` (12 spec tables, scoring, options A-D, spikes S1-S7). Raw notes in `research_notes/GUI framework comparison/` (kept until the document is accepted).
+- Done: researched Rust GUI frameworks; wrote `documents/gui-framework.md` (12 spec tables, scoring, options A-D, spikes S1-S7). Raw notes in `research_notes/GUI framework comparison/` (deleted 2026-10-20 after the user chose GPUI; recoverable from git history).
 - Next: user decision on framework; run the spikes (editor latency, RAM, Linux webview, accessibility).
 - Update (same day): user decided native desktop GUI, webview excluded. Reworked `gui-framework.md` for native only (lead: GPUI + gpui-component gated by editor and a11y spikes; fallback egui); updated `PROJECT.md`, `DESIGN.md`. Spikes now S1-S8 in the document.
 

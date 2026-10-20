@@ -33,12 +33,11 @@ Docs for AI agents (and people) working on Carbon. Read the files that match you
 | `FEATURE.md` | Part 1 Carbon features by pillar; Part 2 feature catalog from other products with adoption scores (1-5) and unique flags; Part 3 market gaps |
 | `DESIGN.md` | Carbon UI and interaction rulebook (tokens, shell, pillar surfaces, components, agent UX, accessibility, budgets) |
 | `RESEARCH.md` | Landscape of alternatives, VS Code reference, comparison and synthesis, sentiment, evidence gaps, key sources |
-| `documents/` | Decision documents; `gui-framework.md` compares native Rust GUI frameworks (tables); `language-tools.md` compares how editors ship language servers, linters, compilers |
+| `documents/` | Decision documents; `gui-framework.md` compares native Rust GUI frameworks (tables); `code-editor.md` and `terminal.md` compare editor engines and terminals; `language-tools.md` compares how editors ship language servers, linters, compilers |
 | `project/built/` | One file per built feature (what, code, usage, limits, verified); index in `README.md`. Panel layout comparison + implementation: `panel-layout.md` |
 | `project/not_built/` | Index of committed features with no code yet (refs to `FEATURE.md` IDs); research/design docs for unbuilt features go here |
-| `project/` | Working knowledge for the chosen stack; `ui-framework.md` is the GPUI Kit knowledge base |
+| `project/ui/` | Working knowledge for the chosen stack; `ui-framework.md` is the GPUI Kit knowledge base |
 | `knowledge/` | **Read-only** knowledge from previous projects: `DESIGN`, `ARCHITECTURE`, `SECURITY`, `EXPERIENCE`, plus per-language folders (`css`, `html`, `python`, `rust`, `shell`); see `knowledge/README.md` |
-| `research_notes/` | Raw research notes behind the documents; temporary, delete once folded into the main files |
 
 ## Rules
 
@@ -49,4 +48,4 @@ Docs for AI agents (and people) working on Carbon. Read the files that match you
 - **Log errors once** in `STATUS.md` (symptom, cause, fix, prevention); reusable lessons may later move to `project/`.
 - **Evidence labels:** M measured, V vendor, A anecdotal, S secondary, doc docs/spec; `(?)` = unverified. Keep them when copying facts.
 - **Docs are compact:** tables and short fragments, no filler. Fold new findings into the main files instead of adding long reports.
-- **`.agents/` is gitignored** and the repo has no commits yet, so deleted text cannot be recovered from git.
+- **`.agents/` is tracked in git.** Commit doc changes with the code; deleted text can be recovered from history. Raw research notes (`research_notes/`) are temporary: fold them into the main files, then delete.

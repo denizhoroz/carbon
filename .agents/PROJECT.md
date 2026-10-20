@@ -16,7 +16,7 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 5. Lightweight (not first priority, but a design focus).
 6. Modular extension sections: e.g. SVG or 3D model viewers addable after build; modular compatibility in general.
 
-**Technical decisions** (recommended, from RESEARCH.md section 5; not yet validated by benchmarks):
+**Technical decisions** (recommended, from RESEARCH.md section 5; those marked built are in `project/built/`; the rest are not yet validated by benchmarks):
 
 - **Architecture:** one static-musl Rust daemon owns workspace, buffers, terminals, LSP/DAP, agents, git; local = remote over loopback. UI is a swappable client.
 - **Do not fork VS Code.** Reuse open protocols and parts (LSP, DAP, MCP, ACP, TextMate/theme JSON, `AGENTS.md`/`SKILL.md`/`.mcp.json`).
@@ -33,12 +33,12 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
   - **Extensions:** works like VS Code. Official (bundled) and user-added extensions/plugins: compilers, linters, appearances (themes), and more (pillar 6). Manage Extensions lists, adds and removes them.
   - **Settings:** every user-changeable option: system, appearance, agents, etc. (`DESIGN.md` Settings).
 - **Core first, in-process (user decision, 2026-10-16, option a):** `apps/carbon-core` holds workspace, file tree, buffers, terminals, agent sessions as plain Rust; the GUI calls it directly; daemon split later keeps the same API. `project/built/carbon-core.md`.
-- **Sequencing:** daemon -> native UI shell + importers -> extensions -> decide on Node host.
+- **Sequencing (revised 2026-10-20):** in-process core + native UI shell and core panels (done) -> agent backend (ACP/MCP) -> extensions and Manage dialogs -> paradigm editor (after its research) -> daemon split -> macOS/Linux + CI.
 
 ## Open questions
 
 - Paradigm editor (pillar 2) is unresearched: run a short follow-up on diagram/architecture tools (Excalidraw, tldraw, draw.io, Mermaid, PlantUML, Structurizr/C4, Lucidchart, Miro AI, Cursor/Claude canvases, VS Code Canvases): file format, AI integration, code round-trip, licences.
-- GPUI + gpui-component is chosen; prototype to confirm: editor latency and large files, accessibility (Narrator, VoiceOver, Orca), terminal embed, docking, RAM on all three OSes (published numbers conflict 2x-15x).
+- Still to verify on GPUI Kit (editor speed gate and terminal embed passed on Windows; see `project/built/`): accessibility (Narrator, VoiceOver, Orca), IME in the editor, macOS and Linux behaviour, RAM on all three OSes (published numbers conflict 2x-15x), docking across windows (panel layout T3).
 - CRDT choice (Zed-style, Diamond Types, Loro) and whether multi-user is needed early.
 - How much of the PIM/agent-hub scope (email, calendar, notes, shared canvas) is in v1 vs IDE parity.
 - AHP/ACP wire-format maturity and licences; MCP Apps client support.
@@ -48,7 +48,7 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 
 ## Status
 
-Research phase complete (Oct 2026); no product code yet beyond the Rust project scaffold (`Cargo.toml`, `src/`). Adoption scores, priorities and verdicts are analyst inference, not user data. Live progress, decisions log and error/solution log: `STATUS.md`.
+Build phase (Oct 2026). Working on Windows: native shell on gpui-kit with title bar and menus, Section Bar, docking layout, Explorer, code editor tabs with rust-analyzer, terminal, command palette, and a GUI-only chat panel (demo agent). Not built: real agent backend (ACP/MCP), paradigm editor, extension system, daemon split, debugging, whole-project search; macOS and Linux untested. What exists: `project/built/README.md`; what is left: `project/not_built/README.md`. Adoption scores, priorities and verdicts in `FEATURE.md`/`RESEARCH.md` are analyst inference, not user data. Live progress, decision log and error/solution log: `STATUS.md`.
 
 ## Docs map (`.agents/`)
 Routing for agents (which file for which task): `README.md`.
@@ -58,9 +58,8 @@ Routing for agents (which file for which task): `README.md`.
 | `PROJECT.md` | Overview, decisions, open questions | Start here |
 | `STATUS.md` | Progress tracker, decision log, error and solution log, session notes | What is done, what is next, known problems |
 | `DESIGN.md` | UI and interaction rulebook for Carbon (tokens, shell, pillar surfaces, components, agent UX, accessibility, budgets) | Before any UI build or fix |
-| `documents/gui-framework.md` | GUI framework comparison (native candidates only; comparison tables: basics, IDE fit, platform, scores, exclusions, risks) | Choosing the UI technology |
-| `project/built/panel-layout.md` | Panel layout comparison (VS Code, Visual Studio, JetBrains, Eclipse, Zed, Sublime, Neovim, Blender, Dear ImGui, GPUI Kit): move/snap, detach, size, saved layouts; Carbon tiers | Building docks and layouts |
-| `project/built/` | One file per built feature + index (title bar/menu, theming, panel layout) | What exists in code |
+| `documents/` | Decision documents: `gui-framework.md` (native GUI comparison), `code-editor.md`, `terminal.md`, `language-tools.md` (how editors ship language servers, linters, compilers) | Why a technology was chosen; revisiting it |
+| `project/built/` | One file per built feature + index (shell, theming, panel layout, Explorer, editor, terminal, command palette, chat, core) | What exists in code |
 | `project/not_built/` | Index of committed features not built yet (FEATURE.md IDs) | Picking the next feature |
 | `project/ui/ui-framework.md` | GPUI Kit knowledge base: versions, setup, components, theming, docking, editor, accessibility, gotchas | Building UI with GPUI Kit |
 | `knowledge/` | Read-only knowledge from previous projects (design, architecture, security, experience, Rust/Dioxus/CSS/HTML/Python/uv/shell) | Reuse proven rules and avoid known problems; never edit |
