@@ -41,7 +41,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 - [ ] CI for all three platforms
 
 ## Next steps
-0. Workflow system Phase 3 (`project/not_built/workflow-system.md` s5): Manage Workflows dialog (list with status/reasons, enable/disable, re-enable quarantined, hide, duplicate, reset, remove, open folder), per-workflow named layouts, Section Bar scroll arrows.
+0. Workflow system Phase 4 (`project/not_built/workflow-system.md` s5): install from folder/zip/git with a pinned hash, capability prompt, update diff; release packaging of `carbon-workflow/`; changing the three locations in Settings (Q16).
 1. Real backend behind `ChatBackend` (ACP or an API); `@` mentions; chat list.
 2. Language-tool install model and Manage Extensions contents (`documents/language-tools.md`).
 3. Paradigm editor research pass (pillar 2).
@@ -153,6 +153,10 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-20 (workflow system Phase 3)
+- Done: Manage Workflows dialog (`manage_workflows.rs`: rows with origin/status tags, Turn On/Off incl. quarantine, Duplicate, Reset and Remove with confirm, did-not-load list, Open Folder, Reload); reloadable registry (`Arc` snapshot + `workflows::reload`); per-workflow named layouts and auto-hide in `state.json` (old `layouts.json` -> Editor once); Section Bar scroll with up/down arrows; core: manifests serialize (Duplicate), `free_user_id`, `create_user_workflow`, `remove_workflow` with path checks. 155 tests, clippy, fmt green; click-tested with 16 user workflows in a scratch folder (state files compared).
+- Next: Phase 4.
 
 ### 2026-10-20 (workflow packages)
 - Done: Carbon's own workflows moved to package folders `apps/carbon-workflow/{editor,paradigm,agent}/` (loaded from `carbon-workflow/` next to the binary or the repo; Editor compiled in as fallback with a notification); installed packages load from `%LOCALAPPDATA%\Carbon\workflows\installed\<id>\<version>\` (newest semver); env overrides for all three locations; `removable` / `can_turn_off` rules, Editor never blocked. 150 tests, clippy, fmt green; click-tested (repo packages, empty shipped folder).

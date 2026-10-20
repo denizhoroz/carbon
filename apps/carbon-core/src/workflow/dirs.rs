@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 
 use semver::Version;
 
+use super::{Origin, WorkflowDef};
+
 /// Overrides the preferences root (and, unless `INSTALLED_ENV` is set, puts
 /// installed packages under it too, so a test touches nothing real).
 pub const DIR_ENV: &str = "CARBON_WORKFLOWS_DIR";
@@ -165,6 +167,53 @@ impl WorkflowDirs {
                 Some((path, id, text))
             })
             .collect()
+    }
+
+    /// Writes a new user workflow to `user/<folder>/workflow.toml`, the
+    /// folder named after the id's last part (`-2`, `-3`, ... when taken).
+    pub fn create_user_workflow(&self, def: &WorkflowDef) -> Result<PathBuf, String> {
+        let text = def.to_toml()?;
+        let base = def.id.as_str().rsplit('.').next().unwrap_or("workflow");
+        let user = self.user_dir();
+        let folder = (1..)
+            .map(|n| match n {
+                1 => user.join(base),
+                n => user.join(format!("{base}-{n}")),
+            })
+            .find(|dir| !dir.exists())
+            .expect("some suffix is free");
+        let path = folder.join("workflow.toml");
+        std::fs::create_dir_all(&folder)
+            .and_then(|_| std::fs::write(&path, text))
+            .map_err(|err| format!("cannot write {}: {err}", path.display()))?;
+        Ok(path)
+    }
+
+    /// Deletes a user workflow's folder or an installed package (all its
+    /// versions). Refuses anything outside the user and installed folders.
+    pub fn remove_workflow(&self, origin: &Origin) -> Result<(), String> {
+        let (target, inside) = match origin {
+            Origin::User(manifest) => (manifest.parent(), self.user_dir()),
+            Origin::Installed(manifest) => (
+                manifest.parent().and_then(Path::parent),
+                self.installed.clone(),
+            ),
+            Origin::Builtin => return Err("Carbon's own workflows cannot be removed".into()),
+        };
+        let target = target.ok_or("no folder to remove")?;
+        let (Ok(target), Ok(inside)) = (dunce::canonicalize(target), dunce::canonicalize(&inside))
+        else {
+            return Err(format!("{} does not exist", target.display()));
+        };
+        if target == inside || !target.starts_with(&inside) {
+            return Err(format!(
+                "{} is not inside {}",
+                target.display(),
+                inside.display()
+            ));
+        }
+        std::fs::remove_dir_all(&target)
+            .map_err(|err| format!("cannot remove {}: {err}", target.display()))
     }
 
     /// Deletes a workflow's overlay ("reset to default"). Missing is fine.

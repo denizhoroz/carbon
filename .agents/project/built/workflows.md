@@ -1,6 +1,6 @@
-# Workflow system (Phase 0-2)
+# Workflow system (Phase 0-3)
 
-Built 2026-10-20. Design and later phases: `../not_built/workflow-system.md` (s5.1 and s5.2 list where the build differs from the plan). A workflow is a switchable app mode, one Section Bar icon each (`section-bar.md`), described by a `workflow.toml` manifest. Built-ins: Editor (real), Paradigm Editor and Agent Automation (placeholders). Users add their own workflows and patch built-ins from a folder; no dialog yet (Manage Workflows content is Phase 3).
+Built 2026-10-20. Design and later phases: `../not_built/workflow-system.md` (s5.1 and s5.2 list where the build differs from the plan). A workflow is a switchable app mode, one Section Bar icon each (`section-bar.md`), described by a `workflow.toml` manifest. Built-ins: Editor (real), Paradigm Editor and Agent Automation (placeholders). Users add their own workflows and patch built-ins from a folder, and manage them in the Manage Workflows dialog (Phase 3, below).
 
 ## Where files live
 
@@ -24,7 +24,7 @@ Preferences root:
 | `state/state.json` | L4 state | Active workflow, each workflow's last layout + fingerprint of the default it came from, `disabled`, `quarantined` (id -> reason) |
 | `state/entering` | crash guard | Id of the workflow being opened; deleted 2 s after it opened |
 
-`target/carbon-gui/layout.json` (Phase 1) is read once to migrate when `state.json` does not exist, and never written again, so older builds keep reading it. Named layouts (`layouts.json`) are still global (Phase 3).
+`target/carbon-gui/layout.json` (Phase 1) is read once to migrate when `state.json` does not exist, and never written again, so older builds keep reading it. Named layouts and auto-hide flags are per workflow since Phase 3 (`state.json` `layouts`); the old global `target/carbon-gui/layouts.json` becomes the Editor's set once and is not written again.
 
 ## Manifest (schema 1)
 
@@ -86,16 +86,33 @@ Only Carbon's own and installed workflows take overlays (a user workflow is edit
 |---|---|
 | Bad manifest or overlay | Skipped with reasons in the log (stderr); one notification lists the files; every other workflow loads |
 | Duplicate id or legacy id, installed or user file using `carbon.*` | The later file is rejected (load order: shipped, installed, user) |
-| Remove / turn off (rules for Phase 3) | `Registry::removable`: user and installed only (Carbon's own folders are read-only). `can_turn_off`: all but the Editor; `block` never blocks the Editor |
+| Remove / turn off | `Registry::removable`: user and installed only (Carbon's own folders are read-only). `can_turn_off`: all but the Editor; `block` never blocks the Editor |
 | Switch workflow | Current layout kept in memory (with its default's fingerprint), target's saved layout loads, else its default; `state.json` written 500 ms after changes |
 | Default layout changed since a layout was saved (fingerprint differs) | That workflow's layout resets to the new default, with a notification. No merge yet; `base_panels` is saved for a later merge |
 | Broken saved layout for one workflow | Only that workflow resets (notification) |
 | `state.json` unreadable | Moved to `state.json.bad`; all workflows start from defaults (notification) |
-| Carbon stops within 2 s of opening a user workflow | Next start: that workflow is quarantined (`state.json`), not offered, notification says why. Re-enable: remove it from `quarantined` (dialog in Phase 3) |
+| Carbon stops within 2 s of opening a user workflow | Next start: that workflow is quarantined (`state.json`), not offered, notification says why. Re-enable: Manage Workflows > Turn On |
 | Carbon stops within 2 s of opening a built-in (also at start) | Next start runs in safe mode with a notification; built-ins are never quarantined |
 | `--safe-mode` (or the case above) | Built-ins only, no overlays, default layouts, nothing read from or written to the folder; the crash mark is cleared |
 | Active workflow hidden, disabled or gone | The Editor (or the first available) opens |
 | Workflow commands | Built from action names at menu refresh; one whose action does not exist is left out and logged once. Placed items appear after a separator at the end of their menu; unplaced ones are palette-only under the workflow's name. A command reusing an existing action shows in both places |
+
+## Manage Workflows dialog (Phase 3)
+
+Section Bar > Manage Workflows. One row per loaded workflow (hidden, off and quarantined ones too): icon, name, origin tag (Carbon / Installed / User), status tag (On / Off / Hidden / Turned off after a crash, with the reason), "Changed" when an overlay applies, id and version. Below the rows: files that did not load, with their problems. Footer: Open Folder (the preferences folder; creates `user/`), Reload (reads the files again, no restart), Close.
+
+| Action | Shown for | Does |
+|---|---|---|
+| Turn Off / Turn On | all but the Editor | `state.json` `disabled`; Turn On also clears a quarantine. Turning off the active workflow switches to the default |
+| Duplicate | all | Copies the effective workflow (overlay applied) to `user/<name>/workflow.toml`: id `user.<slug>` (`-2`, ... when taken), name "<name> (copy)", order + 1, `derived_from = { id, version }`, no legacy ids. Notification on success |
+| Reset | workflows with an overlay or a saved layout | Confirms, then deletes the overlay and the saved dock layout; named layouts stay. The active workflow switches to its default at once |
+| Remove | user and installed workflows | Confirms, then deletes the folder (user) or the package with all versions (installed). Paths are checked to lie inside the user / installed folder. A user workflow's saved state goes too; an installed one's stays for a reinstall |
+
+Safe mode shows a note and disables the actions. Hide/show is not in the dialog (Turn Off covers it); `hidden = true` in an overlay or manifest still works.
+
+## Section Bar overflow (Phase 3)
+
+When the workflows do not fit, the list scrolls (mouse wheel) and up/down arrows appear at its ends (disabled at the top / bottom); each click moves one button. The Manage buttons stay at the bottom.
 
 ## Code
 
@@ -104,8 +121,10 @@ Only Carbon's own and installed workflows take overlays (a user workflow is edit
 | `apps/carbon-core/src/workflow.rs` | `WorkflowId`, `WorkflowDef` (parse, `validate`, `layout_fingerprint`, `base_panels`, `unavailable_kinds`), `CommandDef`, `MenuDef`, `Registry` (`builtin`, `load`, `apply_overlay`, `block`, `available`, `resolve`, `default_workflow`, `origin`), `LayoutFile` (Phase 1 `layout.json`, read for migration) |
 | `apps/carbon-workflow/{editor,paradigm,agent}/workflow.toml` | Carbon's own workflow packages (data, not a crate) |
 | `apps/carbon-core/src/workflow/{overlay,dirs,state}.rs` | `Overlay`/`RegionPatch` + `apply`; `shipped_dir`, `WorkflowDirs` (preferences + installed roots, discovery, newest installed version, `remove_overlay`); `StateFile` (atomic save, `set_aside`), `SavedWorkflow`, `start_entering` / `finish_entering` / `take_unfinished` |
-| `apps/carbon-gui/src/workflows.rs` | `init` at start (crash guard, safe mode, state, registry, notices), `registry`, `dirs`, `take_state`, `icon`, `commands` -> `WorkflowCommand` |
-| `apps/carbon-gui/src/workbench.rs` | `state: StateFile`, `enter` (crash mark + saved or default layout), `park_current`, `load_saved` (fingerprint, broken entry), `save`, `restore`, `migrate_layout_file` |
+| `apps/carbon-gui/src/workflows.rs` | `init` at start (crash guard, safe mode, state, registry, notices), `registry` (an `Arc` snapshot), `reload`, `dirs`, `take_state`, `icon`, `commands` -> `WorkflowCommand` |
+| `apps/carbon-gui/src/workbench.rs` | `state: StateFile`, `enter` (crash mark + saved or default layout + auto-hide), `park_current` (dock + named layouts), `store_for`, `load_saved` (fingerprint, broken entry), `save`, `restore`, `migrate_layout_file`; dialog actions `set_workflow_on`, `duplicate_workflow`, `reset_workflow`, `remove_workflow`, `reload_workflows`, `workflow_flags`, `has_saved_layout` |
+| `apps/carbon-gui/src/manage_workflows.rs` | Manage Workflows dialog (`WorkflowsView`, confirm dialog, Open Folder) |
+| `apps/carbon-gui/src/section_bar.rs` | Scrolling workflow list with arrows (`ScrollHandle`) |
 | `apps/carbon-gui/src/layouts.rs` | `PanelKind` (unknown kind -> placeholder), `LayoutSpec`; only `Preset::Code` left |
 | `apps/carbon-gui/src/menus.rs`, `commands.rs` | Workflow items appended per menu; palette-only workflow commands |
 | `apps/carbon-gui/src/main.rs` | `workflows::init(--safe-mode)`, start-up notifications, active workflow's commands in `MenuState` |
@@ -117,9 +136,11 @@ Only Carbon's own and installed workflows take overlays (a user workflow is edit
 - Packages (same day): 150 workspace tests (new: shipped folders load as `Builtin`, compiled-in Editor fallback with and without a partial folder, newest installed version, `carbon.*` rejected for installed, overlay on installed, removable / can-turn-off rules, Editor never blocked). Click-tested: repo `apps/carbon-workflow` gives the three icons; `CARBON_SHIPPED_WORKFLOWS_DIR` on an empty folder gives the Editor only plus a notification.
 - Not checked by hand: palette entries of workflow commands, overlay `hidden`/`order` in the bar (core-tested), fingerprint reset notice, macOS/Linux config dir.
 
+- Phase 3 (same day): 155 workspace tests (new: manifest -> TOML -> manifest round trip for Duplicate, free user ids, create folder `-2` suffix, remove user/installed with path checks (never the user folder itself or anything outside), named layouts in `state.json`, `LayoutStore` as a state value). Click-tested with 16 user workflows in a scratch folder: arrows appear, step down to the end (down disabled, up enabled); dialog lists all rows and the broken file; Turn Off on Paradigm Editor (tag Off, gone from the bar, still off after restart); Duplicate of the Editor (folder `user/editor-copy`, row "Editor (copy)", notification); Remove with confirm (folder deleted, row gone); the Editor got the old global named layouts. Not clicked: Reset, Turn On after a quarantine, Reload, Open Folder, per-workflow named layouts via the Save dialog (unit-tested).
+
 ## Limits
 
-- No UI to enable, disable, re-enable a quarantined workflow, duplicate, reset or remove (Phase 3 Manage Workflows); edit files by hand.
+- No hide/show in the dialog; no Repair/Remove buttons on a "not available" placeholder; no diff of a copy against its parent (`derived_from` is stored).
 - Layout merge after a default changes is a reset, not a merge.
 - `multi` / `closable` are parsed but not enforced; no scoped key bindings (Q9); `requires_workspace` stored only.
 - A placeholder for an unknown kind is saved as a plain placeholder; when the kind later exists, that workflow keeps the placeholder until Reset Layout.

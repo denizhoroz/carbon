@@ -158,7 +158,8 @@ fn workflow_items(state: &MenuState, menu: &str) -> Vec<MenuItem> {
 }
 
 pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
-    let sections = workflows::registry().available().map(|def| {
+    let registry = workflows::registry();
+    let sections = registry.available().map(|def| {
         MenuItem::action(def.name.clone(), SwitchSection { id: def.id.clone() })
             .checked(def.id == state.section)
     });

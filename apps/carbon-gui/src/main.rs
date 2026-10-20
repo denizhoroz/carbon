@@ -6,6 +6,7 @@ mod explorer_panel;
 mod layouts;
 mod lsp_ops;
 mod manage;
+mod manage_workflows;
 mod menus;
 mod palette;
 mod save_ops;

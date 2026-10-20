@@ -1,11 +1,12 @@
-//! The workflow registry as the GUI sees it, loaded once at start
-//! (`project/not_built/workflow-system.md`): built-ins, user workflows and
-//! overlays from `WorkflowDirs`, with disabled and quarantined ones blocked.
+//! The workflow registry as the GUI sees it (`project/built/workflows.md`):
+//! Carbon's own, installed and user workflows plus overlays, with disabled
+//! and quarantined ones blocked. Loaded at start; `reload` rebuilds it after
+//! Manage Workflows changes something.
 //! Also: the crash-loop guard at start, safe mode, the panel kinds manifests
 //! may name, workflow icons and workflow commands.
 
 use std::collections::HashSet;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use carbon_core::workflow::{
     Registry, StateFile, WorkflowDef, WorkflowDirs, WorkflowId, take_unfinished,
@@ -20,7 +21,7 @@ use crate::app_assets::AppAssets;
 pub const PANEL_KINDS: [&str; 5] = ["editor", "explorer", "terminal", "chat", "placeholder"];
 
 pub struct Workflows {
-    registry: Registry,
+    registry: RwLock<Arc<Registry>>,
     /// `None` in safe mode: nothing is read from or written to the folder.
     dirs: Option<WorkflowDirs>,
     /// Shown as notifications once the window is open.
@@ -40,7 +41,7 @@ pub fn init(safe_mode: bool) {
 fn get() -> &'static Workflows {
     // Without `init` (unit tests): built-ins only, no folder.
     WORKFLOWS.get_or_init(|| Workflows {
-        registry: Registry::builtin(&PANEL_KINDS),
+        registry: RwLock::new(Arc::new(Registry::builtin(&PANEL_KINDS))),
         dirs: None,
         notices: Vec::new(),
         state: Mutex::new(None),
@@ -104,19 +105,9 @@ fn load(mut safe_mode: bool) -> Workflows {
     }
 
     if let Some(state) = &state {
-        registry.block(state.disabled.iter().cloned());
-        registry.block(state.quarantined.keys().cloned());
+        block(&mut registry, state);
     }
-    for rejected in registry.rejected() {
-        eprintln!(
-            "workflow {} not loaded: {}",
-            rejected.source,
-            rejected.problems.join("; ")
-        );
-    }
-    for (source, warning) in registry.warnings() {
-        eprintln!("workflow {source}: {warning}");
-    }
+    log(&registry);
     if registry.uses_editor_fallback() {
         notices.push(
             "Carbon's workflow packages were not found, so only the Editor is available. \
@@ -136,15 +127,51 @@ fn load(mut safe_mode: bool) -> Workflows {
         ));
     }
     Workflows {
-        registry,
+        registry: RwLock::new(Arc::new(registry)),
         dirs,
         notices,
         state: Mutex::new(state),
     }
 }
 
-pub fn registry() -> &'static Registry {
-    &get().registry
+fn block(registry: &mut Registry, state: &StateFile) {
+    registry.block(state.disabled.iter().cloned());
+    registry.block(state.quarantined.keys().cloned());
+}
+
+fn log(registry: &Registry) {
+    for rejected in registry.rejected() {
+        eprintln!(
+            "workflow {} not loaded: {}",
+            rejected.source,
+            rejected.problems.join("; ")
+        );
+    }
+    for (source, warning) in registry.warnings() {
+        eprintln!("workflow {source}: {warning}");
+    }
+}
+
+/// The current registry (a snapshot: keep it only as long as needed).
+pub fn registry() -> Arc<Registry> {
+    get()
+        .registry
+        .read()
+        .map(|registry| registry.clone())
+        .unwrap_or_else(|poisoned| poisoned.into_inner().clone())
+}
+
+/// Reads the workflow files again and blocks what `state` turns off. Safe
+/// mode keeps Carbon's own workflows only.
+pub fn reload(state: &StateFile) {
+    let mut registry = Registry::load(dirs(), &PANEL_KINDS);
+    block(&mut registry, state);
+    log(&registry);
+    let registry = Arc::new(registry);
+    match get().registry.write() {
+        Ok(mut slot) => *slot = registry,
+        Err(poisoned) => *poisoned.into_inner() = registry,
+    }
 }
 
 /// The user workflow folder; `None` in safe mode (`--safe-mode` or after an
@@ -197,7 +224,8 @@ impl Clone for WorkflowCommand {
 /// rejects its arguments) is left out and logged once.
 pub fn commands(id: &WorkflowId, cx: &App) -> Vec<WorkflowCommand> {
     static LOGGED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
-    let Some(def) = registry().get(id) else {
+    let registry = registry();
+    let Some(def) = registry.get(id) else {
         return Vec::new();
     };
     def.commands

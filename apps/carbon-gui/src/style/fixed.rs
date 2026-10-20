@@ -32,6 +32,11 @@ pub const SECTION_BAR_PADDING: Rems = rems(0.5);
 pub const SECTION_BUTTON_SIZE: Pixels = px(36.);
 pub const SECTION_ICON_SIZE: Pixels = px(20.);
 pub const SECTION_BAR_GAP: Rems = rems(0.25);
+/// The same gap in pixels, for scrolling the workflow list one button at a time.
+pub const SECTION_BAR_STEP_GAP: Pixels = px(4.);
+/// Section Bar scroll arrows (shown when the workflows overflow): height, icon.
+pub const SECTION_ARROW_HEIGHT: Pixels = px(20.);
+pub const SECTION_ARROW_ICON_SIZE: Pixels = px(14.);
 
 /// Status bar (bottom): side padding, icon size, icon-to-text gap.
 pub const STATUS_BAR_PADDING: Rems = rems(0.75);

@@ -19,7 +19,7 @@ use gpui_kit::*;
 
 use carbon_core::BufferId;
 use carbon_core::workflow::{
-    LayoutFile, SavedWorkflow, StateFile, WorkflowId, finish_entering, start_entering,
+    LayoutFile, Origin, SavedWorkflow, StateFile, WorkflowId, finish_entering, start_entering,
 };
 use gpui_kit::component::dock::panel_handle;
 
@@ -221,7 +221,7 @@ impl Workbench {
             area,
             section: default_workflow(),
             state: StateFile::default(),
-            store: LayoutStore::load(),
+            store: LayoutStore::default(),
             notices: Vec::new(),
             _layout_sub,
             _save_task: Task::ready(()),
@@ -229,10 +229,6 @@ impl Workbench {
         };
         this.restore(window, cx);
         this.close_empty_docks(window, cx);
-        // Auto-hide docks start hidden, like JetBrains unpinned tool windows.
-        for side in this.store.auto_hide.clone() {
-            this.set_dock_open(side.placement(), false, window, cx);
-        }
         this
     }
 
@@ -428,6 +424,7 @@ impl Workbench {
         }
         self.park_current(cx);
         self.section = id.clone();
+        self.store = self.store_for(id);
         self.enter(window, cx);
         for notice in std::mem::take(&mut self.notices) {
             window.push_notification(notice, cx);
@@ -441,9 +438,155 @@ impl Workbench {
         std::mem::take(&mut self.notices)
     }
 
-    /// Records the active workflow's current layout in `state`.
+    // ---- Manage Workflows ----------------------------------------------------
+
+    /// Turned off by the user, and the quarantine reason if any.
+    pub fn workflow_flags(&self, id: &WorkflowId) -> (bool, Option<String>) {
+        (
+            self.state.disabled.contains(id),
+            self.state.quarantined.get(id).cloned(),
+        )
+    }
+
+    /// Has a saved layout (Reset would change something besides an overlay).
+    pub fn has_saved_layout(&self, id: &WorkflowId) -> bool {
+        *id == self.section || self.state.workflows.contains_key(id)
+    }
+
+    /// Turns a workflow on or off. Turning on also lifts a quarantine.
+    pub fn set_workflow_on(
+        &mut self,
+        id: &WorkflowId,
+        on: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !workflows::registry().can_turn_off(id) {
+            return;
+        }
+        if on {
+            self.state.disabled.remove(id);
+            self.state.quarantined.remove(id);
+        } else {
+            self.state.disabled.insert(id.clone());
+        }
+        self.workflows_changed(window, cx);
+    }
+
+    /// Deletes the workflow's overlay and saved layout; its named layouts stay.
+    pub fn reset_workflow(&mut self, id: &WorkflowId, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(dirs) = workflows::dirs()
+            && let Err(err) = dirs.remove_overlay(id.as_str())
+        {
+            window.push_notification(format!("Could not reset: {err}"), cx);
+            return;
+        }
+        self.state.workflows.remove(id);
+        if *id == self.section {
+            self.reload_registry();
+            self.apply_workflow_default(window, cx);
+        }
+        self.workflows_changed(window, cx);
+    }
+
+    /// Copies the workflow (as it is now, overlay included) to a new user
+    /// workflow and returns its id.
+    pub fn duplicate_workflow(
+        &mut self,
+        id: &WorkflowId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<WorkflowId> {
+        let dirs = workflows::dirs()?;
+        let registry = workflows::registry();
+        let def = registry.get(id)?;
+        let name = format!("{} (copy)", def.name);
+        let copy = def.duplicate(registry.free_user_id(&name), name);
+        match dirs.create_user_workflow(&copy) {
+            Ok(_) => {
+                self.workflows_changed(window, cx);
+                window.push_notification(format!("Created \"{}\".", copy.name), cx);
+                Some(copy.id)
+            }
+            Err(err) => {
+                window.push_notification(format!("Could not duplicate: {err}"), cx);
+                None
+            }
+        }
+    }
+
+    /// Deletes a user workflow (and its saved state) or an installed package
+    /// (its saved state stays for a reinstall).
+    pub fn remove_workflow(
+        &mut self,
+        id: &WorkflowId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let registry = workflows::registry();
+        let (Some(dirs), Some(origin)) = (workflows::dirs(), registry.origin(id)) else {
+            return;
+        };
+        if let Err(err) = dirs.remove_workflow(origin) {
+            window.push_notification(format!("Could not remove: {err}"), cx);
+            return;
+        }
+        if matches!(origin, Origin::User(_)) {
+            self.state.workflows.remove(id);
+            self.state.layouts.remove(id);
+            self.state.disabled.remove(id);
+            self.state.quarantined.remove(id);
+            if let Err(err) = dirs.remove_overlay(id.as_str()) {
+                eprintln!("could not remove the overlay of {id}: {err}");
+            }
+        }
+        self.workflows_changed(window, cx);
+    }
+
+    /// Reads the workflow files again (after editing them by hand).
+    pub fn reload_workflows(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.workflows_changed(window, cx);
+    }
+
+    fn reload_registry(&self) {
+        workflows::reload(&self.state);
+    }
+
+    /// After a Manage Workflows change: rebuild the registry; leave the
+    /// active workflow if it is gone or off; save; refresh bar and menus.
+    fn workflows_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.reload_registry();
+        if !workflows::registry().is_available(&self.section) {
+            // Its layout is kept in `state` unless it was removed.
+            if workflows::registry().get(&self.section).is_some() {
+                self.park_current(cx);
+            }
+            self.section = default_workflow();
+            self.store = self.store_for(&self.section);
+            self.enter(window, cx);
+        }
+        self.schedule_save(cx);
+        cx.emit(MenusChanged);
+        cx.notify();
+    }
+
+    /// A workflow's named layouts and auto-hide flags. The Editor takes the
+    /// old global `layouts.json` the first time.
+    fn store_for(&self, id: &WorkflowId) -> LayoutStore {
+        match self.state.layouts.get(id) {
+            Some(value) => LayoutStore::from_value(value),
+            None if *id == WorkflowId::editor() => LayoutStore::load_legacy(),
+            None => LayoutStore::default(),
+        }
+    }
+
+    /// Records the active workflow's current layout and named layouts in `state`.
     fn park_current(&mut self, cx: &App) {
-        let Some(def) = workflows::registry().get(&self.section) else {
+        self.state
+            .layouts
+            .insert(self.section.clone(), self.store.to_value());
+        let registry = workflows::registry();
+        let Some(def) = registry.get(&self.section) else {
             return;
         };
         match serde_json::to_value(self.area.read(cx).dump(cx)) {
@@ -468,6 +611,10 @@ impl Workbench {
         if !self.load_saved(window, cx) {
             self.apply_workflow_default(window, cx);
         }
+        // Auto-hide docks start hidden, like JetBrains unpinned tool windows.
+        for side in self.store.auto_hide.clone() {
+            self.set_dock_open(side.placement(), false, window, cx);
+        }
         if let Some(dirs) = dirs.cloned() {
             self._enter_task = cx.spawn(async move |_, cx| {
                 cx.background_executor().timer(ENTER_CONFIRM_DELAY).await;
@@ -480,8 +627,9 @@ impl Workbench {
     /// it cannot be used (then the default applies). A layout saved from an
     /// older default is dropped with a notice (no merge yet).
     fn load_saved(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let registry = workflows::registry();
         let (Some(def), Some(saved)) = (
-            workflows::registry().get(&self.section),
+            registry.get(&self.section),
             self.state.workflows.get(&self.section),
         ) else {
             return false;
@@ -597,7 +745,7 @@ impl Workbench {
         } else {
             self.store.auto_hide.push(side);
         }
-        self.store.save();
+        self.schedule_save(cx);
         cx.emit(MenusChanged);
     }
 
@@ -780,7 +928,7 @@ impl Workbench {
         } else {
             self.store.saved.push(layout);
         }
-        self.store.save();
+        self.schedule_save(cx);
         cx.emit(MenusChanged);
         window.push_notification(format!("Layout \"{name}\" saved."), cx);
     }
@@ -807,7 +955,7 @@ impl Workbench {
             return;
         }
         self.store.auto_hide = layout.auto_hide;
-        self.store.save();
+        self.schedule_save(cx);
         self.close_empty_docks(window, cx);
         cx.emit(MenusChanged);
     }
@@ -815,7 +963,7 @@ impl Workbench {
     pub fn delete_layout(&mut self, index: usize, cx: &mut Context<Self>) {
         if index < self.store.saved.len() {
             self.store.saved.remove(index);
-            self.store.save();
+            self.schedule_save(cx);
             cx.emit(MenusChanged);
         }
     }
@@ -910,6 +1058,7 @@ impl Workbench {
             .clone()
             .filter(|id| workflows::registry().is_available(id))
             .unwrap_or_else(default_workflow);
+        self.store = self.store_for(&self.section);
         self.enter(window, cx);
     }
 }
@@ -929,7 +1078,7 @@ fn migrate_layout_file() -> StateFile {
         }
     };
     let registry = workflows::registry();
-    let (active, docks) = file.into_parts(registry);
+    let (active, docks) = file.into_parts(&registry);
     state.active = active;
     for (id, dock) in docks {
         let saved = match registry.get(&id) {

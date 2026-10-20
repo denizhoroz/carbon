@@ -48,8 +48,8 @@ Adding one of Carbon's own workflows: a folder `apps/carbon-workflow/<name>/` wi
 ## Limits
 
 - Old single-layout `layout.json` (T1/T2 format) is ignored on first start and replaced by the workflow default.
-- Named layouts and presets are global, not per workflow (per-workflow named layouts: Phase 3); applying one replaces the active workflow's layout.
+- Named layouts and auto-hide are per workflow (since Phase 3, `workflows.md`); presets are global; applying one replaces the active workflow's layout.
 - Presets Paradigm and Agents were removed 2026-10-20 (user): the workflows replace them; View > Layout > Preset has Code only.
-- No Manage Workflows content yet (Phase 3); no scroll arrows when workflows overflow the bar (Phase 3, s4.10).
-- Manage dialogs are empty placeholders (added 2026-10-19); no menu entry or shortcut opens them.
+- Workflows that do not fit scroll, with up/down arrows (Phase 3, `workflows.md`). Manage Workflows has content (Phase 3).
+- Manage Extensions and Manage Settings are empty placeholders (added 2026-10-19); no menu entry or shortcut opens the Manage dialogs.
 - No keyboard shortcut for sections yet.

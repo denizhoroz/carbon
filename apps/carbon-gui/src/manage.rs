@@ -1,5 +1,6 @@
 //! Manage dialogs opened from the bottom of the Section Bar: Manage Extensions,
-//! Manage Workflows, Manage Settings. Contents are placeholders for now.
+//! Manage Workflows (`manage_workflows.rs`), Manage Settings. Extensions and
+//! Settings are placeholders for now.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme, Icon, Sizable, Size, WindowExt, v_flex};
@@ -46,6 +47,9 @@ impl Manage {
 
 /// Opens `target`'s dialog: title and an empty placeholder body.
 pub fn open(target: Manage, window: &mut Window, cx: &mut App) {
+    if target == Manage::Workflows {
+        return crate::manage_workflows::open(window, cx);
+    }
     window.open_dialog(cx, move |dialog, _, cx| {
         let muted = cx.theme().muted_foreground;
         dialog.title(target.label()).w(fixed::MANAGE_WIDTH).child(

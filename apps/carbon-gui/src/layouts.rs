@@ -1,5 +1,7 @@
 //! Layout tier T2 data: built-in task presets and the user's named layouts.
-//! Named layouts and auto-hide flags live in `layouts.json` beside the current layout.
+//! Named layouts and auto-hide flags are per workflow, kept in the workflow
+//! `state.json` (`workflows.md`); the old global `layouts.json` is read once
+//! as the Editor's.
 
 use carbon_core::workflow::{Region, WorkflowDef};
 use gpui_kit::component::dock::{DockAreaState, DockLayout, DockPlacement, panel_handle};
@@ -12,8 +14,8 @@ use crate::style::fixed;
 use crate::terminal_panel::TerminalPanel;
 use crate::test_panel::TestPanel;
 
-const STORE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/carbon-gui");
-const STORE_FILE: &str = concat!(
+/// Named layouts from before they were per workflow; read once, never written.
+const LEGACY_STORE_FILE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../target/carbon-gui/layouts.json"
 );
@@ -239,27 +241,27 @@ pub struct LayoutStore {
 }
 
 impl LayoutStore {
-    pub fn load() -> Self {
-        let Ok(text) = std::fs::read_to_string(STORE_FILE) else {
+    /// The old global `layouts.json` (it becomes the Editor's set).
+    pub fn load_legacy() -> Self {
+        let Ok(text) = std::fs::read_to_string(LEGACY_STORE_FILE) else {
             return Self::default();
         };
         serde_json::from_str(&text).unwrap_or_else(|err| {
-            eprintln!("invalid {STORE_FILE}: {err}; starting empty");
+            eprintln!("invalid {LEGACY_STORE_FILE}: {err}; starting empty");
             Self::default()
         })
     }
 
-    pub fn save(&self) {
-        let result = serde_json::to_string_pretty(self)
-            .map_err(|err| err.to_string())
-            .and_then(|json| {
-                std::fs::create_dir_all(STORE_DIR)
-                    .and_then(|_| std::fs::write(STORE_FILE, json))
-                    .map_err(|err| err.to_string())
-            });
-        if let Err(err) = result {
-            eprintln!("failed to save {STORE_FILE}: {err}");
-        }
+    /// From its `state.json` entry; a broken entry starts empty.
+    pub fn from_value(value: &serde_json::Value) -> Self {
+        serde_json::from_value(value.clone()).unwrap_or_else(|err| {
+            eprintln!("invalid named layouts: {err}; starting empty");
+            Self::default()
+        })
+    }
+
+    pub fn to_value(&self) -> serde_json::Value {
+        serde_json::to_value(self).unwrap_or_default()
     }
 
     pub fn names(&self) -> Vec<String> {
@@ -281,13 +283,15 @@ mod tests {
     /// The Editor workflow keeps the layout the Code preset always had.
     #[test]
     fn editor_workflow_layout_is_the_code_preset() {
-        let editor = registry().get(&WorkflowId::editor()).unwrap();
+        let registry = registry();
+        let editor = registry.get(&WorkflowId::editor()).unwrap();
         assert_eq!(LayoutSpec::of_workflow(editor), LayoutSpec::code());
     }
 
     #[test]
     fn placeholder_workflows_have_one_panel_and_closed_docks() {
-        let def = registry()
+        let registry = registry();
+        let def = registry
             .get(&WorkflowId::new("carbon.paradigm-editor"))
             .unwrap();
         let spec = LayoutSpec::of_workflow(def);
@@ -337,6 +341,24 @@ mod tests {
         assert_eq!(back.names(), ["Review"]);
         assert_eq!(back.saved[0].auto_hide, [Side::Left, Side::Right]);
         assert_eq!(back.auto_hide, [Side::Bottom]);
+    }
+
+    /// Named layouts travel through `state.json` as JSON values.
+    #[test]
+    fn layout_store_round_trips_as_a_state_value() {
+        let store = LayoutStore {
+            auto_hide: vec![Side::Left],
+            saved: vec![SavedLayout {
+                name: "Wide".into(),
+                dock: DockAreaState::default(),
+                auto_hide: Vec::new(),
+            }],
+        };
+        let back = LayoutStore::from_value(&store.to_value());
+        assert_eq!(back.names(), ["Wide"]);
+        assert_eq!(back.auto_hide, [Side::Left]);
+        let broken = LayoutStore::from_value(&serde_json::json!({"saved": 3}));
+        assert!(broken.saved.is_empty(), "a broken entry starts empty");
     }
 
     #[test]

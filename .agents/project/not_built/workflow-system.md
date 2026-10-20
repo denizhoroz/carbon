@@ -1,6 +1,6 @@
 # Workflow system (design, not built)
 
-Status: design accepted (user answers 2026-10-20 incl. Q3, see s6; workflow range widened the same day, s3.1). **Phase 0-2 built 2026-10-20** (s5.1, s5.2, `../built/workflows.md`); Phase 3+ not built. Evidence: `research_notes/Modular workflow systems/{workspace_mode_systems,plugin_architectures,agent_workflow_packages}.md`. Labels: sourced = URL in s7; **[BG]** = background knowledge, not verified; **(inf)** = my inference/design choice.
+Status: design accepted (user answers 2026-10-20 incl. Q3, see s6; workflow range widened the same day, s3.1). **Phase 0-3 built 2026-10-20** (s5.1-s5.3, `../built/workflows.md`); Phase 4+ not built. Evidence: `research_notes/Modular workflow systems/{workspace_mode_systems,plugin_architectures,agent_workflow_packages}.md`. Labels: sourced = URL in s7; **[BG]** = background knowledge, not verified; **(inf)** = my inference/design choice.
 
 ## 1. Goal, scope, non-goals
 
@@ -285,7 +285,7 @@ Touched code found by grep: `section_bar.rs` (enum `Section`, `label/icon/id`, `
 | 0 Id adapter (built 2026-10-20) | Add `WorkflowId(String)` newtype; `Section::id_str()`; `LayoutFile` keys become strings via an adapter; `SwitchSection` carries the id; behaviour identical | `section_bar.rs`, `menus.rs`, `workbench.rs` (`LayoutFile`, `switch_section`, `restore`), `main.rs` | old `layout.json` (`"code"`) loads; save round-trips byte-compatible keys; palette tests (`commands.rs`: every menu action once, bound actions have commands) stay green | revert commit; file format unchanged |
 | 1 Built-in via registry (built 2026-10-20) | New `carbon-core::workflow` (types, TOML parse, validate, no UI); three embedded manifests: `carbon.editor` (real) plus placeholder `carbon.paradigm-editor` and `carbon.agent-automation` (placeholder panel, Section Bar icons); GUI registry feeds Section Bar, View > Section, `section_preset`; panel-kind registry replaces title match in `layouts.rs::tabs()` (title match kept as fallback); `legacy_ids` | core `workflow/`, `layouts.rs`, `workbench.rs`, `section_bar.rs`, `menus.rs` | golden test: layout built from manifest == `Preset::Code` layout dump; manifest validation unit tests (bad id, unknown kind, bad range); registry lists exactly the three built-ins in `order`; switching to a placeholder and back keeps each layout; old layout file restores; `--safe-mode` flag test | revert the commit; `layout.json` stays readable by the old build (s4.7); `Preset::Code` kept |
 | 2 User workflows from folder (built 2026-10-20) | Scan `<user>/workflows/user/*`; overlay L3; dock state in `state.json`; placeholder panel; scoped commands/menus (no keys, Q9); crash-loop guard | core discovery + overlay + state; GUI placeholder panel, `refresh_menus` | invalid manifest skipped, others load; id collision; overlay apply/reset; missing panel -> placeholder; corrupt state -> base layout; entering-flag quarantine; two workflows keep separate layouts across restart | delete `workflows/` dir; Phase 1 behaviour remains |
-| 3 Manage Workflows dialog | List (status, reason), enable/disable, hide, duplicate, reset, remove (user ones), open folder; in `manage.rs`; per-workflow named layouts (Q8); Section Bar scroll arrows + wheel (s4.10) | `manage.rs`, `layouts.rs` `LayoutStore`, `section_bar.rs`, registry events | dialog actions drive registry (core-level tests); reset deletes L3/L4 only; built-in cannot be removed | dialog is additive; hide the buttons' content |
+| 3 Manage Workflows dialog (built 2026-10-20) | List (status, reason), enable/disable, hide, duplicate, reset, remove (user ones), open folder; in `manage.rs`; per-workflow named layouts (Q8); Section Bar scroll arrows + wheel (s4.10) | `manage.rs`, `layouts.rs` `LayoutStore`, `section_bar.rs`, registry events | dialog actions drive registry (core-level tests); reset deletes L3/L4 only; built-in cannot be removed | dialog is additive; hide the buttons' content |
 | 4 Packages / install | Install from folder/zip/git (pinned hash/tag), `installed/<id>/<version>/`, catalog JSON, capability prompt, update diff, scoped keybindings (deferred, Q9; only if later wanted) | core `install`, GUI install flow | hash mismatch refused; update keeps overlay; downgrade/`carbon_api` mismatch disabled; no script executed on install | uninstall removes `installed/`; user layers untouched |
 | 5 Extension-backed panels, agent behaviour | WASM host + declarative UI vocabulary; `[agent]` loads AGENTS.md/SKILL.md/.mcp.json; capability enforcement | new extension host crate, chat/agent code | fault -> quarantine; denied capability returns typed error; panel crash shows error card, window survives | disable extension feature |
 
@@ -308,6 +308,19 @@ Phase 0 and 1 were built together (no separate id-adapter commit). What differs 
 | Editor id and default | `carbon.editor` is the default workflow; an unknown saved `active` falls back to it |
 
 Tests: core `tests/workflow.rs` (14), GUI `layouts.rs` (3, incl. golden Editor manifest == `Preset::Code`). Click test results in `../built/section-bar.md`.
+
+### 5.3 Built: Phase 3 (2026-10-20)
+
+Details: `../built/workflows.md`. Differences from the plan:
+
+| Plan | Built |
+|---|---|
+| Enable/disable, hide | Turn On / Turn Off only (`state.json` `disabled`); hide stays an overlay/manifest key, not a dialog action |
+| Reset deletes L3 and L4 | Deletes the overlay and the saved dock layout; named layouts (explicit saves) stay |
+| Remove: L1 uninstalled keeps L3/L4 | As planned; a removed user workflow also loses its state entries and overlay |
+| Per-workflow named layouts (Q8) | `state.json` `layouts` (id -> `LayoutStore` JSON: named layouts + auto-hide); the old `layouts.json` is the Editor's set once |
+| Registry events | `workflows::reload` swaps an `Arc<Registry>` after each dialog action; the Section Bar and menus refresh through `MenusChanged`; Reload re-reads files without a restart |
+| Section Bar overflow (s4.10) | Built as decided (arrows + wheel) |
 
 ### 5.2 Built: Phase 2 (2026-10-20)
 
@@ -340,7 +353,7 @@ Details and verification: `../built/workflows.md`. Differences from the plan and
 | Q15 | Where do workflow packages live? | Decided 2026-10-20: shipped ones in repo `apps/carbon-workflow/<name>/` (editor, paradigm, agent), installed read-only next to the binary; downloaded ones in the OS local data dir `Carbon/workflows/installed/`; preferences and the workflow list stay in the config dir (s4.7). Built 2026-10-20 |
 | Q16 | Can users move these locations? | Decided 2026-10-20: yes, all three (shipped, installed, preferences), in the installer or in Settings. Settings is not built: environment variables `CARBON_SHIPPED_WORKFLOWS_DIR`, `CARBON_INSTALLED_WORKFLOWS_DIR`, `CARBON_WORKFLOWS_DIR` meanwhile |
 | Q7 | Id for the Code Editor workflow? | Decided 2026-10-20: user-facing name is now "Editor", id `carbon.editor`, `legacy_ids = ["code"]` for the `layout.json` key; no other aliases. Follow-up: rename the UI label/docs from Code Editor to Editor (`README.md` in this folder) |
-| Q8 | Per-workflow named layouts? | Decided 2026-10-20: yes (s4.7, Phase 3) |
+| Q8 | Per-workflow named layouts? | Decided 2026-10-20: yes (s4.7, Phase 3); built 2026-10-20 |
 | Q9 | Scoped keybindings | Decided 2026-10-20: skip the spike for now; ship without scoped keys (s4.6) |
 | Q10 | Per-workspace vs per-workflow layout (WB-09) | Decided 2026-10-20: per workflow; each workflow has its own layout config the user can change; per-folder later on top (key `(folder, workflow)`) |
 | Q11 | How do extension-backed workflows get GPU/audio/canvas surfaces safely? | **Open.** Options: WASM plus host-provided surface handles, or native first-party only. Recommended default: first-party + manifest-only first, heavy surfaces behind capabilities later (s4.4) |

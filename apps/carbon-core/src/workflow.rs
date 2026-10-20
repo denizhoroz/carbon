@@ -88,7 +88,7 @@ impl fmt::Display for WorkflowId {
 }
 
 /// One `workflow.toml`.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WorkflowDef {
     pub id: WorkflowId,
     pub schema_version: u32,
@@ -97,22 +97,22 @@ pub struct WorkflowDef {
     /// Semver range of the host contract, e.g. `">=0.1, <0.2"`.
     pub carbon_api: String,
     pub name: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
     /// Lucide icon name (`code`, `bot`, ...); the GUI falls back to a generic one.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
     /// Section Bar position, ascending.
     #[serde(default = "default_order")]
     pub order: i32,
     /// Not shown in the Section Bar or View > Section.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub hidden: bool,
     /// Keys this workflow had in saved files before it became a workflow.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub legacy_ids: Vec<String>,
     /// Shows an "open a folder" state without one (not used yet).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub requires_workspace: bool,
     #[serde(default)]
     pub layout: Layout,
@@ -120,10 +120,10 @@ pub struct WorkflowDef {
     #[serde(default)]
     pub panels: BTreeMap<String, PanelRule>,
     /// Commands shown in the palette while this workflow is active.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub commands: Vec<CommandDef>,
     /// Places for those commands in the top-level menus.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub menus: Vec<MenuDef>,
     /// Every other top-level key: reserved ones are ignored, the rest warned about.
     #[serde(flatten)]
@@ -134,13 +134,25 @@ fn default_order() -> i32 {
     1000
 }
 
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
 /// Default layout: the center and the three docks. A missing dock starts empty and closed.
-#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Layout {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub center: Option<Region>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub left: Option<Region>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub right: Option<Region>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bottom: Option<Region>,
 }
 
@@ -158,31 +170,34 @@ impl Layout {
 }
 
 /// One region of the layout: its panels as tabs, in order.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Region {
     /// Names from the manifest's `[panels]` table.
     #[serde(default)]
     pub panels: Vec<String>,
     /// Width (left/right) or height (bottom) in pixels; the host default if unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<f32>,
-    #[serde(default = "yes")]
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub open: bool,
 }
 
 /// A panel the workflow uses.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PanelRule {
     /// Panel kind; defaults to the reference name.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
     /// Tab title; required for placeholders.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// More than one may be open (not enforced yet).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub multi: bool,
     /// The user may close it (not enforced yet).
-    #[serde(default = "yes")]
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub closable: bool,
 }
 
@@ -191,7 +206,7 @@ fn yes() -> bool {
 }
 
 /// A workflow command: runs an existing host action, so it cannot add behaviour.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CommandDef {
     /// Unique within the workflow; `menus` refer to it.
@@ -201,11 +216,12 @@ pub struct CommandDef {
     /// Host action name, e.g. `carbon::NewFile`.
     pub run: String,
     /// Arguments for actions that take them (as the keymap would pass them).
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub args: Option<toml::Table>,
 }
 
 /// A command placed at the end of a top-level menu.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MenuDef {
     /// One of `MENUS`.
@@ -225,6 +241,28 @@ impl WorkflowDef {
             .map(|key| format!("unknown key `{key}` ignored"))
             .collect();
         Ok((def, warnings))
+    }
+
+    /// The manifest as TOML (what Duplicate writes).
+    pub fn to_toml(&self) -> Result<String, String> {
+        toml::to_string(self).map_err(|err| err.to_string())
+    }
+
+    /// A copy under a new id and name, for the user to change: no legacy
+    /// ids, shown, placed right after this one, and `derived_from` naming
+    /// this workflow and its version.
+    pub fn duplicate(&self, id: WorkflowId, name: impl Into<String>) -> Self {
+        let mut copy = self.clone();
+        copy.id = id;
+        copy.name = name.into();
+        copy.legacy_ids.clear();
+        copy.hidden = false;
+        copy.order = self.order.saturating_add(1);
+        let mut parent = toml::Table::new();
+        parent.insert("id".into(), self.id.to_string().into());
+        parent.insert("version".into(), self.version.clone().into());
+        copy.other.insert("derived_from".into(), parent.into());
+        copy
     }
 
     /// The kind of a panel reference (its rule's `kind`, else the name itself).
@@ -704,6 +742,28 @@ impl Registry {
         self.workflows
             .iter()
             .find(|def| def.id.as_str() == key || def.legacy_ids.iter().any(|id| id == key))
+    }
+
+    /// A free id for a user copy of a workflow named `name`: `user.<slug>`,
+    /// with `-2`, `-3`, ... when taken.
+    pub fn free_user_id(&self, name: &str) -> WorkflowId {
+        let mut slug = String::new();
+        for c in name.to_lowercase().chars() {
+            if c.is_ascii_alphanumeric() {
+                slug.push(c);
+            } else if !slug.is_empty() && !slug.ends_with('-') {
+                slug.push('-');
+            }
+        }
+        let slug = slug.trim_end_matches('-');
+        let slug = if slug.is_empty() { "workflow" } else { slug };
+        (1..)
+            .map(|n| match n {
+                1 => WorkflowId::new(format!("user.{slug}")),
+                n => WorkflowId::new(format!("user.{slug}-{n}")),
+            })
+            .find(|id| !self.keys.contains_key(id.as_str()))
+            .expect("some suffix is free")
     }
 
     /// The Editor if available, else the first available workflow, else the

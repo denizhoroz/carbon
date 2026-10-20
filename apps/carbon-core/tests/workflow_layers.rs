@@ -454,3 +454,109 @@ fn only_user_and_installed_workflows_can_be_removed_and_the_editor_always_stays(
     assert!(!registry.removable(&paradigm) && registry.can_turn_off(&paradigm));
     assert!(registry.removable(&review) && registry.can_turn_off(&review));
 }
+
+#[test]
+fn duplicate_writes_a_valid_user_copy_that_loads() {
+    let (_temp, dirs) = dirs();
+    let registry = Registry::load(Some(&dirs), &KINDS);
+    let editor = registry.get(&WorkflowId::editor()).unwrap();
+    let id = registry.free_user_id("Editor (copy)");
+    assert_eq!(id.as_str(), "user.editor-copy");
+    let copy = editor.duplicate(id.clone(), "Editor (copy)");
+    assert_eq!(copy.layout_fingerprint(), editor.layout_fingerprint());
+    let path = dirs.create_user_workflow(&copy).unwrap();
+    assert!(path.ends_with("user/editor-copy/workflow.toml"));
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains("derived_from"), "{text}");
+    assert!(!text.contains("legacy_ids"), "{text}");
+
+    let registry = Registry::load(Some(&dirs), &KINDS);
+    assert!(registry.rejected().is_empty(), "{:?}", registry.rejected());
+    assert!(registry.warnings().is_empty(), "{:?}", registry.warnings());
+    let loaded = registry.get(&id).unwrap();
+    assert_eq!(loaded.name, "Editor (copy)");
+    assert_eq!(loaded.order, 101);
+    assert_eq!(loaded.layout, editor.layout);
+    assert_eq!(loaded.panels, editor.panels);
+    assert_eq!(
+        registry.free_user_id("Editor (copy)").as_str(),
+        "user.editor-copy-2"
+    );
+
+    // A second copy with the same folder name gets its own folder.
+    let again = editor.duplicate(WorkflowId::new("other.editor-copy"), "Again");
+    let path = dirs.create_user_workflow(&again).unwrap();
+    assert!(path.ends_with("user/editor-copy-2/workflow.toml"));
+}
+
+#[test]
+fn free_user_id_makes_a_slug() {
+    let registry = Registry::builtin(&KINDS);
+    assert_eq!(
+        registry.free_user_id("  My Flow!! 2 ").as_str(),
+        "user.my-flow-2"
+    );
+    assert_eq!(registry.free_user_id("???").as_str(), "user.workflow");
+}
+
+#[test]
+fn removing_deletes_only_user_and_installed_folders() {
+    let (_temp, dirs) = dirs();
+    let user = dirs.user_dir().join("review/workflow.toml");
+    write(&user, &user_manifest("me.review", "Review", 1));
+    let installed = dirs.installed_dir().join("me.pack/1.0.0/workflow.toml");
+    write(&installed, &user_manifest("me.pack", "Pack", 2));
+    write(
+        &dirs.installed_dir().join("me.pack/0.9.0/workflow.toml"),
+        "old",
+    );
+
+    dirs.remove_workflow(&Origin::User(user.clone())).unwrap();
+    assert!(!user.parent().unwrap().exists());
+    assert!(dirs.user_dir().exists(), "the user folder itself stays");
+    dirs.remove_workflow(&Origin::Installed(installed.clone()))
+        .unwrap();
+    assert!(
+        !dirs.installed_dir().join("me.pack").exists(),
+        "all versions go"
+    );
+
+    assert!(dirs.remove_workflow(&Origin::Builtin).is_err());
+    let outside = tempfile::tempdir().unwrap();
+    let stray = outside.path().join("x/workflow.toml");
+    write(&stray, "x");
+    assert!(dirs.remove_workflow(&Origin::User(stray.clone())).is_err());
+    assert!(stray.exists(), "nothing outside the user folder is deleted");
+    let root_manifest = dirs.user_dir().join("workflow.toml");
+    write(&root_manifest, "x");
+    assert!(
+        dirs.remove_workflow(&Origin::User(root_manifest)).is_err(),
+        "never the user folder itself"
+    );
+}
+
+#[test]
+fn named_layouts_round_trip_in_the_state_file() {
+    let (_temp, dirs) = dirs();
+    let mut state = StateFile::default();
+    state.layouts.insert(
+        WorkflowId::editor(),
+        json!({"saved": [], "auto_hide": ["left"]}),
+    );
+    state.save(&dirs.state_file()).unwrap();
+    let back = StateFile::load(&dirs.state_file()).unwrap().unwrap();
+    assert_eq!(back.layouts[&WorkflowId::editor()]["auto_hide"][0], "left");
+    // Files from before named layouts moved here still load.
+    fs::write(
+        dirs.state_file(),
+        r#"{"schema":1,"active":"carbon.editor"}"#,
+    )
+    .unwrap();
+    assert!(
+        StateFile::load(&dirs.state_file())
+            .unwrap()
+            .unwrap()
+            .layouts
+            .is_empty()
+    );
+}

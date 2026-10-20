@@ -26,6 +26,9 @@ pub struct StateFile {
     /// Workflow -> why it was quarantined.
     pub quarantined: BTreeMap<WorkflowId, String>,
     pub workflows: BTreeMap<WorkflowId, SavedWorkflow>,
+    /// Each workflow's named layouts and auto-hide flags (the GUI's
+    /// `LayoutStore` as JSON).
+    pub layouts: BTreeMap<WorkflowId, serde_json::Value>,
 }
 
 impl Default for StateFile {
@@ -36,6 +39,7 @@ impl Default for StateFile {
             disabled: BTreeSet::new(),
             quarantined: BTreeMap::new(),
             workflows: BTreeMap::new(),
+            layouts: BTreeMap::new(),
         }
     }
 }
