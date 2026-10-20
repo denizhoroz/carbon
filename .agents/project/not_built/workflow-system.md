@@ -122,13 +122,14 @@ One file `workflow.toml` per workflow, in a folder (TOML decided Q1: comments al
 | `commands` | Workflow-scoped palette commands: `id`, `label`, `run` (a host command id + args) |
 | `menus` | Items placed in existing menus/groups, each referencing a command id |
 | `keybindings` | `key`, `command`, optional `when` (small expression: `workflow == 'x'`, `panelFocus == 'terminal'`) |
-| `activation` | `on = "enter"` (default) or `"startup"`; lazy by default |
+| `activation` | `on = "enter"` (default) or `"startup"`; lazy by default. `startup` only for workflows that declare `background` (decided 2026-10-20) |
 | `requires_workspace` | bool, default `false`. No part of the contract assumes a folder or text buffer (W1) |
-| `file_types` | Handlers contributed: `glob`/MIME -> panel kind, `open = "primary"` or `"secondary"` (W2) |
-| `settings` | Own namespace `workflow.<id>.*`, typed keys with defaults, shown in Manage Settings (W5) |
-| `background` | Optional declared tasks (name, kind); default none = suspend on exit (s4.3, W4) |
-| `requires` | `extensions`, `tools`, `mcp`, other workflows: id + semver range; missing = workflow stays disabled with a visible reason, never auto-installed silently |
-| `capabilities` | Requested grants: `fs.read`/`fs.write` with path scopes, `process.exec` patterns, `net` hosts, `agent.invoke`, `gpu`, `audio.output`, `audio.input`, `midi`; none needed for layout-only workflows (W7) |
+| `file_types` | Handlers contributed: `glob`/MIME -> panel kind, `open = "primary"` or `"secondary"` (W2). Several claim a type: the active workflow wins, else the per-type user default (Q14) |
+| `settings` | Own namespace `workflow.<id>.*`, typed keys with defaults declared here, so Manage Settings draws them without workflow code (W5; waits for the Settings system) |
+| `background` | Optional declared tasks (name, kind); default none = suspend on exit (s4.3, W4, Q20) |
+| `requires` | `extensions`, `tools`, `mcp`, other workflows: id + semver range; missing = workflow stays disabled with a visible reason and an Install button per missing item, never installed without a click (Q21) |
+| `capabilities` | Requested grants: `fs.read`/`fs.write` with path scopes, `process.exec` patterns, `net` hosts, `agent.invoke`, `gpu`, `audio.output`, `audio.input`, `midi`; none needed for layout-only workflows (W7). Granted at install, update asks for new ones only (Q19, s4.8) |
+| UI (reserved) | Declarative UI tree (tier 1, no code) or a WASM component / webview the manifest names by path (Q17, Q18, s4.4). Syntax not designed |
 | `[agent]` (reserved) | Later: instruction files, tool allowlist, MCP servers, hooks; same file kinds as `AGENTS.md`/`SKILL.md`/`.mcp.json` |
 
 **Sketch only** (not final syntax): the Editor workflow as a manifest. Values mirror `Preset::Code` and `fixed::*_DOCK_SIZE`. The placeholder workflows `carbon.paradigm-editor` and `carbon.agent-automation` use the same schema with one `placeholder` panel in `center` and their own icon/order (e.g. 200, 300).
@@ -164,6 +165,17 @@ chat     = { multi = true }
 # Built-in menu items/shortcuts stay global in v1 (not scoped).
 ```
 
+**Package folder (Q22, decided 2026-10-20).** Contributors arrange a package as they like. Only `workflow.toml` at the package root is fixed (discovery, `installed/<id>/<version>/` and hash pins depend on it); every other file (icon, WASM, webview HTML, assets) is named by path in the manifest, and Carbon never looks for files by folder name. Path rules, checked at load so a package works on every OS:
+
+| Rule | Why |
+|---|---|
+| Relative, `/` separators; no `..`, no absolute paths, no symlinks leaving the package | Safety; same reference on every OS |
+| Case matches the file exactly | Linux is case-sensitive, Windows/macOS are not |
+| No Windows reserved names (`CON`, `NUL`, `AUX`, `COM1`, ...) or `<>:"|?*` | Package must install on Windows |
+| Short paths | Windows 260-char limit; installed packages already sit 3-4 folders deep |
+
+A `workflow.toml` guide for contributors (suggested folders like `assets/`, never enforced) comes later.
+
 ### 4.2 Layers and precedence
 
 | Layer | Location | Owner | Writable by user | Contents |
@@ -195,7 +207,7 @@ States: `discovered -> valid -> enabled -> active | faulted | quarantined | disa
 
 Kept per workflow: dock layout and sizes, open/closed docks, auto-hide flags, panel-local state that panels already persist. Shared across workflows (not switched): workspace, buffers, terminals, chats, LSP, settings. Open editor tabs: a tab belongs to the dock state of the workflow where it lives (today's behaviour); same buffer in two workflows is fine because buffers are in core.
 
-Background policy (W4): on exit a workflow is suspended by default (render loops, audio streams, timers stop). A workflow may declare `background` tasks (e.g. automation runs); these keep running, show a visible entry in the status bar jobs item and Manage Workflows, and have a Stop control; the user can deny background for a workflow. Shared terminals/LSP keep today's behaviour. Data between workflows moves through workspace files and MCP (W6); a workflow never holds a reference to another workflow's panels or state. A workflow with `requires_workspace = true` and no folder open stays enterable but shows an empty state.
+Background policy (W4): on exit a workflow is suspended by default (render loops, audio streams, timers stop). A workflow may declare `background` tasks (e.g. automation runs); these keep running, show a visible entry in the status bar jobs item and Manage Workflows, and have a Stop control; the user can deny background for a workflow (Q20, decided 2026-10-20). Shared terminals/LSP keep today's behaviour. Data between workflows moves through workspace files and MCP (W6); a workflow never holds a reference to another workflow's panels or state. A workflow with `requires_workspace = true` and no folder open stays enterable but shows an empty state.
 
 Active workflow = a `Global` readable by commands and `when` evaluation; `View > Section` stays but is generated from the registry. Optional later: `handles` auto-switch hook (Godot `_handles`).
 
@@ -206,8 +218,9 @@ Active workflow = a `Global` readable by commands and `when` evaluation; `View >
 | Panel-kind registry | String id -> factory (`explorer`, `editor`, `terminal`, `chat`, `placeholder`). Today `layouts.rs::tabs()` matches on *title* and each panel calls the kit's `register_panel(PANEL_NAME)` for restoring dock state by name: the new registry replaces the title match and wraps the same factories; kit registration stays |
 | Layout reference | Manifest names kinds, not Rust types; the GUI maps kind -> factory. `DockAreaState` keeps the kit's own panel names, so existing saved layouts still load |
 | Missing kind | Layout loads with a placeholder panel ("Panel `x` is not available", Repair / Remove buttons), never fails the whole layout; repair = drop slot or install provider. The existing `repair_layout` (empty center refills) keeps running |
-| Extension-backed panels (later) | WASM or MCP component supplies a *declarative UI tree* (list, tree, text, form, table, button, markdown; later diagram canvas) rendered by host GPUI code; events return as messages. GPUI types never cross the boundary (kit breaks every minor, R-4). Imperative GPUI views stay first-party only |
-| Surface kinds (W3) | Beyond declarative UI: `surface.gpu` (wgpu target), `surface.audio` (device streams + meters), `surface.canvas` (2D draw/hit-test). Host owns the device and hands the workflow a surface handle gated by a capability (`gpu`, `audio.*`). **Unresolved:** how extension-backed workflows get these safely (WASM plus host-provided surface handles vs native first-party only). Recommended default: first-party and manifest-only workflows first; heavy surfaces behind capabilities later (Phase 5+) |
+| Contributed panels (Q17, Q18, decided 2026-10-20) | Two kinds. **Declarative UI** for simple workflows: a UI tree (list, tree, text, form, table, button, markdown; later diagram canvas) drawn by host GPUI code; events return as messages. Logic in tiers: tier 1 = tree and actions written in the manifest, no code, actions call host commands only; tier 2 = a WASM component builds the tree and handles events (one Store per workflow, s4.8). **Webview** for advanced views: HTML/JS (WebGL/WebGPU for graphics), logic is JS inside the webview, talks to Carbon through a host bridge gated by `capabilities`. GPUI types never cross the boundary (kit breaks every minor, R-4). Native in-process plugins rejected for the same reason and for lack of a sandbox; imperative GPUI views stay first-party only |
+| Webview panel | Embedding not built and unverified: GPUI has no webview; candidate `wry` (Tauri's library: WebView2 / WKWebView / WebKitGTK attached to a native window) **(?)**. Theme variables passed in so pages can match Carbon. Cost: memory per panel |
+| Surface kinds (W3) | `surface.gpu`, `surface.audio`, `surface.canvas` as host-provided handles: **superseded by Q17** (2026-10-20): graphics go through the webview; native surface handles are not planned and are revisited only if a webview cannot meet a need (low-latency audio, Q12) |
 | File-type handlers (W2) | Registry glob/MIME -> (workflow, panel kind); opening a file uses the handler of the active workflow, else the user's default. Related: FEATURE.md EX-05 (viewer registry) |
 | Cost for third parties | Phase 2 workflows are layout over built-in kinds only; this is already useful (e.g. "Review": editor + chat + terminal rearranged, a second chat) |
 
@@ -260,7 +273,7 @@ Migration (built in Phase 1): `layout.json` stays readable by builds from before
 | Quarantine counters | N faults in M minutes disables; user re-enables manually |
 | Safe mode | `--safe-mode` (also offered after an unfinished start): only L0 built-ins, no overlays, no extensions; persisted files untouched. Later: Bisect over enabled workflows/extensions (VS Code Extension Bisect) |
 | Layout repair | Missing panel kinds -> placeholder; corrupt `DockAreaState` -> base layout for that workflow only; `workflow_version` merge (s4.2) |
-| Trust levels | built-in > signed/hash-pinned installed > unsigned installed > project-provided. Layout-only manifests need no prompt. Anything with capabilities, `requires.mcp`, scripts or `[agent].hooks` shows requested capabilities at install/enable and on update diff (Claude Code + Zed lessons). Workflow found in a cloned repo needs workspace trust (WB-05) first |
+| Trust levels | built-in > signed/hash-pinned installed > unsigned installed > project-provided. Layout-only manifests need no prompt. Anything with capabilities, `requires.mcp`, scripts or `[agent].hooks` shows requested capabilities at install/enable; an update asks only for capabilities it adds (update diff); grants can be revoked in Manage Workflows (Q19, decided 2026-10-20; Claude Code + Zed lessons). Workflow found in a cloned repo needs workspace trust (WB-05) first |
 | No auto-run | Install never executes scripts; no shell-injection syntax in agent files; invisible Unicode flagged in instruction files (prompt-injection findings: Snyk ToxicSkills, GlassWorm) |
 | API negotiation | `carbon_api` range checked at register; newer-than-host = "needs newer Carbon", disabled not crashed. Host keeps loaders for the last N `schema_version`s; deprecation shown in Manage Workflows before removal (Zed keeps all old WIT versions: budget the cost) |
 | Device capabilities | `gpu`, `audio.input` (microphone) and `audio.output` are granted per workflow and show an indicator while active; denied = typed error, workflow keeps running without that surface |
@@ -286,8 +299,8 @@ Touched code found by grep: `section_bar.rs` (enum `Section`, `label/icon/id`, `
 | 1 Built-in via registry (built 2026-10-20) | New `carbon-core::workflow` (types, TOML parse, validate, no UI); three embedded manifests: `carbon.editor` (real) plus placeholder `carbon.paradigm-editor` and `carbon.agent-automation` (placeholder panel, Section Bar icons); GUI registry feeds Section Bar, View > Section, `section_preset`; panel-kind registry replaces title match in `layouts.rs::tabs()` (title match kept as fallback); `legacy_ids` | core `workflow/`, `layouts.rs`, `workbench.rs`, `section_bar.rs`, `menus.rs` | golden test: layout built from manifest == `Preset::Code` layout dump; manifest validation unit tests (bad id, unknown kind, bad range); registry lists exactly the three built-ins in `order`; switching to a placeholder and back keeps each layout; old layout file restores; `--safe-mode` flag test | revert the commit; `layout.json` stays readable by the old build (s4.7); `Preset::Code` kept |
 | 2 User workflows from folder (built 2026-10-20) | Scan `<user>/workflows/user/*`; overlay L3; dock state in `state.json`; placeholder panel; scoped commands/menus (no keys, Q9); crash-loop guard | core discovery + overlay + state; GUI placeholder panel, `refresh_menus` | invalid manifest skipped, others load; id collision; overlay apply/reset; missing panel -> placeholder; corrupt state -> base layout; entering-flag quarantine; two workflows keep separate layouts across restart | delete `workflows/` dir; Phase 1 behaviour remains |
 | 3 Manage Workflows dialog (built 2026-10-20) | List (status, reason), enable/disable, hide, duplicate, reset, remove (user ones), open folder; in `manage.rs`; per-workflow named layouts (Q8); Section Bar scroll arrows + wheel (s4.10) | `manage.rs`, `layouts.rs` `LayoutStore`, `section_bar.rs`, registry events | dialog actions drive registry (core-level tests); reset deletes L3/L4 only; built-in cannot be removed | dialog is additive; hide the buttons' content |
-| 4 Packages / install | Install from folder/zip/git (pinned hash/tag), `installed/<id>/<version>/`, catalog JSON, capability prompt, update diff, scoped keybindings (deferred, Q9; only if later wanted) | core `install`, GUI install flow | hash mismatch refused; update keeps overlay; downgrade/`carbon_api` mismatch disabled; no script executed on install | uninstall removes `installed/`; user layers untouched |
-| 5 Extension-backed panels, agent behaviour | WASM host + declarative UI vocabulary; `[agent]` loads AGENTS.md/SKILL.md/.mcp.json; capability enforcement | new extension host crate, chat/agent code | fault -> quarantine; denied capability returns typed error; panel crash shows error card, window survives | disable extension feature |
+| 4 Packages / install | Install from folder/zip/git (pinned hash/tag), `installed/<id>/<version>/`, catalog JSON, capability prompt (Q19), update diff, package path rules (Q22), Install button for missing `requires` (Q21), scoped keybindings (deferred, Q9; only if later wanted) | core `install`, GUI install flow | hash mismatch refused; path rule violations rejected; update keeps overlay; downgrade/`carbon_api` mismatch disabled; no script executed on install | uninstall removes `installed/`; user layers untouched |
+| 5 Contributed panels, agent behaviour | Declarative UI vocabulary (tier 1 manifest, tier 2 WASM host) + webview panel with capability bridge (Q17, Q18); `[agent]` loads AGENTS.md/SKILL.md/.mcp.json; capability enforcement | new extension host crate, chat/agent code | fault -> quarantine; denied capability returns typed error; panel crash shows error card, window survives | disable extension feature |
 
 Every phase: `cargo test --workspace`, clippy `-D warnings`, fmt; manual click test per `gui-click-test-method` (separate target dir, back up shared `layout.json`).
 
@@ -356,10 +369,16 @@ Details and verification: `../built/workflows.md`. Differences from the plan and
 | Q8 | Per-workflow named layouts? | Decided 2026-10-20: yes (s4.7, Phase 3); built 2026-10-20 |
 | Q9 | Scoped keybindings | Decided 2026-10-20: skip the spike for now; ship without scoped keys (s4.6) |
 | Q10 | Per-workspace vs per-workflow layout (WB-09) | Decided 2026-10-20: per workflow; each workflow has its own layout config the user can change; per-folder later on top (key `(folder, workflow)`) |
-| Q11 | How do extension-backed workflows get GPU/audio/canvas surfaces safely? | **Open.** Options: WASM plus host-provided surface handles, or native first-party only. Recommended default: first-party + manifest-only first, heavy surfaces behind capabilities later (s4.4) |
+| Q11 | How do extension-backed workflows get GPU/audio/canvas surfaces safely? | Superseded 2026-10-20 by Q17: through the webview (WebGL/WebGPU); native surface handles only if a webview cannot meet a need (s4.4) |
 | Q12 | Device ownership: one shared audio/GPU manager in the host, or per workflow? Real-time audio thread vs GPUI main thread | **Open** (no evidence gathered; sound design needs a low-latency path) |
 | Q13 | Behaviour when a capability is denied or unsupported (e.g. no GPU)? | **Open**, recommended: disable with a visible reason, like a missing `requires` |
-| Q14 | Which workflow opens a file when several claim the glob? | **Open**, recommended: active workflow, else per-type user default |
+| Q14 | Which workflow opens a file when several claim the glob? | Decided 2026-10-20 (recommended default accepted): active workflow, else per-type user default ("Open With" asks once) |
+| Q17 | How do contributed workflows show their own UI? | Decided 2026-10-20: declarative UI for simple workflows + webview for advanced views; no native in-process plugins (s4.4) |
+| Q18 | Where does workflow logic run? | Decided 2026-10-20: tier 1 no code (tree and actions in the manifest), tier 2 WASM component; webview logic is JS through a capability-gated bridge (s4.4) |
+| Q19 | When are capabilities granted? | Decided 2026-10-20: at install; an update asks only for new ones; runtime denial = typed error; revoke in Manage Workflows (s4.8) |
+| Q20 | Background work after switching away? | Decided 2026-10-20: suspended by default; declared `background` tasks visible in the status bar and Manage Workflows with Stop; user can deny per workflow (s4.3) |
+| Q21 | A `requires` item is missing? | Decided 2026-10-20: workflow disabled with the reason and an Install button per item; nothing installed without a click (s4.1) |
+| Q22 | Package folder structure? | Decided 2026-10-20: free; only `workflow.toml` at the root is fixed; other files named by path in the manifest; path rules checked at load (s4.1). Contributor guide later |
 | Risk | Kit breaks every minor | Manifest never mentions GPUI; only the thin GUI adapter changes |
 | Risk | Panel-kind registry duplicates kit `register_panel` | Registry wraps, does not replace it; verify with restore test |
 | Risk | Over-design before a second workflow exists | Phases 0-1 are small and testable alone; Phase 1 already ships two placeholder workflows (Q4), so a second workflow exists; the range in s3.1 is design input only and adds no code before Phase 5 |

@@ -45,7 +45,7 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 - AHP/ACP wire-format maturity and licences; MCP Apps client support.
 - Licence stance for bundled components (AGPL: PyMuPDF, SearXNG, Firecrawl; ELv2: Phoenix).
 - How extensions get language-tool binaries: config only / download on demand, PATH first / bundled per platform; compilers detected or installed on request (`documents/language-tools.md` s3; user: decide later).
-- Workflow surfaces (Q11): how extension-backed workflows get GPU, audio and canvas surfaces safely (WASM plus host surface handles vs native first-party only); default: first-party and manifest-only first, heavy surfaces behind capabilities later (`project/not_built/workflow-system.md` s3.1, s4.4, s6).
+- Workflow webview embedding: GPUI has no webview; how to host one (candidate `wry`, unverified) for the decided declarative UI + webview model (Q17-Q18, `project/not_built/workflow-system.md` s4.4, s6). Low-latency audio path still open (Q12).
 - Full list of unverified items and benchmarks to run: RESEARCH.md section 8.
 
 ## Status
