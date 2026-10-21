@@ -3,7 +3,7 @@
 //! Files live in the build dir for now; they move to the OS user dir later.
 
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -21,7 +21,7 @@ use gpui_kit::*;
 use carbon_core::BufferId;
 use carbon_core::workflow::{
     InstallKind, InstallPlan, InstallRecord, LayoutFile, Origin, Package, SavedWorkflow, StateFile,
-    WorkflowId, finish_entering, start_entering,
+    WorkflowId, finish_entering, installed_hash, start_entering, verify_installed,
 };
 use gpui_kit::component::dock::panel_handle;
 
@@ -200,6 +200,7 @@ pub struct Workbench {
     _layout_sub: Subscription,
     _save_task: Task<()>,
     _enter_task: Task<()>,
+    _verify_task: Task<()>,
 }
 
 impl EventEmitter<MenusChanged> for Workbench {}
@@ -228,9 +229,11 @@ impl Workbench {
             _layout_sub,
             _save_task: Task::ready(()),
             _enter_task: Task::ready(()),
+            _verify_task: Task::ready(()),
         };
         this.restore(window, cx);
         this.close_empty_docks(window, cx);
+        this.verify_installed(window, cx);
         this
     }
 
@@ -442,6 +445,97 @@ impl Workbench {
 
     // ---- Manage Workflows ----------------------------------------------------
 
+    /// Checks every installed package against the hash recorded at install,
+    /// off the UI thread. A changed one is turned off until Reinstall or Keep
+    /// Changes (its flag is saved, so it stays off from the next start on);
+    /// one that matches again is turned back on.
+    fn verify_installed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let registry = workflows::registry();
+        let checks: Vec<(WorkflowId, PathBuf, String)> = self
+            .state
+            .installs
+            .iter()
+            .filter(|(id, _)| matches!(registry.origin(id), Some(Origin::Installed(_))))
+            .filter_map(|(id, record)| {
+                let dir = registry.package_dir(id)?.to_path_buf();
+                Some((id.clone(), dir, record.hash.clone()))
+            })
+            .collect();
+        if checks.is_empty() {
+            return;
+        }
+        let results = cx.background_executor().spawn(async move {
+            checks
+                .into_iter()
+                .map(|(id, dir, hash)| (id, verify_installed(&dir, &hash).err()))
+                .collect::<Vec<_>>()
+        });
+        self._verify_task = cx.spawn_in(window, async move |this, cx| {
+            let results = results.await;
+            _ = this.update_in(cx, |this, window, cx| {
+                let registry = workflows::registry();
+                let mut names = Vec::new();
+                let mut any = false;
+                for (id, problem) in results {
+                    match problem {
+                        Some(problem) => {
+                            if this.state.changed.insert(id.clone(), problem).is_none() {
+                                any = true;
+                                names.push(
+                                    registry
+                                        .get(&id)
+                                        .map_or(id.to_string(), |def| format!("\"{}\"", def.name)),
+                                );
+                            }
+                        }
+                        None => any |= this.state.changed.remove(&id).is_some(),
+                    }
+                }
+                if any {
+                    this.workflows_changed(window, cx);
+                }
+                if !names.is_empty() {
+                    window.push_notification(
+                        format!(
+                            "Turned off {}: its files changed since it was installed. \
+                             Manage Workflows can reinstall it or keep the changes.",
+                            names.join(", ")
+                        ),
+                        cx,
+                    );
+                }
+            });
+        });
+    }
+
+    /// Turned off because its files changed since install, and why.
+    pub fn changed_reason(&self, id: &WorkflowId) -> Option<String> {
+        self.state.changed.get(id).cloned()
+    }
+
+    /// Trusts a changed package's files as they are now: records their hash
+    /// (no longer pinned or signed) and turns it back on.
+    pub fn keep_changes(&mut self, id: &WorkflowId, window: &mut Window, cx: &mut Context<Self>) {
+        let registry = workflows::registry();
+        let Some(dir) = registry.package_dir(id) else {
+            return;
+        };
+        let hash = match installed_hash(dir) {
+            Ok(hash) => hash,
+            Err(err) => {
+                window.push_notification(format!("Could not read its files: {err}"), cx);
+                return;
+            }
+        };
+        if let Some(record) = self.state.installs.get_mut(id) {
+            record.hash = hash;
+            record.pinned = false;
+            record.signed = false;
+        }
+        self.state.changed.remove(id);
+        self.workflows_changed(window, cx);
+    }
+
     /// Turned off by the user, and the quarantine reason if any.
     pub fn workflow_flags(&self, id: &WorkflowId) -> (bool, Option<String>) {
         (
@@ -545,6 +639,7 @@ impl Workbench {
         // A reinstall asks again: its files may differ.
         self.state.grants.remove(id);
         self.state.installs.remove(id);
+        self.state.changed.remove(id);
         self.workflows_changed(window, cx);
     }
 
@@ -574,6 +669,7 @@ impl Workbench {
             .grants
             .insert(id.clone(), def.capabilities.iter().cloned().collect());
         self.state.installs.insert(id.clone(), package.record());
+        self.state.changed.remove(&id);
         self.state.quarantined.remove(&id);
         // A layout kept from another version (also after an uninstall) goes
         // quietly: the user just chose this version.
@@ -594,6 +690,7 @@ impl Workbench {
             InstallKind::Update { from } => {
                 format!("Updated \"{}\" from {from} to {}.", def.name, def.version)
             }
+            InstallKind::Reinstall => format!("Reinstalled \"{}\" {}.", def.name, def.version),
             _ => format!("Installed \"{}\" {}.", def.name, def.version),
         };
         window.push_notification(done, cx);

@@ -8,7 +8,7 @@ In rough order; each row points to its design.
 
 | # | Item | Scope | Design |
 |---|---|---|---|
-| 1 | **Phase 4: what is left** | Built 2026-10-21: folder, zip and git install (gix), checks, capability prompt and grants, update diff, content hash and commit pins, catalog (git repo + `catalog.json`), `requires` with Install buttons (Q21), Fetching dialog with Cancel. Left: signatures and trusted keys; catalog URL in Settings (env meanwhile); re-check installed files against their hash (at load or a Verify button); byte progress; workspace trust for project-provided workflows; `requires` kinds extensions/tools/mcp once those systems exist | s4.5 |
+| 1 | **Phase 4: what is left** | Built 2026-10-21: folder, zip and git install (gix), checks, capability prompt and grants, update diff, content hash and commit pins, catalog (git repo + `catalog.json`), `requires` with Install buttons (Q21), Fetching dialog with progress and Cancel, minisign-signed catalogs with trusted keys (Q26), catalog source dialog (`catalog.toml`, Q28), installed files checked at start with Reinstall / Keep Changes (Q27). Left: workspace trust for workflows found in a project (Carbon does not load those yet); `requires` kinds extensions/tools/mcp once those systems exist; move the catalog source into Settings when it exists | s4.5 |
 | 2 | Capabilities | Built: names and scopes, grants in `state.json`, Permissions dialog (allow/revoke). Left: enforce in the webview page API and WASM; denied = typed error (Q13) | s4.5, Q13, Q19 |
 | 3 | Webview, next steps | Page-to-Carbon API (open file, run command, events), gated by capabilities; network for pages via the `net` capability; decide whether the `webview` feature is on by default (measure the classic swap chain); a tab click should focus the panel; origin collision of rare ids (`a-.b` / `a.-b`); Linux (needs GPUI Fast or another path); not yet tested: auto-hide docks over a page, flicker during an edge drag, memory per page | s4.4 |
 | 4 | Views tier 2 | Stateful widgets (input, toggle, select, form, table, tree) with data from a WASM component or from Carbon; refresh on events | s4.4 |
@@ -121,12 +121,10 @@ Built 2026-10-21 (folder/zip/git sources, checks, dialog, grants, update diff, u
 
 | Topic | Design |
 |---|---|
-| Signatures | Signed `catalog.json` (or per-package signature over the content hash) with keys the user trusts; key list in Settings |
-| Catalog | URL in Settings (env `CARBON_WORKFLOW_CATALOG` meanwhile); several catalogs; search; update notices for installed packages |
-| Integrity | Re-check installed files against `installs.hash` (at load or a Verify button); offer Reinstall on a mismatch |
+| Catalog | Several catalogs; search; update notices for installed packages; source and keys in Settings |
 | Workspace trust | A workflow found in a cloned repo needs workspace trust first (WB-05) |
 | Update | Saved layout merged instead of replaced (s4.2); diff of views/pages beyond the layout fingerprint |
-| Trust levels | built-in > hash-pinned installed > unpinned installed > project-provided (the `pinned` flag is recorded and shown; nothing behaves differently by level yet) |
+| Trust levels | built-in > signed (catalog with a trusted key) > hash-pinned installed > unpinned installed > project-provided (`signed` / `pinned` recorded and shown; nothing behaves differently by level yet) |
 | API | `carbon_api` checked at load (newer-than-host = "needs newer Carbon", disabled); host keeps loaders for the last N `schema_version`s with a deprecation notice |
 | Agent files | No shell-injection syntax; invisible Unicode flagged (Snyk ToxicSkills, GlassWorm findings) |
 | Devices | `gpu`, `audio.input`, `audio.output` granted per workflow, indicator while in use; denied = typed error, the workflow keeps running |
@@ -162,7 +160,10 @@ Built 2026-10-21 (folder/zip/git sources, checks, dialog, grants, update diff, u
 | Q21 | Missing `requires` | Disabled with the reason and an Install button; nothing installs without a click (built for workflows) |
 | Q23 | Git transport | gix built in (HTTPS via reqwest + rustls), not the user's git (user, 2026-10-21) (built) |
 | Q24 | Catalog source | A git repo with `catalog.json`, every version pinned by commit + content hash (user, 2026-10-21) (built) |
-| Q25 | Hash pins | Commit id for git; SHA-256 content hash for every install, checked against catalog pins; signatures later (user, 2026-10-21) (built) |
+| Q25 | Hash pins | Commit id for git; SHA-256 content hash for every install, checked against catalog pins (user, 2026-10-21) (built) |
+| Q26 | Signatures | minisign over `catalog.json` (`catalog.json.minisig`); trusted keys set = signature required, none = used unchecked (user, 2026-10-21) (built) |
+| Q27 | Installed files changed | Checked at start; turned off with Reinstall / Keep Changes (user, 2026-10-21) (built) |
+| Q28 | Catalog source before Settings | Catalog dialog > Source… writes `catalog.toml`; env overrides the URL (user, 2026-10-21) (built) |
 | Q22 | Package folder | Free; only root `workflow.toml` fixed; path rules (built) |
 
 Risks: the kit breaks every minor (only the GUI adapter touches GPUI types); the webview is a native window above GPUI (every new overlay must hide pages; kept in `Workbench::sync_webviews`); thin evidence for Blender, Zed modes, Cursor, VS Code crash semantics.

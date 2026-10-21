@@ -30,7 +30,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 | 3 Agents tab | [~] | Chat panel v1 GUI with demo agent (`project/built/chat.md`); no real backend, sessions or approvals yet |
 | 4 Multi-platform (Win/macOS/Linux) | [ ] | |
 | 5 Lightweight | [ ] | Design focus, not first priority |
-| 6 Modular extension sections | [~] | Workflow system built (Phase 0-3, package files, declarative views tier 1, experimental webview panels, install from folder/zip/git, content hashes, catalog, `requires`: `project/built/workflows.md`); next: grant enforcement (page API), signatures; Manage Extensions empty |
+| 6 Modular extension sections | [~] | Workflow system built (Phase 0-3, package files, declarative views tier 1, experimental webview panels, install from folder/zip/git, content hashes, catalog, `requires`: `project/built/workflows.md`); signed catalogs, installed-file checks; next: grant enforcement (page API); Manage Extensions empty |
 
 ### Infrastructure
 - [x] Rust workspace scaffold (`apps/carbon-core` lib + `apps/carbon-gui` bin)
@@ -41,7 +41,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 - [ ] CI for all three platforms
 
 ## Next steps
-0. Workflow system (`project/not_built/workflow-system.md` s1): enforce grants in a webview page API; Phase 4 leftovers (signatures, catalog URL in Settings, integrity re-check); release packaging of `carbon-workflow/`; changing the three locations in Settings (Q16).
+0. Workflow system (`project/not_built/workflow-system.md` s1): enforce grants in a webview page API; workspace trust for project workflows when Carbon loads them; release packaging of `carbon-workflow/`; changing the three locations in Settings (Q16).
 1. Real backend behind `ChatBackend` (ACP or an API); `@` mentions; chat list.
 2. Language-tool install model and Manage Extensions contents (`documents/language-tools.md`).
 3. Paradigm editor research pass (pillar 2).
@@ -54,6 +54,9 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-21 | Catalog signatures: minisign over `catalog.json`; trusted keys set = signature required, none = used unchecked | user answer (minisign); policy my design, offered with the question | `project/built/workflows.md`, `project/not_built/workflow-system.md` Q26 |
+| 2026-10-21 | Installed files are hashed at every start; a changed package is turned off with Reinstall / Keep Changes | user answer | `project/built/workflows.md`, Q27 |
+| 2026-10-21 | Catalog URL and keys set in the Catalog dialog (`catalog.toml`) until Settings exists; env overrides the URL | user answer | `project/built/workflows.md`, Q28 |
 | 2026-10-21 | Git sources through gix built in (HTTPS via reqwest + rustls), not the user's git CLI | user answer (over my recommendation of the git CLI) | `project/built/workflows.md`, `project/not_built/workflow-system.md` Q23 |
 | 2026-10-21 | Catalog = a git repository with `catalog.json`; every version pinned by commit id + content hash | user answer | `project/built/workflows.md`, `project/not_built/workflow-system.md` Q24 |
 | 2026-10-21 | Hash pins: commit id for git, SHA-256 content hash (path + NUL + file hash, sorted) for every install, checked against catalog pins; signatures later | user answer; hash format my design | `project/built/workflows.md`, `project/not_built/workflow-system.md` Q25 |
@@ -170,6 +173,11 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-21 (Phase 4 leftovers: signatures, integrity, progress)
+- Done: minisign-signed catalogs (`minisign-verify`, trusted keys, signature required when keys are set, Signed / Not checked header, cache re-checked); Catalog Source dialog writing `catalog.toml`; installed files hashed at start, changed ones turned off with Reinstall / Keep Changes (`state.json` `changed`); `FetchControl` with gix progress shown in the Fetching dialog; Signed tag, `signed` in install records. 183 tests; clippy, fmt green (also with `webview`). Click-tested with a pure-Python minisign signer; four display fixes.
+- Not buildable yet: workspace trust for project workflows (Carbon does not load workflows from a project), `requires` for extensions/tools/mcp (no such systems).
+- Next: enforce grants in a webview page API.
 
 ### 2026-10-21 (Phase 4: git, catalog, pins, requires)
 - Done: git sources through gix (shallow fetch of one commit by tag, branch or commit id; tree checked and written out; HTTPS via reqwest + rustls; cause chains in errors); SHA-256 content hash for every package, re-checked at install; `installs` records in `state.json` (source, rev, commit, hash, pinned); catalog as a git repo with `catalog.json` (parse with bad entries left out, cache, Catalog dialog with Install/Update); `[requires]` for workflows (not offered while missing, chains, Install button from the catalog); Install ▾ menu, From Git dialog, Fetching dialog with Cancel; install UI moved to `workflow_install.rs`. 180 tests (+1 ignored network test); clippy, fmt green (also with `webview`). Click-tested with local repos and a catalog; three fixes (error cause, source line end, "Needs" wording).

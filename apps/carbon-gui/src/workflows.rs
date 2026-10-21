@@ -156,6 +156,7 @@ fn load(mut safe_mode: bool) -> Workflows {
 fn block(registry: &mut Registry, state: &StateFile) {
     registry.block(state.disabled.iter().cloned());
     registry.block(state.quarantined.keys().cloned());
+    registry.block(state.changed.keys().cloned());
 }
 
 fn log(registry: &Registry) {

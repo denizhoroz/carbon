@@ -73,14 +73,17 @@ impl InstallSource {
     }
 }
 
-/// What a catalog entry says a package must be (`catalog.rs`). The commit is
-/// checked while fetching; these are checked by [`plan_install`].
+/// What a package must be: a catalog entry (`catalog.rs`), or the record of
+/// a pinned install when reinstalling it. The commit is checked while
+/// fetching; these are checked by [`plan_install`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pin {
     pub id: WorkflowId,
     pub version: String,
     /// `content_hash` format.
     pub hash: String,
+    /// The pin comes from a catalog signed by a trusted key.
+    pub signed: bool,
 }
 
 /// A package that passed every check, ready to plan and install.
@@ -94,7 +97,7 @@ pub struct Package {
     pub bytes: u64,
     /// `sha256:<hex>` over its files ([`content_hash`]).
     pub hash: String,
-    /// Set when installing from the catalog.
+    /// Set when installing from the catalog or reinstalling a pinned package.
     pub pin: Option<Pin>,
     /// Zip: name prefix of the package root (`""` or `"folder/"`).
     prefix: String,
@@ -118,6 +121,7 @@ impl Package {
             commit,
             hash: self.hash.clone(),
             pinned: self.pin.is_some() || commit_pinned,
+            signed: self.pin.as_ref().is_some_and(|pin| pin.signed),
         }
     }
 }
@@ -139,6 +143,26 @@ pub struct InstallRecord {
     /// a trust level above a folder, zip, tag or branch (s4.5).
     #[serde(default)]
     pub pinned: bool,
+    /// The pin came from a catalog signed by a trusted key (above pinned).
+    #[serde(default)]
+    pub signed: bool,
+}
+
+/// Checks an installed package's folder against the hash recorded at
+/// install.
+pub fn verify_installed(dir: &Path, hash: &str) -> Result<(), String> {
+    let now = installed_hash(dir)?;
+    if now == hash {
+        Ok(())
+    } else {
+        Err("its files changed since it was installed".into())
+    }
+}
+
+/// The content hash of an installed package's folder as it is now.
+pub fn installed_hash(dir: &Path) -> Result<String, String> {
+    let (files, _) = list_folder(dir).map_err(|problems| problems.join("; "))?;
+    content_hash(dir, &files)
 }
 
 /// Reads and checks a package; every problem found, not just the first.
@@ -454,20 +478,19 @@ pub fn plan_install(
     if let Some(pin) = &package.pin {
         if pin.id != def.id {
             problems.push(format!(
-                "the catalog lists `{}` but the package is `{}`",
+                "expected `{}` (pinned) but the package is `{}`",
                 pin.id, def.id
             ));
         }
         if pin.version != def.version {
             problems.push(format!(
-                "the catalog lists version {} but the package is {}",
+                "expected version {} (pinned) but the package is {}",
                 pin.version, def.version
             ));
         }
         if pin.hash != package.hash {
             problems.push(
-                "its files differ from what the catalog lists (the content hash does not match)"
-                    .into(),
+                "its files differ from the pinned ones (the content hash does not match)".into(),
             );
         }
     }

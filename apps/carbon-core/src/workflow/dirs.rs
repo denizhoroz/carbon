@@ -121,9 +121,15 @@ impl WorkflowDirs {
         self.root.join("state").join("state.json")
     }
 
-    /// The last catalog fetched (`catalog.rs`), shown until the next refresh.
+    /// The last catalog fetched (`catalog.rs`), shown until the next refresh;
+    /// its signature sits next to it (`catalog.json.minisig`).
     pub fn catalog_file(&self) -> PathBuf {
         self.root.join("state").join("catalog.json")
+    }
+
+    /// The catalog repository and trusted keys (`CatalogConfig`).
+    pub fn catalog_config_file(&self) -> PathBuf {
+        self.root.join("catalog.toml")
     }
 
     /// Exists while a workflow is being opened (crash-loop guard).

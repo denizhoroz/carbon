@@ -6,13 +6,15 @@
 //! package rules checked first: no links, no submodules, Q22 paths, the file
 //! and size limits. The folder then goes through `read_package` like any
 //! other. Nothing from the repository is run (no hooks, no filters).
+//! [`FetchControl`] cancels a fetch and reports its progress.
 
 use std::fmt;
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 
+use gix::progress::tree;
 use gix::remote::fetch::Shallow;
 
 use super::{
@@ -53,6 +55,48 @@ impl fmt::Display for GitCheckout {
     }
 }
 
+/// Cancels a running fetch and tells how far it got. Shared between the
+/// thread that fetches and the UI.
+pub struct FetchControl {
+    interrupt: AtomicBool,
+    progress: Arc<tree::Root>,
+}
+
+impl Default for FetchControl {
+    fn default() -> Self {
+        Self {
+            interrupt: AtomicBool::new(false),
+            progress: tree::Root::new(),
+        }
+    }
+}
+
+impl FetchControl {
+    /// Asks the fetch to stop; gix checks between steps, so it may take a
+    /// while (seconds, more on a big pack).
+    pub fn cancel(&self) {
+        self.interrupt.store(true, Ordering::Relaxed);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.interrupt.load(Ordering::Relaxed)
+    }
+
+    /// The step that is moving, e.g. `read pack: 12.3 MB`; `None` before
+    /// the first one starts.
+    pub fn status(&self) -> Option<String> {
+        let mut tasks = Vec::new();
+        self.progress.sorted_snapshot(&mut tasks);
+        tasks.iter().rev().find_map(|(_, task)| {
+            let value = task.progress.as_ref()?;
+            let step = value.step.load(Ordering::Relaxed);
+            let unit = value.unit.as_ref()?;
+            (step > 0)
+                .then(|| format!("{}: {}", task.name, unit.display(step, value.done_at, None)))
+        })
+    }
+}
+
 /// A full hexadecimal commit id (40 characters, SHA-1).
 pub fn is_commit_id(rev: &str) -> bool {
     rev.len() == 40 && rev.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -60,10 +104,10 @@ pub fn is_commit_id(rev: &str) -> bool {
 
 /// Fetches `rev` of `url` (empty: the default branch) and reads it as a
 /// package. A commit id must be what the server sends back. Blocking and
-/// network-bound: run it off the UI thread; `interrupt` stops it.
-pub fn fetch_git(url: &str, rev: &str, interrupt: &AtomicBool) -> Result<Package, Vec<String>> {
+/// network-bound: run it off the UI thread; `control` cancels it.
+pub fn fetch_git(url: &str, rev: &str, control: &FetchControl) -> Result<Package, Vec<String>> {
     let rev = rev.trim();
-    let (temp, repo) = fetch(url, rev, interrupt).map_err(|err| vec![err])?;
+    let (temp, repo) = fetch(url, rev, control).map_err(|err| vec![err])?;
     let commit = repo
         .head_commit()
         .map_err(|err| vec![format!("{url}: no commit for `{rev}`: {}", chain(&err))])?;
@@ -88,35 +132,43 @@ pub fn fetch_git(url: &str, rev: &str, interrupt: &AtomicBool) -> Result<Package
     }))
 }
 
-/// One file of `url` at its default branch (the catalog's `catalog.json`),
-/// at most `limit` bytes.
-pub(super) fn fetch_file(
+/// Files at the root of `url`'s default branch (the catalog's
+/// `catalog.json` and its signature), each at most `limit` bytes; `None` for
+/// one that is not there.
+pub(super) fn fetch_files(
     url: &str,
-    path: &str,
+    paths: &[&str],
     limit: u64,
-    interrupt: &AtomicBool,
-) -> Result<Vec<u8>, String> {
-    let (_temp, repo) = fetch(url, "", interrupt)?;
+    control: &FetchControl,
+) -> Result<Vec<Option<Vec<u8>>>, String> {
+    let (_temp, repo) = fetch(url, "", control)?;
     let commit = repo
         .head_commit()
         .map_err(|err| format!("{url}: no commit: {}", chain(&err)))?;
     let fail = |err: &dyn std::error::Error| format!("{url}: {}", chain(err));
     let tree = commit.tree().map_err(|err| fail(&err))?;
-    let entry = tree
-        .lookup_entry_by_path(path)
-        .map_err(|err| fail(&err))?
-        .filter(|entry| entry.mode().is_blob())
-        .ok_or_else(|| format!("{url}: no {path} at the root"))?;
-    let header = repo
-        .find_header(entry.object_id())
-        .map_err(|err| fail(&err))?;
-    if header.size() > limit {
-        return Err(format!("{url}: {path} is larger than {} KB", limit / 1024));
+    let mut files = Vec::new();
+    for path in paths {
+        let Some(entry) = tree
+            .lookup_entry_by_path(path)
+            .map_err(|err| fail(&err))?
+            .filter(|entry| entry.mode().is_blob())
+        else {
+            files.push(None);
+            continue;
+        };
+        let header = repo
+            .find_header(entry.object_id())
+            .map_err(|err| fail(&err))?;
+        if header.size() > limit {
+            return Err(format!("{url}: {path} is larger than {} KB", limit / 1024));
+        }
+        let blob = repo
+            .find_blob(entry.object_id())
+            .map_err(|err| fail(&err))?;
+        files.push(Some(blob.data.clone()));
     }
-    let blob = repo
-        .find_blob(entry.object_id())
-        .map_err(|err| fail(&err))?;
-    Ok(blob.data.clone())
+    Ok(files)
 }
 
 /// A shallow bare clone of `url` holding just `rev`'s commit, in a new
@@ -124,7 +176,7 @@ pub(super) fn fetch_file(
 fn fetch(
     url: &str,
     rev: &str,
-    interrupt: &AtomicBool,
+    control: &FetchControl,
 ) -> Result<(tempfile::TempDir, gix::Repository), String> {
     let fail = |err: &dyn std::error::Error| format!("{url}: {}", chain(err));
     if url.trim().is_empty() {
@@ -145,7 +197,7 @@ fn fetch(
         prepare = prepare.with_ref_name(Some(rev)).map_err(|err| fail(&err))?;
     }
     let (repo, _) = prepare
-        .fetch_only(gix::progress::Discard, interrupt)
+        .fetch_only(control.progress.add_child(url), &control.interrupt)
         .map_err(|err| fail(&err))?;
     Ok((temp, repo))
 }

@@ -28,14 +28,16 @@ use serde::{Deserialize, Serialize};
 
 pub use capability::{check_capability, describe_capability};
 pub use catalog::{
-    CATALOG_ENV, CATALOG_SCHEMA, Catalog, CatalogPackage, CatalogVersion, catalog_url,
-    fetch_catalog, fetch_from_catalog,
+    CATALOG_ENV, CATALOG_FILE, CATALOG_SCHEMA, CATALOG_SIGNATURE, Catalog, CatalogConfig,
+    CatalogFiles, CatalogPackage, CatalogVersion, Signing, check_signature, env_url, fetch_catalog,
+    fetch_from_catalog,
 };
 pub use dirs::{SHIPPED_ENV, WorkflowDirs, shipped_dir};
-pub use git::{GitCheckout, fetch_git, is_commit_id};
+pub use git::{FetchControl, GitCheckout, fetch_git, is_commit_id};
 pub use install::{
     InstallKind, InstallPlan, InstallRecord, InstallSource, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES,
-    Package, Pin, content_hash, copy_package_files, list_folder, plan_install, read_package,
+    Package, Pin, content_hash, copy_package_files, installed_hash, list_folder, plan_install,
+    read_package, verify_installed,
 };
 pub use overlay::{Overlay, RegionPatch};
 pub use package::{MAX_PACKAGE_PATH, check_package_path, resolve_package_file};

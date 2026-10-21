@@ -7,11 +7,11 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
-use std::sync::atomic::AtomicBool;
 
 use carbon_core::workflow::{
-    Catalog, InstallKind, InstallSource, Registry, RequireKind, WorkflowDirs, WorkflowId,
-    fetch_catalog, fetch_from_catalog, fetch_git, plan_install, read_package,
+    Catalog, CatalogConfig, CatalogFiles, FetchControl, InstallKind, InstallSource, Pin, Registry,
+    RequireKind, Signing, WorkflowDirs, WorkflowId, fetch_catalog, fetch_from_catalog, fetch_git,
+    installed_hash, plan_install, read_package, verify_installed,
 };
 
 const KINDS: [&str; 5] = ["editor", "explorer", "terminal", "chat", "placeholder"];
@@ -95,8 +95,8 @@ fn url(dir: &Path) -> String {
     dir.display().to_string().replace('\\', "/")
 }
 
-fn never() -> AtomicBool {
-    AtomicBool::new(false)
+fn never() -> FetchControl {
+    FetchControl::default()
 }
 
 #[test]
@@ -250,8 +250,9 @@ fn catalog_installs_are_pinned_by_commit_and_hash() {
     git(&catalog_dir, &["add", "-A"]);
     git(&catalog_dir, &["commit", "-q", "-m", "catalog"]);
 
-    let text = fetch_catalog(&url(&catalog_dir), &never()).unwrap();
-    let (catalog, problems) = Catalog::parse(&text).unwrap();
+    let files = fetch_catalog(&url(&catalog_dir), &never()).unwrap();
+    assert!(files.signature.is_none());
+    let (catalog, problems) = Catalog::load(&files, &[]).unwrap();
     assert!(problems.is_empty(), "{problems:?}");
     let listed = catalog.get(&WorkflowId::new("acme.git")).unwrap();
     let dirs = WorkflowDirs::new(temp.path().join("prefs"));
@@ -262,7 +263,7 @@ fn catalog_installs_are_pinned_by_commit_and_hash() {
             .iter()
             .find(|v| v.version == version)
             .unwrap();
-        let package = fetch_from_catalog(listed, entry, &never()).unwrap();
+        let package = fetch_from_catalog(listed, entry, false, &never()).unwrap();
         (plan_install(&package, &registry, &BTreeSet::new()), package)
     };
 
@@ -351,4 +352,118 @@ fn https_sources_fetch() {
     let problems = fetch_git("https://example.invalid/acme/x.git", "", &never()).unwrap_err();
     println!("{problems:?}");
     assert!(problems[0].matches(": ").count() >= 2, "{problems:?}");
+}
+
+// Signed with the pure-Python minisign signer used for the click tests (seed
+// 0x01 x 32, key number 1122334455667788); KEY_B is another key.
+const SIGNED_TEXT: &str = r#"{ "schema": 1, "packages": [ { "id": "acme.signed", "name": "Signed", "versions": [ { "version": "1.0.0", "git": "x", "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } ] } ] }"#;
+const KEY_A: &str = "RWQRIjNEVWZ3iIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c";
+const KEY_B: &str = "RWSId2ZVRDMiEYE5dw6ofRdfVqNUZsNMfszLjYqRtO43ol32D1uPybOU";
+const SIGNATURE_A: &str = "untrusted comment: signature from minisign secret key
+RUQRIjNEVWZ3iKzqCAH+ZONIWhQ9dObQEoXalpKYir3ZjDqpJJyRiQBVpHodM1slVixx1JczbjuCzfj/HzEE169RVoFl8KLoDQc=
+trusted comment: timestamp:0\tfile:catalog.json\tacme test key
+yixUw619twESshvoMqhlLclcBikWS1IbPvUUKZJO1yk4kYUaBWqPSOe+JiyTiOR0sJ/JTmS47m0z9ejxoHsXBw==
+";
+
+#[test]
+fn signed_catalogs_need_a_trusted_key() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path().join("catalog");
+    fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    write(&dir.join("catalog.json"), SIGNED_TEXT);
+    write(&dir.join("catalog.json.minisig"), SIGNATURE_A);
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "signed"]);
+
+    let files = fetch_catalog(&url(&dir), &never()).unwrap();
+    assert!(files.signature.is_some());
+    let keys = |keys: &[&str]| keys.iter().map(|key| key.to_string()).collect::<Vec<_>>();
+
+    // A whole `.pub` file works as a key too.
+    let pub_file = format!("untrusted comment: minisign public key\n{KEY_A}\n");
+    let (catalog, _) = Catalog::load(&files, &keys(&[KEY_B, &pub_file])).unwrap();
+    assert!(catalog.is_signed());
+    match catalog.signing.unwrap() {
+        Signing::Trusted { key, comment } => {
+            assert!(KEY_A.starts_with(&key));
+            assert!(comment.contains("acme test key"));
+        }
+        other => panic!("{other:?}"),
+    }
+
+    let err = Catalog::load(&files, &keys(&[KEY_B])).unwrap_err();
+    assert!(err.contains("not signed by a trusted key"), "{err}");
+    let tampered = CatalogFiles {
+        text: SIGNED_TEXT.replace("1.0.0", "1.0.1"),
+        ..files.clone()
+    };
+    assert!(Catalog::load(&tampered, &keys(&[KEY_A])).is_err());
+    let unsigned = CatalogFiles {
+        signature: None,
+        ..files.clone()
+    };
+    let err = Catalog::load(&unsigned, &keys(&[KEY_A])).unwrap_err();
+    assert!(err.contains("required"), "{err}");
+
+    // No keys: used, not checked.
+    let (catalog, _) = Catalog::load(&unsigned, &[]).unwrap();
+    assert_eq!(catalog.signing, Some(Signing::NotChecked));
+    assert!(!catalog.is_signed());
+}
+
+#[test]
+fn the_catalog_config_round_trips_and_checks_keys() {
+    let temp = tempfile::tempdir().unwrap();
+    let dirs = WorkflowDirs::new(temp.path().join("prefs"));
+    let path = dirs.catalog_config_file();
+    assert_eq!(
+        CatalogConfig::load(&path).unwrap(),
+        CatalogConfig::default()
+    );
+    let config = CatalogConfig {
+        url: Some("https://example.com/catalog.git".into()),
+        keys: vec![KEY_A.into(), "not a key".into()],
+    };
+    config.save(&path).unwrap();
+    assert_eq!(CatalogConfig::load(&path).unwrap(), config);
+    let problems = config.check();
+    assert_eq!(problems.len(), 1);
+    assert!(problems[0].starts_with("trusted key 2"), "{problems:?}");
+}
+
+#[test]
+fn changed_installed_files_are_found() {
+    let temp = tempfile::tempdir().unwrap();
+    let (url, first) = package_repo(&temp.path().join("repo"));
+    let package = fetch_git(&url, &first, &never()).unwrap();
+    let dirs = WorkflowDirs::new(temp.path().join("prefs"));
+    let manifest = dirs.install(&package).unwrap();
+    let dir = manifest.parent().unwrap();
+    verify_installed(dir, &package.hash).unwrap();
+
+    write(&dir.join("assets/readme.txt"), "changed");
+    assert!(verify_installed(dir, &package.hash).is_err());
+    let now = installed_hash(dir).unwrap();
+    assert_ne!(now, package.hash);
+    verify_installed(dir, &now).unwrap();
+    // An added file counts too.
+    write(&dir.join("extra.txt"), "x");
+    assert!(verify_installed(dir, &now).is_err());
+
+    // Reinstalling the recorded commit with the recorded hash as its pin
+    // restores the files.
+    let mut again = fetch_git(&url, &first, &never()).unwrap();
+    again.pin = Some(Pin {
+        id: WorkflowId::new("acme.git"),
+        version: "1.0.0".into(),
+        hash: package.hash.clone(),
+        signed: false,
+    });
+    let registry = Registry::load(Some(&dirs), &KINDS);
+    let plan = plan_install(&again, &registry, &BTreeSet::new());
+    assert_eq!(plan.kind, InstallKind::Reinstall);
+    assert!(plan.problems.is_empty(), "{:?}", plan.problems);
+    let manifest = dirs.install(&again).unwrap();
+    verify_installed(manifest.parent().unwrap(), &package.hash).unwrap();
 }

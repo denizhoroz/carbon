@@ -33,6 +33,9 @@ pub struct StateFile {
     pub grants: BTreeMap<WorkflowId, BTreeSet<String>>,
     /// Where each installed package came from, its content hash and pin.
     pub installs: BTreeMap<WorkflowId, InstallRecord>,
+    /// Installed packages turned off because their files no longer match
+    /// `installs` (workflow -> why), until Reinstall or Keep Changes.
+    pub changed: BTreeMap<WorkflowId, String>,
 }
 
 impl Default for StateFile {
@@ -46,6 +49,7 @@ impl Default for StateFile {
             layouts: BTreeMap::new(),
             grants: BTreeMap::new(),
             installs: BTreeMap::new(),
+            changed: BTreeMap::new(),
         }
     }
 }

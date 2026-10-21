@@ -282,8 +282,14 @@ impl WorkflowsView {
             })
             .flatten();
         let missing = registry.missing(&id).to_vec();
+        let changed = self
+            .workbench
+            .as_ref()
+            .and_then(|workbench| workbench.read(cx).changed_reason(&id));
         let status = if quarantine.is_some() {
             Tag::danger().outline().child("Turned off after a crash")
+        } else if changed.is_some() {
+            Tag::danger().outline().child("Files changed")
         } else if off {
             Tag::secondary().outline().child("Off")
         } else if !missing.is_empty() {
@@ -301,7 +307,49 @@ impl WorkflowsView {
                 .disabled(locked)
         };
 
-        let toggle = registry.can_turn_off(&id).then(|| {
+        // Files changed since install: Reinstall or Keep Changes instead of
+        // Turn On/Off and Duplicate.
+        let repair = changed.is_some().then(|| {
+            let reinstall = record.clone().map(|record| {
+                let (id, version) = (id.clone(), def.version.clone());
+                action("Reinstall", "reinstall")
+                    .outline()
+                    .on_click(move |_, window, cx| {
+                        workflow_install::reinstall(
+                            id.clone(),
+                            record.clone(),
+                            version.clone(),
+                            window,
+                            cx,
+                        )
+                    })
+            });
+            let keep = {
+                let (entity, id, name) = (entity.clone(), id.clone(), def.name.clone());
+                action("Keep Changes", "keep")
+                    .ghost()
+                    .on_click(move |_, window, cx| {
+                        let (entity, id) = (entity.clone(), id.clone());
+                        confirm(
+                            window,
+                            cx,
+                            format!("Keep the changed files of \"{name}\"?"),
+                            "Carbon trusts its files as they are now and turns it back on. \
+                             It is no longer pinned.",
+                            "Keep Changes",
+                            move |window, cx| {
+                                entity.update(cx, |view, cx| {
+                                    view.with_workbench(window, cx, |w, window, cx| {
+                                        w.keep_changes(&id, window, cx)
+                                    })
+                                })
+                            },
+                        )
+                    })
+            };
+            (reinstall, keep)
+        });
+        let toggle = (changed.is_none() && registry.can_turn_off(&id)).then(|| {
             let (entity, id) = (entity.clone(), id.clone());
             let turn_on = off || quarantine.is_some();
             action(if turn_on { "Turn On" } else { "Turn Off" }, "toggle")
@@ -400,9 +448,18 @@ impl WorkflowsView {
                             )
                             .child(Tag::secondary().outline().small().child(origin))
                             .child(status.small())
-                            .when(record.as_ref().is_some_and(|record| record.pinned), |row| {
-                                row.child(Tag::success().outline().small().child("Pinned"))
-                            })
+                            .when_some(
+                                record.as_ref().and_then(|record| {
+                                    if record.signed {
+                                        Some("Signed")
+                                    } else {
+                                        record.pinned.then_some("Pinned")
+                                    }
+                                }),
+                                |row, trust| {
+                                    row.child(Tag::success().outline().small().child(trust))
+                                },
+                            )
                             .when(overlay, |row| {
                                 row.child(Tag::info().outline().small().child("Changed"))
                             }),
@@ -452,13 +509,24 @@ impl WorkflowsView {
                     }))
                     .when_some(quarantine, |row, reason| {
                         row.child(div().text_xs().text_color(danger).child(reason))
+                    })
+                    .when_some(changed.clone(), |row, reason| {
+                        row.child(
+                            div()
+                                .text_xs()
+                                .text_color(danger)
+                                .child(format!("Turned off: {reason}.")),
+                        )
                     }),
             )
             .child(
                 h_flex()
                     .gap_1()
                     .children(toggle)
-                    .child(duplicate)
+                    .when_some(repair, |buttons, (reinstall, keep)| {
+                        buttons.children(reinstall).child(keep)
+                    })
+                    .when(changed.is_none(), |buttons| buttons.child(duplicate))
                     .children(permissions_button)
                     .children(reset)
                     .children(remove),

@@ -5,17 +5,22 @@
 //! dialog says what installing does (new, update, downgrade; permissions;
 //! requirements; pins) and installs on the user's click.
 
+use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use carbon_core::workflow::{
-    Catalog, CatalogPackage, InstallKind, InstallSource, Origin, Package, WorkflowId, catalog_url,
-    describe_capability, fetch_catalog, fetch_from_catalog, fetch_git, plan_install, read_package,
+    CATALOG_ENV, CATALOG_SIGNATURE, Catalog, CatalogConfig, CatalogFiles, CatalogPackage,
+    FetchControl, InstallKind, InstallRecord, InstallSource, Origin, Package, Pin, Signing,
+    WorkflowId, describe_capability, env_url, fetch_catalog, fetch_from_catalog, fetch_git,
+    plan_install, read_package,
 };
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::tag::Tag;
 use gpui_kit::component::{
@@ -95,7 +100,7 @@ fn git_dialog(window: &mut Window, cx: &mut App) {
             };
             fetch_then_install(
                 what,
-                move |interrupt| fetch_git(&url, &rev, interrupt),
+                move |control| fetch_git(&url, &rev, control),
                 window,
                 cx,
             );
@@ -151,20 +156,22 @@ fn git_dialog(window: &mut Window, cx: &mut App) {
     url.update(cx, |input, cx| input.focus(window, cx));
 }
 
-/// Runs `job` (a fetch) off the UI thread behind a dialog with Cancel, then
-/// shows the install dialog or what went wrong. The dialog closes only
-/// through Cancel, so closing it here never closes another one.
+/// Runs `job` (a fetch) off the UI thread behind a dialog showing its
+/// progress, with Cancel; then shows the install dialog or what went wrong.
+/// The dialog closes only through Cancel, so closing it here never closes
+/// another one.
 fn fetch_then_install(
     what: String,
-    job: impl FnOnce(&AtomicBool) -> Result<Package, Vec<String>> + Send + 'static,
+    job: impl FnOnce(&FetchControl) -> Result<Package, Vec<String>> + Send + 'static,
     window: &mut Window,
     cx: &mut App,
 ) {
-    let cancel = Arc::new(AtomicBool::new(false));
-    let on_cancel = cancel.clone();
+    let control = Arc::new(FetchControl::default());
+    let dialog_control = control.clone();
     let text = format!("Fetching {what}…");
     window.open_dialog(cx, move |dialog, _, cx| {
-        let on_cancel = on_cancel.clone();
+        let muted = cx.theme().muted_foreground;
+        let on_cancel = dialog_control.clone();
         dialog
             .title("Fetching")
             .w(fixed::DIALOG_WIDTH)
@@ -172,30 +179,42 @@ fn fetch_then_install(
             .overlay_closable(false)
             .close_button(false)
             .child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(text.clone()),
+                v_flex()
+                    .gap_1()
+                    .child(div().text_sm().text_color(muted).child(text.clone()))
+                    .when_some(dialog_control.status(), |body, status| {
+                        body.child(div().text_xs().text_color(muted).child(status))
+                    }),
             )
             .footer(
                 h_flex().w_full().justify_end().child(
                     Button::new("fetch-cancel")
                         .label("Cancel")
                         .on_click(move |_, window, cx| {
-                            on_cancel.store(true, Ordering::Relaxed);
+                            on_cancel.cancel();
                             window.close_dialog(cx);
                         }),
                 ),
             )
     });
-    let interrupt = cancel.clone();
+    let done = Arc::new(AtomicBool::new(false));
+    let (job_control, job_done) = (control.clone(), done.clone());
+    let task = cx.background_executor().spawn(async move {
+        let result = job(&job_control);
+        job_done.store(true, Ordering::Relaxed);
+        result
+    });
     window
         .spawn(cx, async move |cx| {
-            let result = cx
-                .background_executor()
-                .spawn(async move { job(&interrupt) })
-                .await;
-            if cancel.load(Ordering::Relaxed) {
+            // Redraw the dialog while the job runs: its byte count moves.
+            while !done.load(Ordering::Relaxed) && !control.is_cancelled() {
+                cx.background_executor()
+                    .timer(Duration::from_millis(250))
+                    .await;
+                _ = cx.update(|window, _| window.refresh());
+            }
+            let result = task.await;
+            if control.is_cancelled() {
                 return;
             }
             _ = cx.update(|window, cx| {
@@ -273,8 +292,10 @@ fn install_dialog(package: Package, window: &mut Window, cx: &mut App) {
             ),
         };
         let record = package.record();
-        let pin = if package.pin.is_some() {
-            "Pinned by the catalog: commit and content hash checked."
+        let pin = if record.signed {
+            "Pinned by a signed catalog: commit and content hash checked."
+        } else if package.pin.is_some() {
+            "Pinned: commit and content hash checked."
         } else if record.pinned {
             "Pinned to a commit."
         } else {
@@ -436,21 +457,76 @@ pub fn short_hash(hash: &str) -> String {
 
 // ---- catalog -----------------------------------------------------------------
 
-/// The last catalog fetched, from `state/catalog.json` until a refresh.
+/// The last catalog loaded (signature checked), from `state/catalog.json`
+/// until a refresh.
 static CATALOG: RwLock<Option<Arc<Catalog>>> = RwLock::new(None);
 
-/// The catalog as last fetched (read from its cache file the first time).
+/// `catalog.toml` (repository URL, trusted keys); defaults when missing or
+/// unreadable.
+pub fn catalog_config() -> CatalogConfig {
+    workflows::dirs()
+        .and_then(|dirs| CatalogConfig::load(&dirs.catalog_config_file()).ok())
+        .unwrap_or_default()
+}
+
+/// The cached catalog's two files.
+fn cache_paths() -> Option<(PathBuf, PathBuf)> {
+    let text = workflows::dirs()?.catalog_file();
+    let signature = text.with_file_name(CATALOG_SIGNATURE);
+    Some((text, signature))
+}
+
+/// The catalog as last fetched: read from its cache the first time, with
+/// the signature checked against today's trusted keys.
 pub fn catalog() -> Option<Arc<Catalog>> {
     if let Some(catalog) = CATALOG.read().ok().and_then(|slot| slot.clone()) {
         return Some(catalog);
     }
-    let text = std::fs::read_to_string(workflows::dirs()?.catalog_file()).ok()?;
-    let (catalog, _) = Catalog::parse(&text).ok()?;
+    let (text, signature) = cache_paths()?;
+    let files = CatalogFiles {
+        text: std::fs::read_to_string(text).ok()?,
+        signature: std::fs::read_to_string(signature).ok(),
+    };
+    let (catalog, _) = Catalog::load(&files, &catalog_config().keys).ok()?;
     let catalog = Arc::new(catalog);
     if let Ok(mut slot) = CATALOG.write() {
         *slot = Some(catalog.clone());
     }
     Some(catalog)
+}
+
+/// Keeps `files` as the cached catalog and `catalog` as the loaded one.
+fn remember(files: &CatalogFiles, catalog: Arc<Catalog>) {
+    if let Some((text, signature)) = cache_paths() {
+        let saved = text
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|_| std::fs::write(&text, &files.text))
+            .and_then(|_| match &files.signature {
+                Some(sig) => std::fs::write(&signature, sig),
+                None => match std::fs::remove_file(&signature) {
+                    Err(err) if err.kind() != std::io::ErrorKind::NotFound => Err(err),
+                    _ => Ok(()),
+                },
+            });
+        if let Err(err) = saved {
+            eprintln!("cannot write {}: {err}", text.display());
+        }
+    }
+    if let Ok(mut slot) = CATALOG.write() {
+        *slot = Some(catalog);
+    }
+}
+
+/// Drops the loaded and cached catalog (its source or keys changed).
+fn forget_catalog() {
+    if let Ok(mut slot) = CATALOG.write() {
+        *slot = None;
+    }
+    if let Some((text, signature)) = cache_paths() {
+        let _ = std::fs::remove_file(text);
+        let _ = std::fs::remove_file(signature);
+    }
 }
 
 /// Installs the catalog's best version of `id` within `range` (a missing
@@ -461,15 +537,19 @@ pub fn install_listed(
     window: &mut Window,
     cx: &mut App,
 ) {
-    let Some(listed) = catalog().and_then(|catalog| catalog.get(id).cloned()) else {
+    let Some(catalog) = catalog() else {
         return;
     };
-    install_from_catalog(listed, range, window, cx);
+    let Some(listed) = catalog.get(id).cloned() else {
+        return;
+    };
+    install_from_catalog(listed, range, catalog.is_signed(), window, cx);
 }
 
 fn install_from_catalog(
     listed: CatalogPackage,
     range: Option<&VersionReq>,
+    signed: bool,
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -479,21 +559,66 @@ fn install_from_catalog(
     let what = format!("{} {}", listed.name, version.version);
     fetch_then_install(
         what,
-        move |interrupt| fetch_from_catalog(&listed, &version, interrupt),
+        move |control| fetch_from_catalog(&listed, &version, signed, control),
         window,
         cx,
     );
 }
 
-/// The catalog's packages with Install / Update; Refresh fetches it again.
+/// Fetches an installed package again from where it came from, so its files
+/// are the ones recorded at install (Manage Workflows > Reinstall after its
+/// files changed). A pinned install keeps its pin; for an unpinned one the
+/// source must still hold the same files.
+pub fn reinstall(
+    id: WorkflowId,
+    record: InstallRecord,
+    version: String,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let pin = record.pinned.then(|| Pin {
+        id,
+        version,
+        hash: record.hash.clone(),
+        signed: record.signed,
+    });
+    let what = match &record.commit {
+        Some(commit) => format!("{} @ {}", record.source, &commit[..commit.len().min(10)]),
+        None => record.source.clone(),
+    };
+    fetch_then_install(
+        what,
+        move |control| {
+            let mut package = match &record.commit {
+                Some(commit) => fetch_git(&record.source, commit, control)?,
+                None => read_package(InstallSource::from_path(&record.source))?,
+            };
+            if pin.is_none() && package.hash != record.hash {
+                return Err(vec![format!(
+                    "{} no longer holds the files that were installed (the content hash \
+                     differs). Install it again from its source to take the new files.",
+                    record.source
+                )]);
+            }
+            package.pin = pin;
+            Ok(package)
+        },
+        window,
+        cx,
+    );
+}
+
+/// The catalog's packages with Install / Update; Refresh fetches it again,
+/// Source… sets the repository and the trusted keys.
 pub fn catalog_dialog(window: &mut Window, cx: &mut App) {
     let view = cx.new(CatalogView::new);
     if view.read(cx).catalog.is_none() {
         view.update(cx, |view, cx| view.refresh(cx));
     }
     window.open_dialog(cx, move |dialog, _, cx| {
-        let refresh = view.clone();
+        let (refresh, source) = (view.clone(), view.clone());
         let busy = view.read(cx).fetching;
+        let locked = workflows::dirs().is_none();
         dialog
             .title("Workflow Catalog")
             .w(fixed::MANAGE_WIDTH)
@@ -502,11 +627,19 @@ pub fn catalog_dialog(window: &mut Window, cx: &mut App) {
                 h_flex()
                     .w_full()
                     .gap_2()
-                    .justify_end()
+                    .child(
+                        Button::new("catalog-source")
+                            .label("Source…")
+                            .disabled(locked)
+                            .on_click(move |_, window, cx| {
+                                source_dialog(source.clone(), window, cx)
+                            }),
+                    )
+                    .child(div().flex_1())
                     .child(
                         Button::new("catalog-refresh")
                             .label(if busy { "Refreshing…" } else { "Refresh" })
-                            .disabled(busy || catalog_url().is_none())
+                            .disabled(busy || catalog_config().effective_url().is_none())
                             .on_click(move |_, _, cx| {
                                 refresh.update(cx, |view, cx| view.refresh(cx))
                             }),
@@ -519,6 +652,113 @@ pub fn catalog_dialog(window: &mut Window, cx: &mut App) {
                     ),
             )
     });
+}
+
+/// Asks for the catalog repository and the keys trusted to sign it; saves
+/// them to `catalog.toml` and fetches the catalog again.
+fn source_dialog(view: Entity<CatalogView>, window: &mut Window, cx: &mut App) {
+    let config = catalog_config();
+    let url = cx.new(|cx| {
+        InputState::new(window, cx)
+            .placeholder("https://example.com/acme/catalog.git")
+            .default_value(config.url.clone().unwrap_or_default())
+    });
+    let keys = cx.new(|cx| {
+        TextareaState::new(window, cx)
+            .rows(4)
+            .placeholder(
+                "One minisign public key per line (RWQ…); empty: signatures are not checked",
+            )
+            .default_value(config.keys.join("\n"))
+    });
+    let error: Rc<RefCell<Option<String>>> = Rc::default();
+    let (dialog_url, dialog_keys, dialog_error) = (url.clone(), keys.clone(), error.clone());
+    window.open_dialog(cx, move |dialog, _, cx| {
+        let (muted, danger) = (cx.theme().muted_foreground, cx.theme().danger);
+        let label = |text: &'static str| div().text_sm().child(text);
+        let (save_url, save_keys, save_error, save_view) = (
+            dialog_url.clone(),
+            dialog_keys.clone(),
+            dialog_error.clone(),
+            view.clone(),
+        );
+        dialog
+            .title("Catalog Source")
+            .w(fixed::DIALOG_WIDTH)
+            .child(
+                v_flex()
+                    .gap(fixed::PANEL_GAP)
+                    .child(label("Repository"))
+                    .child(Input::new(&dialog_url))
+                    .when_some(env_url(), |body, url| {
+                        body.child(
+                            div()
+                                .text_xs()
+                                .text_color(muted)
+                                .child(format!("{CATALOG_ENV} is set, so {url} is used instead.")),
+                        )
+                    })
+                    .child(label("Trusted keys"))
+                    .child(Textarea::new(&dialog_keys))
+                    .child(div().text_xs().text_color(muted).child(
+                        "With keys, the catalog must carry catalog.json.minisig made by one of \
+                         them (minisign -Sm catalog.json); without, it is used unchecked.",
+                    ))
+                    .when_some(dialog_error.borrow().clone(), |body, err| {
+                        body.child(div().text_sm().text_color(danger).child(err))
+                    }),
+            )
+            .footer(
+                h_flex()
+                    .w_full()
+                    .gap_2()
+                    .justify_end()
+                    .child(
+                        Button::new("source-cancel")
+                            .label("Cancel")
+                            .on_click(|_, window, cx| window.close_dialog(cx)),
+                    )
+                    .child(Button::new("source-save").primary().label("Save").on_click(
+                        move |_, window, cx| {
+                            let url = save_url.read(cx).value().trim().to_string();
+                            let keys = save_keys
+                                .read(cx)
+                                .value()
+                                .lines()
+                                .map(str::trim)
+                                .filter(|key| !key.is_empty())
+                                .map(str::to_string)
+                                .collect();
+                            let config = CatalogConfig {
+                                url: (!url.is_empty()).then_some(url),
+                                keys,
+                            };
+                            let saved = match config.check().into_iter().next() {
+                                Some(problem) => Err(problem),
+                                None => workflows::dirs()
+                                    .ok_or_else(|| "safe mode".to_string())
+                                    .and_then(|dirs| config.save(&dirs.catalog_config_file())),
+                            };
+                            match saved {
+                                Ok(()) => {
+                                    window.close_dialog(cx);
+                                    forget_catalog();
+                                    save_view.update(cx, |view, cx| {
+                                        view.catalog = None;
+                                        view.problems.clear();
+                                        view.refresh(cx);
+                                    });
+                                }
+                                Err(err) => {
+                                    *save_error.borrow_mut() = Some(err);
+                                    window.refresh();
+                                }
+                            }
+                        },
+                    )),
+            )
+    });
+    url.update(cx, |input, cx| input.focus(window, cx));
 }
 
 struct CatalogView {
@@ -539,38 +779,29 @@ impl CatalogView {
         }
     }
 
-    /// Fetches the catalog repository again; keeps the old list on failure.
+    /// Fetches the catalog repository again and checks its signature; keeps
+    /// the old list on failure.
     fn refresh(&mut self, cx: &mut Context<Self>) {
-        let Some(url) = catalog_url() else {
+        let config = catalog_config();
+        let Some(url) = config.effective_url() else {
+            cx.notify();
             return;
         };
         self.fetching = true;
         cx.notify();
         let fetch = cx.background_executor().spawn(async move {
-            let text = fetch_catalog(&url, &AtomicBool::new(false))?;
-            let (catalog, problems) = Catalog::parse(&text)?;
-            Ok::<_, String>((text, catalog, problems))
+            let files = fetch_catalog(&url, &FetchControl::default())?;
+            let (catalog, problems) = Catalog::load(&files, &config.keys)?;
+            Ok::<_, String>((files, catalog, problems))
         });
         self._task = Some(cx.spawn(async move |this, cx| {
             let result = fetch.await;
             _ = this.update(cx, |this, cx| {
                 this.fetching = false;
                 match result {
-                    Ok((text, catalog, problems)) => {
-                        if let Some(dirs) = workflows::dirs() {
-                            let path = dirs.catalog_file();
-                            let saved = path
-                                .parent()
-                                .map_or(Ok(()), std::fs::create_dir_all)
-                                .and_then(|_| std::fs::write(&path, text));
-                            if let Err(err) = saved {
-                                eprintln!("cannot write {}: {err}", path.display());
-                            }
-                        }
+                    Ok((files, catalog, problems)) => {
                         let catalog = Arc::new(catalog);
-                        if let Ok(mut slot) = CATALOG.write() {
-                            *slot = Some(catalog.clone());
-                        }
+                        remember(&files, catalog.clone());
                         this.catalog = Some(catalog);
                         this.problems = problems;
                     }
@@ -579,6 +810,52 @@ impl CatalogView {
                 cx.notify();
             });
         }));
+    }
+
+    /// Where the catalog comes from and whether its signature was checked.
+    fn header(&self, cx: &App) -> Option<impl IntoElement> {
+        let muted = cx.theme().muted_foreground;
+        let url = catalog_config().effective_url()?;
+        let signing = self
+            .catalog
+            .as_ref()
+            .and_then(|catalog| catalog.signing.clone());
+        let signing = signing.map(|signing| match signing {
+            Signing::Trusted { key, comment } => (
+                Tag::success().outline().small().child("Signed"),
+                // minisign separates the trusted comment's fields with tabs.
+                format!(
+                    "by trusted key {key}… · {}",
+                    comment.split('\t').collect::<Vec<_>>().join(" · ")
+                ),
+            ),
+            Signing::NotChecked => (
+                Tag::secondary().outline().small().child("Not checked"),
+                "No trusted keys are set (Source…), so its signature is not checked.".into(),
+            ),
+        });
+        Some(
+            v_flex()
+                .gap_1()
+                .pb(fixed::PANEL_GAP)
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(muted)
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis_start()
+                        .child(format!("From {url}")),
+                )
+                .when_some(signing, |header, (tag, text)| {
+                    header.child(
+                        h_flex()
+                            .gap_1()
+                            .child(tag)
+                            .child(div().text_xs().text_color(muted).child(text)),
+                    )
+                }),
+        )
     }
 
     fn row(&self, listed: &CatalogPackage, cx: &App) -> impl IntoElement {
@@ -602,6 +879,10 @@ impl CatalogView {
         });
         let icon = workflows::named_icon(listed.icon.as_deref())
             .unwrap_or_else(|| Icon::new(IconName::LayoutDashboard));
+        let signed = self
+            .catalog
+            .as_ref()
+            .is_some_and(|catalog| catalog.is_signed());
         let install = action.map(|label| {
             let listed = listed.clone();
             Button::new(SharedString::from(format!("catalog-install-{}", listed.id)))
@@ -611,7 +892,7 @@ impl CatalogView {
                 .when(label == "Update", |button| button.outline())
                 .disabled(workflows::dirs().is_none())
                 .on_click(move |_, window, cx| {
-                    install_from_catalog(listed.clone(), None, window, cx)
+                    install_from_catalog(listed.clone(), None, signed, window, cx)
                 })
         });
         h_flex()
@@ -672,16 +953,18 @@ impl Render for CatalogView {
             .flat_map(|catalog| catalog.packages.iter())
             .map(|listed| self.row(listed, cx).into_any_element())
             .collect();
+        let url = catalog_config().effective_url();
         v_flex()
             .id("workflow-catalog")
             .h(fixed::MANAGE_BODY_HEIGHT)
             .overflow_y_scroll()
-            .map(|list| match (catalog_url(), &self.catalog) {
-                (None, None) => list.child(note(format!(
-                    "No catalog is set. Set {} to a git repository whose root holds \
-                     catalog.json, then restart Carbon.",
-                    carbon_core::workflow::CATALOG_ENV
-                ))),
+            .children(self.header(cx))
+            .map(|list| match (url, &self.catalog) {
+                (None, _) => list.child(note(
+                    "No catalog is set. Use Source… to name a git repository whose root \
+                     holds catalog.json."
+                        .into(),
+                )),
                 (_, None) if self.fetching => list.child(note("Fetching the catalog…".into())),
                 (_, Some(catalog)) if catalog.packages.is_empty() => {
                     list.child(note("The catalog lists no packages.".into()))

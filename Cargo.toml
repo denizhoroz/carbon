@@ -60,9 +60,14 @@ gix = { version = "0.89.0", default-features = false, features = [
     "sha1",
     "parallel",
     "blocking-http-transport-reqwest-rust-tls",
+    # Byte counts for the Fetching dialog.
+    "progress-tree",
+    "progress-unit-bytes",
 ] }
 # Content hash of installed workflow packages (hash pins, workflow-system.md s4.5).
 sha2 = "0.10.9"
+# Catalog signatures (workflow-system.md Q26): verifies `minisign -S` signatures, no signing.
+minisign-verify = "0.3.0"
 # Webview panels (workflow-system.md Q17, s4.4 webview spike): the kit's own wrapper and
 # the wry fork it builds on; same version line as gpui-kit, pin exact with it.
 gpui-wry = "=0.7.3"
