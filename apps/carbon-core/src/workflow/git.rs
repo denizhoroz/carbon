@@ -1,0 +1,224 @@
+//! Workflow packages from git (Phase 4, workflow-system.md s4.5; user
+//! 2026-10-21: gix, not the user's git). A repository URL (https, ssh, a
+//! local path) and a revision: a tag, a branch, or a full commit id (pinned).
+//! Only that one commit is fetched (shallow, into a temporary bare
+//! repository), and its tree is written out to a temporary folder with the
+//! package rules checked first: no links, no submodules, Q22 paths, the file
+//! and size limits. The folder then goes through `read_package` like any
+//! other. Nothing from the repository is run (no hooks, no filters).
+
+use std::fmt;
+use std::num::NonZeroU32;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+
+use gix::remote::fetch::Shallow;
+
+use super::{
+    InstallSource, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, Package, check_package_path, read_package,
+};
+
+/// A commit written out to a temporary folder; the folder lives as long as
+/// any clone of this.
+#[derive(Clone, Debug)]
+pub struct GitCheckout {
+    pub url: String,
+    /// What was asked for: a tag, a branch, `HEAD` or the commit id itself.
+    pub rev: String,
+    /// The full commit id fetched.
+    pub commit: String,
+    /// The package root (inside the temporary folder).
+    pub root: PathBuf,
+    _temp: Arc<tempfile::TempDir>,
+}
+
+impl PartialEq for GitCheckout {
+    fn eq(&self, other: &Self) -> bool {
+        (&self.url, &self.rev, &self.commit, &self.root)
+            == (&other.url, &other.rev, &other.commit, &other.root)
+    }
+}
+
+impl Eq for GitCheckout {}
+
+impl fmt::Display for GitCheckout {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let short = &self.commit[..self.commit.len().min(10)];
+        if self.rev == self.commit {
+            write!(f, "{} @ {short}", self.url)
+        } else {
+            write!(f, "{} @ {} ({short})", self.url, self.rev)
+        }
+    }
+}
+
+/// A full hexadecimal commit id (40 characters, SHA-1).
+pub fn is_commit_id(rev: &str) -> bool {
+    rev.len() == 40 && rev.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// Fetches `rev` of `url` (empty: the default branch) and reads it as a
+/// package. A commit id must be what the server sends back. Blocking and
+/// network-bound: run it off the UI thread; `interrupt` stops it.
+pub fn fetch_git(url: &str, rev: &str, interrupt: &AtomicBool) -> Result<Package, Vec<String>> {
+    let rev = rev.trim();
+    let (temp, repo) = fetch(url, rev, interrupt).map_err(|err| vec![err])?;
+    let commit = repo
+        .head_commit()
+        .map_err(|err| vec![format!("{url}: no commit for `{rev}`: {}", chain(&err))])?;
+    let commit_id = commit.id.to_string();
+    if is_commit_id(rev) && !commit_id.eq_ignore_ascii_case(rev) {
+        return Err(vec![format!(
+            "{url}: asked for commit {rev} but got {commit_id}"
+        )]);
+    }
+    let root = temp.path().join("package");
+    write_tree(&repo, &commit, &root)?;
+    read_package(InstallSource::Git(GitCheckout {
+        url: url.to_string(),
+        rev: if rev.is_empty() {
+            "HEAD".into()
+        } else {
+            rev.to_string()
+        },
+        commit: commit_id,
+        root,
+        _temp: Arc::new(temp),
+    }))
+}
+
+/// One file of `url` at its default branch (the catalog's `catalog.json`),
+/// at most `limit` bytes.
+pub(super) fn fetch_file(
+    url: &str,
+    path: &str,
+    limit: u64,
+    interrupt: &AtomicBool,
+) -> Result<Vec<u8>, String> {
+    let (_temp, repo) = fetch(url, "", interrupt)?;
+    let commit = repo
+        .head_commit()
+        .map_err(|err| format!("{url}: no commit: {}", chain(&err)))?;
+    let fail = |err: &dyn std::error::Error| format!("{url}: {}", chain(err));
+    let tree = commit.tree().map_err(|err| fail(&err))?;
+    let entry = tree
+        .lookup_entry_by_path(path)
+        .map_err(|err| fail(&err))?
+        .filter(|entry| entry.mode().is_blob())
+        .ok_or_else(|| format!("{url}: no {path} at the root"))?;
+    let header = repo
+        .find_header(entry.object_id())
+        .map_err(|err| fail(&err))?;
+    if header.size() > limit {
+        return Err(format!("{url}: {path} is larger than {} KB", limit / 1024));
+    }
+    let blob = repo
+        .find_blob(entry.object_id())
+        .map_err(|err| fail(&err))?;
+    Ok(blob.data.clone())
+}
+
+/// A shallow bare clone of `url` holding just `rev`'s commit, in a new
+/// temporary folder; `HEAD` points at it.
+fn fetch(
+    url: &str,
+    rev: &str,
+    interrupt: &AtomicBool,
+) -> Result<(tempfile::TempDir, gix::Repository), String> {
+    let fail = |err: &dyn std::error::Error| format!("{url}: {}", chain(err));
+    if url.trim().is_empty() {
+        return Err("no repository URL".into());
+    }
+    let temp = tempfile::Builder::new()
+        .prefix("carbon-workflow-")
+        .tempdir()
+        .map_err(|err| fail(&err))?;
+    let mut prepare = gix::prepare_clone_bare(url, temp.path().join("repo"))
+        .map_err(|err| fail(&err))?
+        .with_shallow(Shallow::DepthAtRemote(NonZeroU32::MIN));
+    if is_commit_id(rev) {
+        prepare = prepare
+            .with_revision(Some(rev.to_ascii_lowercase()))
+            .map_err(|err| fail(&err))?;
+    } else if !rev.is_empty() {
+        prepare = prepare.with_ref_name(Some(rev)).map_err(|err| fail(&err))?;
+    }
+    let (repo, _) = prepare
+        .fetch_only(gix::progress::Discard, interrupt)
+        .map_err(|err| fail(&err))?;
+    Ok((temp, repo))
+}
+
+/// Writes `commit`'s tree to `root`, refusing anything a package may not hold.
+fn write_tree(
+    repo: &gix::Repository,
+    commit: &gix::Commit<'_>,
+    root: &Path,
+) -> Result<(), Vec<String>> {
+    let fail = |err: &dyn std::error::Error| vec![chain(err)];
+    let tree = commit.tree().map_err(|err| fail(&err))?;
+    let mut recorder = gix::traverse::tree::Recorder::default();
+    tree.traverse()
+        .breadthfirst(&mut recorder)
+        .map_err(|err| fail(&err))?;
+    let mut problems = Vec::new();
+    let mut blobs = Vec::new();
+    let mut bytes = 0u64;
+    for entry in &recorder.records {
+        let path = entry.filepath.to_string();
+        if entry.mode.is_tree() {
+            continue;
+        }
+        if entry.mode.is_link() {
+            problems.push(format!("`{path}`: links are not allowed in a package"));
+        } else if entry.mode.is_commit() {
+            problems.push(format!("`{path}`: submodules are not allowed in a package"));
+        } else if let Err(problem) = check_package_path(&path) {
+            problems.push(problem);
+        } else {
+            let header = repo.find_header(entry.oid).map_err(|err| fail(&err))?;
+            bytes += header.size();
+            blobs.push((path, entry.oid));
+        }
+    }
+    if blobs.len() > MAX_PACKAGE_FILES {
+        problems.push(format!("more than {MAX_PACKAGE_FILES} files"));
+    }
+    if bytes > MAX_PACKAGE_BYTES {
+        problems.push(format!(
+            "larger than {} MB",
+            MAX_PACKAGE_BYTES / 1024 / 1024
+        ));
+    }
+    if !problems.is_empty() {
+        return Err(problems);
+    }
+    for (path, oid) in blobs {
+        let blob = repo.find_blob(oid).map_err(|err| fail(&err))?;
+        let target = root.join(&path);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| vec![format!("{}: {err}", parent.display())])?;
+        }
+        std::fs::write(&target, &blob.data)
+            .map_err(|err| vec![format!("{}: {err}", target.display())])?;
+    }
+    Ok(())
+}
+
+/// An error and its causes, `: `-separated: gix's own message is often just
+/// "Transport handshake failed" with the reason (DNS, TLS, 404) below it.
+fn chain(err: &dyn std::error::Error) -> String {
+    let mut text = err.to_string();
+    let mut source = err.source();
+    while let Some(cause) = source {
+        let cause_text = cause.to_string();
+        if !text.contains(&cause_text) {
+            text.push_str(": ");
+            text.push_str(&cause_text);
+        }
+        source = cause.source();
+    }
+    text
+}

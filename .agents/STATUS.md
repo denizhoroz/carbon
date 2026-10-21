@@ -6,7 +6,7 @@ Living tracker for Carbon. Update it at the end of each work session. Newest ent
 
 ## Current focus
 
-Core panels work on Windows (shell, layout, Explorer, editor with rust-analyzer, terminal, command palette, chat GUI with a demo agent). Workflow system built through Phase 3 plus declarative views and experimental webview panels (`project/built/workflows.md`). Next: workflow Phase 4 (install), a real chat backend (ACP/API), Manage Extensions and Settings contents, paradigm editor research, then macOS/Linux builds and CI.
+Core panels work on Windows (shell, layout, Explorer, editor with rust-analyzer, terminal, command palette, chat GUI with a demo agent). Workflow system built through Phase 3 plus declarative views, experimental webview panels and package install from folder, zip, git and a catalog with pins and `requires` (`project/built/workflows.md`). Next: enforce grants in a webview page API, a real chat backend (ACP/API), Manage Extensions and Settings contents, paradigm editor research, then macOS/Linux builds and CI.
 
 ## Progress
 
@@ -30,7 +30,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 | 3 Agents tab | [~] | Chat panel v1 GUI with demo agent (`project/built/chat.md`); no real backend, sessions or approvals yet |
 | 4 Multi-platform (Win/macOS/Linux) | [ ] | |
 | 5 Lightweight | [ ] | Design focus, not first priority |
-| 6 Modular extension sections | [~] | Workflow system built (Phase 0-3, package files, declarative views tier 1, experimental webview panels: `project/built/workflows.md`); next Phase 4 install; Manage Extensions empty |
+| 6 Modular extension sections | [~] | Workflow system built (Phase 0-3, package files, declarative views tier 1, experimental webview panels, install from folder/zip/git, content hashes, catalog, `requires`: `project/built/workflows.md`); next: grant enforcement (page API), signatures; Manage Extensions empty |
 
 ### Infrastructure
 - [x] Rust workspace scaffold (`apps/carbon-core` lib + `apps/carbon-gui` bin)
@@ -41,7 +41,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 - [ ] CI for all three platforms
 
 ## Next steps
-0. Workflow system Phase 4 (`project/not_built/workflow-system.md` s1, s4.5): install from folder/zip/git with a pinned hash, capability prompt, update diff; release packaging of `carbon-workflow/`; changing the three locations in Settings (Q16).
+0. Workflow system (`project/not_built/workflow-system.md` s1): enforce grants in a webview page API; Phase 4 leftovers (signatures, catalog URL in Settings, integrity re-check); release packaging of `carbon-workflow/`; changing the three locations in Settings (Q16).
 1. Real backend behind `ChatBackend` (ACP or an API); `@` mentions; chat list.
 2. Language-tool install model and Manage Extensions contents (`documents/language-tools.md`).
 3. Paradigm editor research pass (pillar 2).
@@ -54,6 +54,12 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-21 | Git sources through gix built in (HTTPS via reqwest + rustls), not the user's git CLI | user answer (over my recommendation of the git CLI) | `project/built/workflows.md`, `project/not_built/workflow-system.md` Q23 |
+| 2026-10-21 | Catalog = a git repository with `catalog.json`; every version pinned by commit id + content hash | user answer | `project/built/workflows.md`, `project/not_built/workflow-system.md` Q24 |
+| 2026-10-21 | Hash pins: commit id for git, SHA-256 content hash (path + NUL + file hash, sorted) for every install, checked against catalog pins; signatures later | user answer; hash format my design | `project/built/workflows.md`, `project/not_built/workflow-system.md` Q25 |
+| 2026-10-21 | `[requires]` built for workflows: missing = not offered, chain-aware, Install button from the catalog; extensions/tools/mcp accepted and always missing for now | Q21; details my design | `project/built/workflows.md` |
+| 2026-10-21 | Phase 4 first step installs from a folder or a zip (git and catalog later) | user answer | `project/built/workflows.md` |
+| 2026-10-21 | Capabilities: prompt at install and store grants now, enforcement later (page API / WASM); grants only for installed packages | user answer (prompt + grants); scope to installed packages my design | `project/built/workflows.md`, `project/not_built/workflow-system.md` s4.5 |
 | 2026-10-21 | Declarative views tier 1: `[[views.<name>]]` widget lists (heading, text, markdown, button, row, column, divider, list) in `view` panels; buttons and list rows run `[[commands]]` only | user asked to build tier 1; widget set and syntax my design | `project/built/workflows.md`, `project/not_built/workflow-system.md` s4.4 |
 | 2026-10-21 | Webview pages come only from the workflow's package (`page`), one origin per workflow, no network, navigation kept inside, no new windows; network later via the `net` capability | my default when continuing the webview; not objected | `project/built/workflows.md`, `project/not_built/workflow-system.md` s4.4 |
 | 2026-10-20 | Webview panels use the kit's `gpui-wry`, behind cargo feature `webview` (off by default); pages hidden under GPUI overlays, shortcuts forwarded from the page | user accepted the researched recommendations | `project/not_built/workflow-system.md` s4.4 |
@@ -106,6 +112,13 @@ Template:
 - Prevention: check or test added, if any
 ```
 
+### 2026-10-21 Cargo cannot find a new crate version that exists
+- Symptom: `failed to select a version for the requirement gix-credentials = "^0.42.0"` (candidates up to 0.39.0), then the same for `gix-negotiate`, after adding gix network features; `cargo search` showed 0.42.0
+- Context: `cargo build`, Windows, sparse crates.io index
+- Cause: (verified) stale per-crate files in `~/.cargo/registry/index/<index>/.cache` that cargo did not refresh
+- Fix: moved that `.cache` folder aside (`.cache.stale-2026-10-21`, safe to delete); cargo refetched the entries
+- Prevention: none; try this when a published version is "not found"
+
 ### 2026-10-17 Explorer buttons do nothing after a menu or dialog closes
 - Symptom: clicking Open/Create Folder in the Explorer has no effect; no error
 - Context: `window.dispatch_action(Box::new(CreateFolder))` from a panel button; handlers are `.on_action` on `CarbonApp`
@@ -157,6 +170,14 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-21 (Phase 4: git, catalog, pins, requires)
+- Done: git sources through gix (shallow fetch of one commit by tag, branch or commit id; tree checked and written out; HTTPS via reqwest + rustls; cause chains in errors); SHA-256 content hash for every package, re-checked at install; `installs` records in `state.json` (source, rev, commit, hash, pinned); catalog as a git repo with `catalog.json` (parse with bad entries left out, cache, Catalog dialog with Install/Update); `[requires]` for workflows (not offered while missing, chains, Install button from the catalog); Install ▾ menu, From Git dialog, Fetching dialog with Cancel; install UI moved to `workflow_install.rs`. 180 tests (+1 ignored network test); clippy, fmt green (also with `webview`). Click-tested with local repos and a catalog; three fixes (error cause, source line end, "Needs" wording).
+- Next: enforce grants in a webview page API; signatures and catalog URL in Settings later.
+
+### 2026-10-21 (Phase 4: install)
+- Done: install workflow packages from a folder or zip (core `workflow/install.rs`: checks, zip-slip and size limits, `\` zip names, plan new/update/reinstall/downgrade, staging copy, one version kept); `capabilities` field with names/scopes and plain descriptions; grants in `state.json`; install, Cannot Install and Permissions dialogs in Manage Workflows; uninstall drops grants; Duplicate copies package files. 174 tests; clippy, fmt green (also with `webview`). Click-tested through the real file dialogs; four bugs found and fixed (`Compress-Archive` zips, wrapped permissions text, stretched view button, needless reset notice).
+- Next: rest of Phase 4 (git source, hash pins, `requires`, catalog) or enforcing grants in a webview page API.
 
 ### 2026-10-21 (review and docs)
 - Done: reviewed the work since Phase 3 against the docs; `project/built/workflows.md` gained package files, declarative views and webview panels (and lost three stale lines); `workflow-system.md` compacted from 466 to about 180 lines with the to-do list first (built history now only in the built doc and git); references, indexes, `PROJECT.md`, `FEATURE.md`, decision log updated.

@@ -41,7 +41,6 @@ dunce = "1.0.5"
 tempfile = "3.27.0"
 notify = "8.2.0"
 trash = "5.2.9"
-# Git status for explorer markers (FEATURE SC-06: gitoxide reads). No network, merge, blame.
 # Language server protocol types (already in the lock through the kit's editor).
 lsp-types = "0.97.0"
 # Fuzzy matching for the command palette and Quick Open (fzf scoring; Helix and Zed use it).
@@ -51,7 +50,19 @@ toml = "1.1.8"
 semver = "1.0.28"
 # OS config dir for user workflows (workflow-system.md Q6).
 dirs = "6.0.0"
-gix = { version = "0.89.0", default-features = false, features = ["status", "sha1", "parallel"] }
+# Installing workflow packages from .zip files (Phase 4); deflate through flate2 (pure-Rust zlib-rs).
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# Git status for explorer markers (FEATURE SC-06: gitoxide reads; no merge, blame).
+# Network: fetching workflow packages and the catalog from git (Phase 4, user 2026-10-21:
+# gix over the user's git CLI); HTTPS through reqwest + rustls.
+gix = { version = "0.89.0", default-features = false, features = [
+    "status",
+    "sha1",
+    "parallel",
+    "blocking-http-transport-reqwest-rust-tls",
+] }
+# Content hash of installed workflow packages (hash pins, workflow-system.md s4.5).
+sha2 = "0.10.9"
 # Webview panels (workflow-system.md Q17, s4.4 webview spike): the kit's own wrapper and
 # the wry fork it builds on; same version line as gpui-kit, pin exact with it.
 gpui-wry = "=0.7.3"

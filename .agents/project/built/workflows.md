@@ -1,6 +1,6 @@
-# Workflow system (Phase 0-3, views, webview panels)
+# Workflow system (Phase 0-3, views, webview panels, install, catalog)
 
-Built 2026-10-20 (Phase 0-3) and 2026-10-21 (package files, declarative views, webview panels). What is left, its design and the decisions: `../not_built/workflow-system.md` (s1 To do; s4.4 webview research). A workflow is a switchable app mode, one Section Bar icon each (`section-bar.md`), described by a `workflow.toml` manifest. Built-ins: Editor (real), Paradigm Editor and Agent Automation (placeholders). Users add their own workflows and patch built-ins from a folder, and manage them in the Manage Workflows dialog (Phase 3, below).
+Built 2026-10-20 (Phase 0-3) and 2026-10-21 (package files, declarative views, webview panels, Phase 4 install from folder/zip/git with capabilities, content hashes, the catalog and `[requires]`). What is left, its design and the decisions: `../not_built/workflow-system.md` (s1 To do; s4.4 webview research). A workflow is a switchable app mode, one Section Bar icon each (`section-bar.md`), described by a `workflow.toml` manifest. Built-ins: Editor (real), Paradigm Editor and Agent Automation (placeholders). Users add their own workflows and patch built-ins from a folder, and manage them in the Manage Workflows dialog (Phase 3, below).
 
 ## Where files live
 
@@ -9,7 +9,7 @@ Three locations (user decision 2026-10-20, Q15-Q16; built the same day). Users w
 | Location | Default | Override | Contents |
 |---|---|---|---|
 | Shipped packages (Carbon's own, read-only) | `carbon-workflow/` next to the binary, else the repo's `apps/carbon-workflow/` (development) | `CARBON_SHIPPED_WORKFLOWS_DIR` | `editor/`, `paradigm/`, `agent/`, each a package: `workflow.toml` at its root plus any files it names (Package files below) |
-| Installed packages (downloaded) | `<OS local data dir>/Carbon/workflows/installed/` (Windows `%LOCALAPPDATA%`) | `CARBON_INSTALLED_WORKFLOWS_DIR`; under `CARBON_WORKFLOWS_DIR` when only that is set | `<id>/<version>/workflow.toml`; the highest semver folder wins. Nothing installs them yet (Phase 4) |
+| Installed packages (downloaded) | `<OS local data dir>/Carbon/workflows/installed/` (Windows `%LOCALAPPDATA%`) | `CARBON_INSTALLED_WORKFLOWS_DIR`; under `CARBON_WORKFLOWS_DIR` when only that is set | `<id>/<version>/workflow.toml`; the highest semver folder wins. Manage Workflows installs them (one version kept) |
 | Preferences and workflow list | `<OS config dir>/Carbon/workflows/` (Windows `%APPDATA%`) | `CARBON_WORKFLOWS_DIR` | Table below |
 
 The Editor manifest is also compiled into carbon-core (`include_str!` of the shipped file): when the shipped folder is missing or has no Editor, Carbon opens with that copy only and a notification says so. Release packaging must copy `apps/carbon-workflow/` to `carbon-workflow/` next to the binary (no installer yet).
@@ -19,9 +19,9 @@ Preferences root:
 | Path | Layer | Contents |
 |---|---|---|
 | (shipped) `carbon-workflow/<name>/workflow.toml` | L0 Carbon's own | `carbon.editor`, `carbon.paradigm-editor`, `carbon.agent-automation`; changed only through an overlay |
-| `user/<folder>/workflow.toml` | L2 user | A whole workflow, by hand or from Manage Workflows > Duplicate |
+| `user/<folder>/workflow.toml` | L2 user | A whole workflow, by hand or from Manage Workflows > Duplicate (which copies the package's other files too) |
 | `overlay/<id>.toml` | L3 overlay | Patch of a built-in; delete the file to reset |
-| `state/state.json` | L4 state | Active workflow, each workflow's last layout + fingerprint of the default it came from, `disabled`, `quarantined` (id -> reason) |
+| `state/state.json` | L4 state | Active workflow, each workflow's last layout + fingerprint of the default it came from, `disabled`, `quarantined` (id -> reason), named layouts, `grants` (id -> capabilities) |
 | `state/entering` | crash guard | Id of the workflow being opened; deleted 2 s after it opened |
 
 `target/carbon-gui/layout.json` (Phase 1) is read once to migrate when `state.json` does not exist, and never written again, so older builds keep reading it. Named layouts and auto-hide flags are per workflow since Phase 3 (`state.json` `layouts`); the old global `target/carbon-gui/layouts.json` becomes the Editor's set once and is not written again.
@@ -66,7 +66,7 @@ type = "heading"
 text = "Review"
 ```
 
-Panel kinds: `editor`, `explorer`, `terminal`, `chat`, `placeholder` (needs `title`), `view` (needs `view`), and `webview` (needs a build with the `webview` cargo feature; `page` optional). Another kind loads as a "Panel `x` is not available" placeholder (warning, not an error). Unknown top-level keys warn; reserved keys (`keybindings`, `requires`, `capabilities`, `[agent]`, ...) are ignored; unknown keys inside `layout`, `panels`, `commands`, `menus` reject the file. A leading UTF-8 BOM is fine.
+Panel kinds: `editor`, `explorer`, `terminal`, `chat`, `placeholder` (needs `title`), `view` (needs `view`), and `webview` (needs a build with the `webview` cargo feature; `page` optional). Another kind loads as a "Panel `x` is not available" placeholder (warning, not an error). Unknown top-level keys warn; reserved keys (`keybindings`, `activation`, `file_types`, `settings`, `background`, `[agent]`, `derived_from`) are ignored; unknown keys inside `layout`, `panels`, `commands`, `menus` reject the file. A leading UTF-8 BOM is fine.
 
 ## Package files (Q22, 2026-10-21)
 
@@ -111,6 +111,51 @@ Off by default: `cargo run -p carbon-gui --features webview`. Windows and macOS 
 | Covering | The page is a native window above GPUI, so it is hidden when its tab is in the background, its dock is closed, another group is zoomed, or a dialog, the palette, a title-bar menu or a tab menu holds focus. Tooltips and notifications can be covered |
 | Lifetime | Built after the panel's first render inside the panel's task (WebView2 creation runs the message loop; inside an update it panicked), hidden until loaded, kept while the panel moves between docks (no reload), restored after restart (`workflow` + `page` in the saved layout) |
 
+## Installing packages (Phase 4, 2026-10-21)
+
+Manage Workflows > **Install ▾** (From Folder…, From Zip…, From Git…) or **Catalog…**. The package is read and checked off the UI thread before anything is written (core `workflow/install.rs`, `git.rs`, `catalog.rs`):
+
+| Check | Rule |
+|---|---|
+| Manifest | `workflow.toml` at the package root; a zip may wrap the package in one top folder. Parsed and validated like any manifest; `carbon.*` ids refused |
+| Paths | Every file follows the package path rules; links refused (git: also submodules); zip entries named with `\` (Windows PowerShell `Compress-Archive`) are read as `/`, then checked, so `..\x` is still refused ("zip slip"); a root `.git` folder is left out |
+| Limits | At most 10,000 files and 256 MB unpacked (also enforced while extracting, whatever a zip header says) |
+| Pages | Every webview `page` must be a file of the package |
+| Clashes | An id or legacy id used by a user workflow or Carbon's own is refused |
+| Content hash | `sha256:<hex>` over the files: for each package path in sorted order, the path, a NUL byte and the file's SHA-256; the same files give the same hash from a folder, a zip or git. Computed while reading; the installed copy must match it ("changed since it was read" otherwise) |
+| Catalog pin | From the catalog, the package's id, version and content hash must be the listed ones; the commit is checked while fetching |
+
+The install dialog says what happens: a new workflow, an update (`1.0.0` to `2.0.0`), a reinstall, or an older version (warning colour); size and source; the permissions it asks for in plain words, new ones tagged New, already granted ones listed, ones no longer asked for named; "its default layout changed; your saved layout for it is replaced". The button is "Allow and Install" when it asks for something new; problems disable it. A package that fails the checks opens "Cannot Install" with every reason.
+
+Installing copies into `installed/<id>/<version>/` through a staging folder, then removes the package's other versions (so a downgrade takes effect: the newest folder would win otherwise). It grants the asked capabilities, records where the package came from (`state.json` `installs`: source, tag or branch, commit, content hash, pinned), lifts a quarantine, and drops a saved layout that does not match the new default (the active workflow switches to it at once). Remove (uninstall) also drops the grants and the record: a reinstall asks again. Nothing in a package is ever run.
+
+**Git sources** (user decision 2026-10-21: gix, not the user's git). From Git… asks for a repository (https, ssh, or a local path, `\` or `/`) and a revision: a tag, a branch, a full commit id, or empty for the default branch. gix fetches only that commit (shallow depth 1, by ref name or by commit id) into a temporary bare repository; its tree is written to a temporary folder after the package rules are checked (links, submodules, paths, limits), then read like a folder. HTTPS goes through reqwest + rustls; errors print gix's cause chain (DNS, TLS, HTTP). Hooks, filters and LFS never run. A "Fetching…" dialog shows meanwhile; Cancel stops the fetch (gix checks the flag between steps; a big remote took about 25 s to stop) and its temporary folder is deleted.
+
+**Pins and trust.** A full commit id pins the install; a tag or branch does not (it can move). An install from the catalog is pinned by commit and content hash. The install dialog says which ("Pinned by the catalog: commit and content hash checked." / "Pinned to a commit." / "Not pinned: …") with the short hash; installed rows show a **Pinned** tag and a "From <source> @ <rev> (<commit>) · sha256:…" line (start-ellipsized so the end stays visible). No signatures yet.
+
+**Catalog** (user decision 2026-10-21: a git repository). `CARBON_WORKFLOW_CATALOG` names a repository whose root holds `catalog.json` (until Settings can set it):
+
+```json
+{ "schema": 1, "packages": [ { "id": "acme.sketch", "name": "Sketch", "description": "...", "icon": "pencil",
+  "versions": [ { "version": "1.1.0", "git": "https://example.com/sketch.git",
+                  "commit": "<40 hex>", "hash": "sha256:<64 hex>" } ] } ] }
+```
+
+Catalog… fetches it (default branch, shallow, at most 4 MB), keeps a copy in `state/catalog.json` (shown at once next time; Refresh fetches again) and lists each package with its newest version, an "Installed x.y" tag, and **Install** / **Update** (none when a user or built-in workflow has the id). Bad entries (id, semver, commit not 40 hex, hash not `sha256:` + 64 lowercase hex, listed twice) are left out and named under the list; the rest stay usable. Installing a version fetches its pinned commit and goes through the install dialog.
+
+**Requirements** (`[requires]`, Q21):
+
+```toml
+[requires]
+workflows = { "acme.base" = ">=2.0" }   # also extensions, tools, mcp: id = semver range
+```
+
+A workflow whose requirement is not met still loads but is not offered (Section Bar, View > Section); a workflow needing one that itself misses something is missing too (`Registry::missing`, repeated until nothing changes). Its row shows **Needs more** and "Needs workflow acme.base >=2.0: not installed" (or "1.2.0 is installed", or "installed but cannot run (...)"), with **Install 2.0.0** when the catalog lists a fitting version; nothing installs without that click. When the requirement arrives (install, Turn On after an update), the workflow is offered again at once; removing it turns the dependent off again. `extensions`, `tools` and `mcp` are accepted and always missing ("…s are not supported by this Carbon yet") until those systems exist. The install dialog lists unmet requirements under **Needs** ("It installs, but stays off until these are installed"). Bad ids, ranges that do not parse and a workflow requiring itself reject the manifest.
+
+## Capabilities (2026-10-21)
+
+`capabilities = ["fs.read:workspace", "net:api.github.com", "process.exec:git", "gpu"]`: known names `fs.read` / `fs.write` (scope `workspace`, `package` or `home`), `net` (host, `*.domain` or `*`), `process.exec` (program or `*`), `agent.invoke`, `gpu`, `audio.output`, `audio.input`, `midi`; anything else rejects the manifest. Grants live in `state.json` (`grants`: id -> granted list), only for installed packages (user workflows are the user's own; built-ins are Carbon's). Installed rows show "N of M permissions allowed" and a **Permissions** dialog (each capability with Allowed / Not allowed, Revoke All, Allow All). Nothing enforces grants yet: the webview page API and WASM will check them.
+
 ## Overlay
 
 ```toml
@@ -148,7 +193,7 @@ Only Carbon's own and installed workflows take overlays (a user workflow is edit
 
 ## Manage Workflows dialog (Phase 3)
 
-Section Bar > Manage Workflows. One row per loaded workflow (hidden, off and quarantined ones too): icon, name, origin tag (Carbon / Installed / User), status tag (On / Off / Hidden / Turned off after a crash, with the reason), "Changed" when an overlay applies, id and version. Below the rows: files that did not load, with their problems. Footer: Open Folder (the preferences folder; creates `user/`), Reload (reads the files again, no restart), Close.
+Section Bar > Manage Workflows. One row per loaded workflow (hidden, off and quarantined ones too): icon, name, origin tag (Carbon / Installed / User), status tag (On / Off / Hidden / Turned off after a crash, with the reason), "Changed" when an overlay applies, id and version. Below the rows: files that did not load, with their problems. Footer: Install ▾ (From Folder / Zip / Git), Catalog…, Open Folder (the preferences folder; creates `user/`), Reload (reads the files again, no restart), Close. Installed rows also show **Pinned**, the source line and unmet requirements (above).
 
 | Action | Shown for | Does |
 |---|---|---|
@@ -178,6 +223,10 @@ When the workflows do not fit, the list scrolls (mouse wheel) and up/down arrows
 | `apps/carbon-gui/src/menus.rs`, `commands.rs` | Workflow items appended per menu; palette-only workflow commands |
 | `apps/carbon-gui/src/main.rs` | `workflows::init(--safe-mode)`, start-up notifications, active workflow's commands in `MenuState` |
 | `apps/carbon-core/src/workflow/{package,view}.rs` | `check_package_path`, `resolve_package_file`; `Widget`, `ListItem`, `check_view` (limits) |
+| `apps/carbon-core/src/workflow/{install,capability}.rs` | `InstallSource` (Folder, Zip, Git), `read_package`, `Package` (`hash`, `pin`, `record`), `content_hash`, `Pin`, `InstallRecord`, `plan_install` -> `InstallPlan`/`InstallKind` (`needs`, pin problems), `WorkflowDirs::install` (hash re-check), `copy_package_files`; `check_capability`, `describe_capability` |
+| `apps/carbon-core/src/workflow/{git,catalog,requires}.rs` | `fetch_git`, `GitCheckout`, `is_commit_id` (gix shallow fetch, tree written out with checks); `Catalog`, `CatalogPackage::best`, `fetch_catalog`, `fetch_from_catalog`, `catalog_url`; `Requires`, `Missing`, `RequireKind` (with `Registry::missing` / `unmet`) |
+| `apps/carbon-gui/src/workflow_install.rs` | Install menu, file picker, From Git dialog, Fetching dialog with Cancel, install / Cannot Install dialogs, Catalog dialog (`CatalogView`, cached catalog), `install_listed` for requirement buttons |
+| `apps/carbon-gui/src/manage_workflows.rs` (install) | Install ▾ / Catalog… footer, Pinned tag, source line, unmet requirements with Install, Permissions dialog; workbench `install_package`, `install_record`, `grants`, `set_grants` |
 | `apps/carbon-gui/src/view_panel.rs` | `ViewPanel`: draws a view, runs commands (`workflows::command_action`), saved as `workflow` + `view` |
 | `apps/carbon-gui/src/webview_panel.rs`, `webview_panel/protocol.rs`, `webview_panel/spike.html` | `WebviewPanel` (feature `webview`): build, IPC, theme, keys, show/hide; `carbon-page` protocol, CSP, navigation rule; test page |
 | `apps/carbon-gui/src/workbench.rs` `sync_webviews` | Every frame: which webview pages may show (dock open, no zoom elsewhere, no overlay) |
@@ -193,6 +242,10 @@ When the workflows do not fit, the list scrolls (mouse wheel) and up/down arrows
 
 - Package files, views, webviews (2026-10-21): 166 workspace tests (new: path rules, exact-case and outside-package resolving, `page` and `view` rules, package folders, view parsing/validation/limits/round trip, view panel layout, reserved keys, page messages, page origins). Clippy and fmt clean with and without `webview` (44 GUI tests with it). Click-tested in a scratch folder: a View Demo workflow (every widget; New File, Palette and a list row run; a missing action shows the notice; restart restores; Reload shows an edited heading); a Web Spike workflow (package page with its JS/CSS/JSON, network blocked, link away and `window.open` blocked, two webviews at once, palette/menus/dialog/tab menu hide pages, zoom (bug found and fixed), move to the bottom dock without reload, restart, dock close and window resize follow). Real keypresses in a page (F1, Ctrl+P, Ctrl+Shift+P, Ctrl+B) checked by the user.
 
+- Install (2026-10-21): 174 workspace tests (new: folder install and load, zip with and without a top folder and with `\` names, zip slip (`../` and `..\`), missing manifest, missing page, bad capability, `carbon.*` id, user-id clash, update/downgrade plan and capability diff, one version kept, Duplicate copies package files, capability names and descriptions). Click-tested through the real Windows file dialogs in a scratch folder: install a folder (dialog, grants saved, row + Section Bar icon), update from a zip (diff: new `midi`, kept `gpu`, dropped `net`, layout changed; only `2.0.0` left), zip slip refused with the reason, a `Compress-Archive` zip opens as a downgrade, Permissions > Revoke All (row `0 of 2`, `grants` empty), Duplicate copies `assets/`, Remove while active (folder gone, Editor opens). Found and fixed: `Compress-Archive` zips were refused (backslashes), the permissions count wrapped onto its own line, a lone view button stretched to full width, a reinstall showed a needless "layout was reset" notice.
+
+- Phase 4 rest (2026-10-21): 180 workspace tests (new `tests/workflow_sources.rs`: git tag / branch / default branch / commit id with records and equal hashes, install from a git checkout, unknown tag and commit refused, a symlink entry refused; the same hash from a folder and a zip in another order and folder, a changed source refused at install; catalog parsing keeps good entries and picks versions by range; catalog fetch from a git repo with a good pin, a wrong version and a wrong hash; requirements: version too low, chain, extension unsupported, bad range and self reference rejected; plus an ignored network test over real HTTPS). Click-tested with local git repos and a catalog repo made by a script (hashes computed in Python matched Rust's): From Git with a Windows path and tag `v1.0.0` (Not pinned, tag + commit shown); Catalog lists three packages with Installed/Update/Install; App installs with "Needs" and stays off with **Install 2.0.0**; that button installs Base and App turns on; Sketch updates 1.0.0 -> 1.1.0 (pinned); Cancel during a fetch of `linux.git`; an unreachable host opens Cannot Install; restart keeps everything; removing Base turns App off again. Found and fixed: gix's message hid the cause ("Transport handshake failed"), the source line cut off its useful end, lower-case "needs" in rows.
+
 ## Limits
 
 - No hide/show in the dialog; no Repair/Remove buttons on a "not available" placeholder; no diff of a copy against its parent (`derived_from` is stored).
@@ -201,6 +254,6 @@ When the workflows do not fit, the list scrolls (mouse wheel) and up/down arrows
 - A placeholder for an unknown kind is saved as a plain placeholder; when the kind later exists, that workflow keeps the placeholder until Reset Layout.
 - The crash mark covers 2 s after opening; a crash later is not tied to a workflow. Killing Carbon within 2 s of start (e.g. while debugging) triggers safe mode once.
 - Registry is loaded at start and on Manage Workflows > Reload; nothing watches the folders.
-- Duplicate copies only `workflow.toml`, so a duplicated workflow loses its package files (a webview page).
+- Install: no signatures or trusted keys; catalog URL only from `CARBON_WORKFLOW_CATALOG`; installed files are not re-checked against their hash after install; no byte progress (Fetching dialog only; a zip is copied on the UI thread); a commit-id fetch needs a server that serves commits by id (GitHub, GitLab and plain git do); `requires` kinds other than workflows are always missing; Cancel can take tens of seconds to stop a big fetch; grants are recorded, not enforced.
 - Views have no state: no inputs, toggles, forms, tables or trees (tier 2 or host data later).
 - Webview: off by default, Windows/macOS only; a tab click does not focus the panel (a click in the page does); no page-to-Carbon API beyond the test messages; workflow ids `a-.b` and `a.-b` (rare) map to the same page origin; not tested: auto-hide docks over a page, flicker during an edge drag, memory per page.

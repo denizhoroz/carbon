@@ -100,17 +100,21 @@ fn element(widget: &Widget, path: &str, workflow: &WorkflowId, cx: &App) -> AnyE
             style,
         } => {
             let (workflow, command) = (workflow.clone(), command.clone());
-            Button::new(id)
-                .label(label.clone())
-                .when_some(workflows::named_icon(icon.as_deref()), |button, icon| {
-                    button.icon(icon)
-                })
-                .map(|button| match style {
-                    ButtonStyle::Primary => button.primary(),
-                    ButtonStyle::Secondary => button.outline(),
-                    ButtonStyle::Ghost => button.ghost(),
-                })
-                .on_click(move |_, window, cx| run(&workflow, &command, window, cx))
+            // Its own width, also when a column would stretch it.
+            h_flex()
+                .child(
+                    Button::new(id)
+                        .label(label.clone())
+                        .when_some(workflows::named_icon(icon.as_deref()), |button, icon| {
+                            button.icon(icon)
+                        })
+                        .map(|button| match style {
+                            ButtonStyle::Primary => button.primary(),
+                            ButtonStyle::Secondary => button.outline(),
+                            ButtonStyle::Ghost => button.ghost(),
+                        })
+                        .on_click(move |_, window, cx| run(&workflow, &command, window, cx)),
+                )
                 .into_any_element()
         }
         Widget::Row { children } => h_flex()

@@ -1,6 +1,6 @@
 # Workflow system: remaining work and design
 
-Built (`../built/workflows.md`): Phase 0-3 (registry, manifests, built-in packages, user folder, overlays, `state.json`, crash guard, safe mode, Manage Workflows, per-workflow named layouts, Section Bar overflow) on 2026-10-20; package files, declarative views tier 1 and experimental webview panels on 2026-10-21. This file holds what is left, the design for it, and the decisions. Evidence: `research_notes/Modular workflow systems/{workspace_mode_systems,plugin_architectures,agent_workflow_packages}.md`. Labels: **[BG]** = background knowledge, not verified; **(inf)** = my design choice.
+Built (`../built/workflows.md`): Phase 0-3 (registry, manifests, built-in packages, user folder, overlays, `state.json`, crash guard, safe mode, Manage Workflows, per-workflow named layouts, Section Bar overflow) on 2026-10-20; package files, declarative views tier 1, experimental webview panels and Phase 4 install (folder/zip/git, capability prompt and grants, update diff, content hashes, catalog, `requires`) on 2026-10-21. This file holds what is left, the design for it, and the decisions. Evidence: `research_notes/Modular workflow systems/{workspace_mode_systems,plugin_architectures,agent_workflow_packages}.md`. Labels: **[BG]** = background knowledge, not verified; **(inf)** = my design choice.
 
 ## 1. To do
 
@@ -8,12 +8,12 @@ In rough order; each row points to its design.
 
 | # | Item | Scope | Design |
 |---|---|---|---|
-| 1 | **Phase 4: install packages** | Install from a folder, zip or git (pinned hash/tag) into `installed/<id>/<version>/`; path rules checked on install (Q22); capability prompt (Q19); update with a diff (version, capabilities, layout); Install button for missing `requires` (Q21); uninstall keeps overlay/state for a reinstall; Duplicate copies package files too (today only `workflow.toml`); later a catalog (JSON index) | s4.5 |
-| 2 | Capabilities | Parse `capabilities`; store grants in `state.json`; enforce in the webview bridge (and later WASM); revoke in Manage Workflows; denied = typed error | s4.5, Q13, Q19 |
+| 1 | **Phase 4: what is left** | Built 2026-10-21: folder, zip and git install (gix), checks, capability prompt and grants, update diff, content hash and commit pins, catalog (git repo + `catalog.json`), `requires` with Install buttons (Q21), Fetching dialog with Cancel. Left: signatures and trusted keys; catalog URL in Settings (env meanwhile); re-check installed files against their hash (at load or a Verify button); byte progress; workspace trust for project-provided workflows; `requires` kinds extensions/tools/mcp once those systems exist | s4.5 |
+| 2 | Capabilities | Built: names and scopes, grants in `state.json`, Permissions dialog (allow/revoke). Left: enforce in the webview page API and WASM; denied = typed error (Q13) | s4.5, Q13, Q19 |
 | 3 | Webview, next steps | Page-to-Carbon API (open file, run command, events), gated by capabilities; network for pages via the `net` capability; decide whether the `webview` feature is on by default (measure the classic swap chain); a tab click should focus the panel; origin collision of rare ids (`a-.b` / `a.-b`); Linux (needs GPUI Fast or another path); not yet tested: auto-hide docks over a page, flicker during an edge drag, memory per page | s4.4 |
 | 4 | Views tier 2 | Stateful widgets (input, toggle, select, form, table, tree) with data from a WASM component or from Carbon; refresh on events | s4.4 |
 | 5 | Real Paradigm Editor and Agent Automation | Replace the placeholder panels (first-party Rust panels, views or webviews) | `README.md` row "More workflows" |
-| 6 | Unbuilt manifest fields | `activation`, `file_types` (Q14), `settings` (needs the Settings system), `background` (Q20), `requires` (Q21), `[agent]`; `keybindings` deferred (Q9) | s4.1, s4.3 |
+| 6 | Unbuilt manifest fields | `activation`, `file_types` (Q14), `settings` (needs the Settings system), `background` (Q20), `[agent]`; `keybindings` deferred (Q9) | s4.1, s4.3 |
 | 7 | Robustness | Layout merge after a default changes (today a reset); Repair/Remove buttons on a "not available" placeholder; quarantine counters (N faults in M minutes); Bisect over workflows/extensions | s4.2, s4.3 |
 | 8 | Locations and release | Change the three locations in the installer/Settings (Q16; env variables meanwhile); release packaging copies `apps/carbon-workflow/` next to the binary | Q15, Q16 |
 | 9 | Contributor guide | A `workflow.toml` guide (fields, views, pages, suggested folders) | Q22 |
@@ -46,7 +46,7 @@ No surveyed product has a mode with both a dock layout and agent behaviour; Carb
 |---|---|---|
 | R6 | Versioned API: `schema_version` + `carbon_api`; host keeps loaders for the last N schema versions | s4.5 |
 | R7 | Trust: manifest-only workflows run nothing; capabilities declared and granted by the user; no auto-run on install; hash pins | s4.5 |
-| R9 | Agent behaviour later without redesign (`[agent]`, `requires` reserved) | s4.1 |
+| R9 | Agent behaviour later without redesign (`[agent]` reserved; `[requires]` built for workflows, other kinds accepted) | s4.1 |
 | W1 | Nothing assumes a folder or text buffer; `requires_workspace` shows an "open a folder" state | s4.3 |
 | W2 | File-type handlers (glob/MIME to panel kind) | s4.1, Q14 |
 | W4 | Background: suspend on exit by default; declared tasks visible and stoppable | s4.3, Q20 |
@@ -79,8 +79,6 @@ Built fields are in `../built/workflows.md`. Unknown top-level keys warn; the re
 | `file_types` | glob/MIME -> panel kind, `open = "primary"`/`"secondary"`; the active workflow wins, else the per-type user default ("Open With" asks once) (Q14) |
 | `settings` | Typed keys with defaults under `workflow.<id>.*`, drawn by Manage Settings with no workflow code (W5) |
 | `background` | Declared tasks (name, kind); default none = suspend on exit (Q20) |
-| `requires` | `extensions`, `tools`, `mcp`, other workflows: id + semver range; missing = disabled with the reason and an Install button per item, never installed without a click (Q21) |
-| `capabilities` | `fs.read`/`fs.write` with path scopes, `process.exec` patterns, `net` hosts, `agent.invoke`, `gpu`, `audio.output`, `audio.input`, `midi`; none for layout-only or view-only workflows (Q19) |
 | `[agent]` | Instruction files, tool allowlist, MCP servers, hooks; the same files as `AGENTS.md`/`SKILL.md`/`.mcp.json` |
 
 ### 4.2 Layers and updates
@@ -119,14 +117,16 @@ Webview library (research 2026-10-20, sources s6): the kit's `gpui-wry` 0.7.3 (s
 
 ### 4.5 Install, trust, versioning (Phase 4)
 
+Built 2026-10-21 (folder/zip/git sources, checks, dialog, grants, update diff, uninstall drops grants, content hash, commit and catalog pins, catalog, `requires`): `../built/workflows.md`. Still to build:
+
 | Topic | Design |
 |---|---|
-| Sources | A folder, a zip, a git repo at a pinned tag/hash; later a catalog (JSON index of packages and versions) |
-| Install | Validate the manifest and every path (Q22) before copying; copy into `installed/<id>/<version>/`; never run anything (no install scripts); id clash with shipped or user ids rejected |
-| Capability prompt | At install: list what the package asks for (Q19); layout-only and view-only packages need no prompt; a workflow found in a cloned repo needs workspace trust first (WB-05) |
-| Update | New version folder; show a diff (version, new capabilities, layout change); only new capabilities are asked for; overlay re-applied; saved layout merged (s4.2) |
-| Uninstall | Remove the package (all versions); keep overlay and state for a reinstall unless asked |
-| Trust levels | built-in > hash-pinned installed > unpinned installed > project-provided |
+| Signatures | Signed `catalog.json` (or per-package signature over the content hash) with keys the user trusts; key list in Settings |
+| Catalog | URL in Settings (env `CARBON_WORKFLOW_CATALOG` meanwhile); several catalogs; search; update notices for installed packages |
+| Integrity | Re-check installed files against `installs.hash` (at load or a Verify button); offer Reinstall on a mismatch |
+| Workspace trust | A workflow found in a cloned repo needs workspace trust first (WB-05) |
+| Update | Saved layout merged instead of replaced (s4.2); diff of views/pages beyond the layout fingerprint |
+| Trust levels | built-in > hash-pinned installed > unpinned installed > project-provided (the `pinned` flag is recorded and shown; nothing behaves differently by level yet) |
 | API | `carbon_api` checked at load (newer-than-host = "needs newer Carbon", disabled); host keeps loaders for the last N `schema_version`s with a deprecation notice |
 | Agent files | No shell-injection syntax; invisible Unicode flagged (Snyk ToxicSkills, GlassWorm findings) |
 | Devices | `gpu`, `audio.input`, `audio.output` granted per workflow, indicator while in use; denied = typed error, the workflow keeps running |
@@ -157,9 +157,12 @@ Webview library (research 2026-10-20, sources s6): the kit's `gpui-wry` 0.7.3 (s
 | Q16 | Moving those locations | Yes, all three, in the installer or Settings; env variables meanwhile |
 | Q17 | Contributed UI | Declarative views + webview pages; no native plugins (views tier 1 and webview pages built) |
 | Q18 | Where logic runs | Tier 1 manifest (built), tier 2 WASM; webview logic is JS through a capability-gated bridge |
-| Q19 | Capability grants | At install; an update asks only for new ones; revocable |
+| Q19 | Capability grants | At install; an update asks only for new ones; revocable (built, not enforced yet) |
 | Q20 | Background work | Suspended by default; declared tasks visible with Stop; deniable |
-| Q21 | Missing `requires` | Disabled with the reason and an Install button; nothing installs without a click |
+| Q21 | Missing `requires` | Disabled with the reason and an Install button; nothing installs without a click (built for workflows) |
+| Q23 | Git transport | gix built in (HTTPS via reqwest + rustls), not the user's git (user, 2026-10-21) (built) |
+| Q24 | Catalog source | A git repo with `catalog.json`, every version pinned by commit + content hash (user, 2026-10-21) (built) |
+| Q25 | Hash pins | Commit id for git; SHA-256 content hash for every install, checked against catalog pins; signatures later (user, 2026-10-21) (built) |
 | Q22 | Package folder | Free; only root `workflow.toml` fixed; path rules (built) |
 
 Risks: the kit breaks every minor (only the GUI adapter touches GPUI types); the webview is a native window above GPUI (every new overlay must hide pages; kept in `Workbench::sync_webviews`); thin evidence for Blender, Zed modes, Cursor, VS Code crash semantics.

@@ -2,6 +2,7 @@
 //! persist) plus T2: named layouts, task presets, keyboard move/resize, auto-hide docks.
 //! Files live in the build dir for now; they move to the OS user dir later.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -19,7 +20,8 @@ use gpui_kit::*;
 
 use carbon_core::BufferId;
 use carbon_core::workflow::{
-    LayoutFile, Origin, SavedWorkflow, StateFile, WorkflowId, finish_entering, start_entering,
+    InstallKind, InstallPlan, InstallRecord, LayoutFile, Origin, Package, SavedWorkflow, StateFile,
+    WorkflowId, finish_entering, start_entering,
 };
 use gpui_kit::component::dock::panel_handle;
 
@@ -502,7 +504,7 @@ impl Workbench {
         let def = registry.get(id)?;
         let name = format!("{} (copy)", def.name);
         let copy = def.duplicate(registry.free_user_id(&name), name);
-        match dirs.create_user_workflow(&copy) {
+        match dirs.create_user_workflow(&copy, registry.package_dir(id)) {
             Ok(_) => {
                 self.workflows_changed(window, cx);
                 window.push_notification(format!("Created \"{}\".", copy.name), cx);
@@ -540,7 +542,86 @@ impl Workbench {
                 eprintln!("could not remove the overlay of {id}: {err}");
             }
         }
+        // A reinstall asks again: its files may differ.
+        self.state.grants.remove(id);
+        self.state.installs.remove(id);
         self.workflows_changed(window, cx);
+    }
+
+    /// Installs a checked package whose plan the user accepted; its
+    /// capabilities are granted. An install lifts a quarantine; a changed
+    /// default layout replaces the saved one.
+    pub fn install_package(
+        &mut self,
+        package: &Package,
+        plan: &InstallPlan,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(dirs) = workflows::dirs() else {
+            return;
+        };
+        if !plan.problems.is_empty() {
+            return;
+        }
+        if let Err(err) = dirs.install(package) {
+            window.push_notification(format!("Could not install: {err}"), cx);
+            return;
+        }
+        let def = &package.def;
+        let id = def.id.clone();
+        self.state
+            .grants
+            .insert(id.clone(), def.capabilities.iter().cloned().collect());
+        self.state.installs.insert(id.clone(), package.record());
+        self.state.quarantined.remove(&id);
+        // A layout kept from another version (also after an uninstall) goes
+        // quietly: the user just chose this version.
+        let stale = self
+            .state
+            .workflows
+            .get(&id)
+            .is_some_and(|saved| !saved.matches(def));
+        if plan.layout_changed || stale {
+            self.state.workflows.remove(&id);
+            if id == self.section {
+                self.reload_registry();
+                self.apply_workflow_default(window, cx);
+            }
+        }
+        self.workflows_changed(window, cx);
+        let done = match &plan.kind {
+            InstallKind::Update { from } => {
+                format!("Updated \"{}\" from {from} to {}.", def.name, def.version)
+            }
+            _ => format!("Installed \"{}\" {}.", def.name, def.version),
+        };
+        window.push_notification(done, cx);
+    }
+
+    /// Where installed package `id` came from, if it was installed through Carbon.
+    pub fn install_record(&self, id: &WorkflowId) -> Option<InstallRecord> {
+        self.state.installs.get(id).cloned()
+    }
+
+    /// Capabilities granted to `id`.
+    pub fn grants(&self, id: &WorkflowId) -> BTreeSet<String> {
+        self.state.grants.get(id).cloned().unwrap_or_default()
+    }
+
+    /// Grants all capabilities `id` asks for, or revokes them all.
+    pub fn set_grants(&mut self, id: &WorkflowId, allow: bool, cx: &mut Context<Self>) {
+        let asked = workflows::registry()
+            .get(id)
+            .map(|def| def.capabilities.iter().cloned().collect())
+            .unwrap_or_default();
+        if allow {
+            self.state.grants.insert(id.clone(), asked);
+        } else {
+            self.state.grants.remove(id);
+        }
+        self.schedule_save(cx);
+        cx.notify();
     }
 
     /// Reads the workflow files again (after editing them by hand).

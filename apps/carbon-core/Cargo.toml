@@ -24,3 +24,5 @@ nucleo-matcher.workspace = true
 toml.workspace = true
 semver.workspace = true
 dirs.workspace = true
+zip.workspace = true
+sha2.workspace = true

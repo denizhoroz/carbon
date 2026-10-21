@@ -20,6 +20,7 @@ mod view_panel;
 #[cfg(feature = "webview")]
 mod webview_panel;
 mod workbench;
+mod workflow_install;
 mod workflows;
 mod workspace_ops;
 

@@ -8,9 +8,14 @@
 //! installed one (`overlay.rs`). Saved layouts and flags live in `state.rs`;
 //! folders in `dirs.rs`. Plain data with no UI types.
 
+mod capability;
+mod catalog;
 mod dirs;
+mod git;
+mod install;
 mod overlay;
 mod package;
+mod requires;
 mod state;
 mod view;
 
@@ -21,9 +26,20 @@ use std::path::{Path, PathBuf};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
+pub use capability::{check_capability, describe_capability};
+pub use catalog::{
+    CATALOG_ENV, CATALOG_SCHEMA, Catalog, CatalogPackage, CatalogVersion, catalog_url,
+    fetch_catalog, fetch_from_catalog,
+};
 pub use dirs::{SHIPPED_ENV, WorkflowDirs, shipped_dir};
+pub use git::{GitCheckout, fetch_git, is_commit_id};
+pub use install::{
+    InstallKind, InstallPlan, InstallRecord, InstallSource, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES,
+    Package, Pin, content_hash, copy_package_files, list_folder, plan_install, read_package,
+};
 pub use overlay::{Overlay, RegionPatch};
 pub use package::{MAX_PACKAGE_PATH, check_package_path, resolve_package_file};
+pub use requires::{Missing, RequireKind, Requires};
 pub use state::{SavedWorkflow, StateFile, finish_entering, start_entering, take_unfinished};
 pub use view::{Align, ButtonStyle, ListItem, MAX_VIEW_DEPTH, MAX_VIEW_WIDGETS, Widget};
 
@@ -53,15 +69,13 @@ const EDITOR_FALLBACK: &str = include_str!("../../carbon-workflow/editor/workflo
 const EDITOR_FALLBACK_SOURCE: &str = "built-in Editor";
 
 /// Manifest keys from the design that this build accepts but does not use yet.
-const RESERVED_KEYS: [&str; 9] = [
+const RESERVED_KEYS: [&str; 7] = [
     "derived_from",
     "keybindings",
     "activation",
     "file_types",
     "settings",
     "background",
-    "requires",
-    "capabilities",
     "agent",
 ];
 
@@ -133,9 +147,16 @@ pub struct WorkflowDef {
     /// Places for those commands in the top-level menus.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub menus: Vec<MenuDef>,
+    /// What the workflow may do beyond showing panels (`capability.rs`);
+    /// granted by the user at install.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<String>,
     /// Declarative views by name, for `view` panels (`view.rs`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub views: BTreeMap<String, Vec<Widget>>,
+    /// Workflows (later extensions, tools, MCP servers) it needs (`requires.rs`).
+    #[serde(default, skip_serializing_if = "Requires::is_empty")]
+    pub requires: Requires,
     /// Every other top-level key: reserved ones are ignored, the rest warned about.
     #[serde(flatten)]
     other: toml::Table,
@@ -450,9 +471,15 @@ impl WorkflowDef {
                 problems.push(format!("menu item: no command `{}`", item.command));
             }
         }
+        for capability in &self.capabilities {
+            if let Err(problem) = check_capability(capability) {
+                problems.push(problem);
+            }
+        }
         for (name, widgets) in &self.views {
             problems.extend(view::check_view(name, widgets, &command_ids));
         }
+        problems.extend(self.requires.check(self.id.as_str()));
         problems
     }
 }
@@ -518,6 +545,8 @@ pub struct Registry {
     /// Package folder of each workflow loaded from one (pages and assets
     /// resolve inside it); none for the compiled-in Editor.
     packages: HashMap<WorkflowId, PathBuf>,
+    /// Workflows with unmet `[requires]`: loaded but not offered.
+    missing: HashMap<WorkflowId, Vec<Missing>>,
 }
 
 impl Registry {
@@ -593,6 +622,7 @@ impl Registry {
             }
         }
         registry.sort();
+        registry.check_requires();
         registry
     }
 
@@ -610,6 +640,7 @@ impl Registry {
             registry.add(source, text, panel_kinds, origin);
         }
         registry.sort();
+        registry.check_requires();
         registry
     }
 
@@ -730,6 +761,49 @@ impl Registry {
             .sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.id.cmp(&b.id)));
     }
 
+    /// Finds every workflow whose `[requires]` are not met. A workflow that
+    /// needs one that is itself missing something is missing too, so this
+    /// repeats until nothing changes.
+    fn check_requires(&mut self) {
+        self.missing.clear();
+        loop {
+            let found: Vec<(WorkflowId, Vec<Missing>)> = self
+                .workflows
+                .iter()
+                .filter(|def| !self.missing.contains_key(&def.id))
+                .map(|def| (def.id.clone(), self.unmet(def)))
+                .filter(|(_, missing)| !missing.is_empty())
+                .collect();
+            if found.is_empty() {
+                return;
+            }
+            self.missing.extend(found);
+        }
+    }
+
+    /// `def`'s requirements that the loaded workflows do not meet (`def`
+    /// need not be loaded: the install dialog asks this of a package).
+    pub fn unmet(&self, def: &WorkflowDef) -> Vec<Missing> {
+        def.requires.missing(|id| {
+            let Some(other) = self.get(&WorkflowId::new(id)) else {
+                return Err("not installed".into());
+            };
+            match self
+                .missing
+                .get(&other.id)
+                .and_then(|missing| missing.first())
+            {
+                Some(first) => Err(format!("installed but cannot run ({first})")),
+                None => Ok(other.version.clone()),
+            }
+        })
+    }
+
+    /// `id`'s unmet requirements; empty when it has none.
+    pub fn missing(&self, id: &WorkflowId) -> &[Missing] {
+        self.missing.get(id).map(Vec::as_slice).unwrap_or_default()
+    }
+
     /// Keeps these workflows out of `available` (disabled or quarantined).
     /// The Editor is never blocked: it is the default and safe-mode workflow.
     pub fn block(&mut self, ids: impl IntoIterator<Item = WorkflowId>) {
@@ -765,11 +839,12 @@ impl Registry {
         &self.workflows
     }
 
-    /// The workflows the Section Bar and View > Section offer.
+    /// The workflows the Section Bar and View > Section offer: shown, not
+    /// blocked, requirements met.
     pub fn available(&self) -> impl Iterator<Item = &WorkflowDef> {
-        self.workflows
-            .iter()
-            .filter(|def| !def.hidden && !self.blocked.contains(&def.id))
+        self.workflows.iter().filter(|def| {
+            !def.hidden && !self.blocked.contains(&def.id) && !self.missing.contains_key(&def.id)
+        })
     }
 
     pub fn is_available(&self, id: &WorkflowId) -> bool {

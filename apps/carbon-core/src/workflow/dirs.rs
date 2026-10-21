@@ -121,6 +121,11 @@ impl WorkflowDirs {
         self.root.join("state").join("state.json")
     }
 
+    /// The last catalog fetched (`catalog.rs`), shown until the next refresh.
+    pub fn catalog_file(&self) -> PathBuf {
+        self.root.join("state").join("catalog.json")
+    }
+
     /// Exists while a workflow is being opened (crash-loop guard).
     pub fn entering_file(&self) -> PathBuf {
         self.root.join("state").join("entering")
@@ -171,7 +176,13 @@ impl WorkflowDirs {
 
     /// Writes a new user workflow to `user/<folder>/workflow.toml`, the
     /// folder named after the id's last part (`-2`, `-3`, ... when taken).
-    pub fn create_user_workflow(&self, def: &WorkflowDef) -> Result<PathBuf, String> {
+    /// `package`: the original's package folder; its other files are copied
+    /// too (pages, assets), so the copy works on its own.
+    pub fn create_user_workflow(
+        &self,
+        def: &WorkflowDef,
+        package: Option<&Path>,
+    ) -> Result<PathBuf, String> {
         let text = def.to_toml()?;
         let base = def.id.as_str().rsplit('.').next().unwrap_or("workflow");
         let user = self.user_dir();
@@ -186,6 +197,9 @@ impl WorkflowDirs {
         std::fs::create_dir_all(&folder)
             .and_then(|_| std::fs::write(&path, text))
             .map_err(|err| format!("cannot write {}: {err}", path.display()))?;
+        if let Some(package) = package {
+            super::copy_package_files(package, &folder)?;
+        }
         Ok(path)
     }
 

@@ -464,7 +464,7 @@ fn duplicate_writes_a_valid_user_copy_that_loads() {
     assert_eq!(id.as_str(), "user.editor-copy");
     let copy = editor.duplicate(id.clone(), "Editor (copy)");
     assert_eq!(copy.layout_fingerprint(), editor.layout_fingerprint());
-    let path = dirs.create_user_workflow(&copy).unwrap();
+    let path = dirs.create_user_workflow(&copy, None).unwrap();
     assert!(path.ends_with("user/editor-copy/workflow.toml"));
     let text = fs::read_to_string(&path).unwrap();
     assert!(text.contains("derived_from"), "{text}");
@@ -485,7 +485,7 @@ fn duplicate_writes_a_valid_user_copy_that_loads() {
 
     // A second copy with the same folder name gets its own folder.
     let again = editor.duplicate(WorkflowId::new("other.editor-copy"), "Again");
-    let path = dirs.create_user_workflow(&again).unwrap();
+    let path = dirs.create_user_workflow(&again, None).unwrap();
     assert!(path.ends_with("user/editor-copy-2/workflow.toml"));
 }
 

@@ -12,7 +12,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use super::{WorkflowDef, WorkflowDirs, WorkflowId};
+use super::{InstallRecord, WorkflowDef, WorkflowDirs, WorkflowId};
 
 /// Version of the state file format.
 pub const STATE_SCHEMA: u32 = 1;
@@ -29,6 +29,10 @@ pub struct StateFile {
     /// Each workflow's named layouts and auto-hide flags (the GUI's
     /// `LayoutStore` as JSON).
     pub layouts: BTreeMap<WorkflowId, serde_json::Value>,
+    /// Capabilities the user granted, per installed workflow.
+    pub grants: BTreeMap<WorkflowId, BTreeSet<String>>,
+    /// Where each installed package came from, its content hash and pin.
+    pub installs: BTreeMap<WorkflowId, InstallRecord>,
 }
 
 impl Default for StateFile {
@@ -40,6 +44,8 @@ impl Default for StateFile {
             quarantined: BTreeMap::new(),
             workflows: BTreeMap::new(),
             layouts: BTreeMap::new(),
+            grants: BTreeMap::new(),
+            installs: BTreeMap::new(),
         }
     }
 }
