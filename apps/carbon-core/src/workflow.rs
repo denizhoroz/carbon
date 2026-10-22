@@ -55,6 +55,9 @@ pub const EDITOR: &str = "carbon.editor";
 const BUILTIN_PREFIX: &str = "carbon.";
 /// Panel kind with no content of its own: shows its `title`.
 pub const PLACEHOLDER_KIND: &str = "placeholder";
+/// The file tree. Every workflow has one, first in `layout.left` (the
+/// Explorer section), and nowhere else (`WorkflowDef::with_explorer`).
+pub const EXPLORER_KIND: &str = "explorer";
 /// Panel kind showing a web page from the workflow's package (`page`).
 pub const WEBVIEW_KIND: &str = "webview";
 /// Panel kind drawing one of the manifest's declarative `views` (`view`).
@@ -176,7 +179,8 @@ fn is_true(value: &bool) -> bool {
     *value
 }
 
-/// Default layout: the center and the three docks. A missing dock starts empty and closed.
+/// Default layout: the center and the three docks. A missing right or bottom
+/// dock starts empty and closed; `left` is the Explorer section, always there.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Layout {
@@ -363,6 +367,39 @@ impl WorkflowDef {
         kinds
     }
 
+    /// The workflow as Carbon shows it: the Explorer first in `layout.left`
+    /// when the manifest does not list it there (the region is added, open,
+    /// when missing). Applied after `validate`, so the Explorer is nowhere
+    /// else and the name `explorer` is free for it.
+    pub fn with_explorer(mut self) -> Self {
+        let left = self.layout.left.get_or_insert_with(|| Region {
+            panels: Vec::new(),
+            size: None,
+            open: true,
+        });
+        let listed = left.panels.iter().any(|name| {
+            self.panels
+                .get(name)
+                .and_then(|rule| rule.kind.as_deref())
+                .unwrap_or(name)
+                == EXPLORER_KIND
+        });
+        if !listed {
+            left.panels.insert(0, EXPLORER_KIND.to_string());
+            self.panels
+                .entry(EXPLORER_KIND.to_string())
+                .or_insert(PanelRule {
+                    kind: None,
+                    title: None,
+                    multi: false,
+                    closable: false,
+                    page: None,
+                    view: None,
+                });
+        }
+        self
+    }
+
     /// Problems that keep this workflow from loading; empty when valid.
     /// `builtin`: may use `carbon.*`.
     pub fn validate(&self, builtin: bool) -> Vec<String> {
@@ -417,8 +454,27 @@ impl WorkflowDef {
                     problems.push(format!(
                         "layout.{region_name}: panel `{name}` is not in [panels]"
                     ));
+                } else if self.panel_kind(name) == EXPLORER_KIND && region_name != "left" {
+                    problems.push(format!(
+                        "layout.{region_name}: the Explorer stays in layout.left (the Explorer section)"
+                    ));
                 }
             }
+        }
+        let explorers = self
+            .layout
+            .left
+            .iter()
+            .flat_map(|left| &left.panels)
+            .filter(|name| self.panel_kind(name) == EXPLORER_KIND)
+            .count();
+        if explorers > 1 {
+            problems.push("layout.left: the Explorer is listed more than once".into());
+        }
+        if self.panel_kind(EXPLORER_KIND) != EXPLORER_KIND {
+            problems.push(format!(
+                "panel `{EXPLORER_KIND}`: the name is kept for the Explorer"
+            ));
         }
         for (name, rule) in &self.panels {
             if self.panel_kind(name) == PLACEHOLDER_KIND
@@ -685,7 +741,7 @@ impl Registry {
         }
         let id = def.id.clone();
         self.origins.insert(def.id.clone(), origin);
-        self.workflows.push(def);
+        self.workflows.push(def.with_explorer());
         Some(id)
     }
 
@@ -732,7 +788,7 @@ impl Registry {
         }
         self.warn(source, notices);
         self.warn_unavailable(source, &patched, panel_kinds);
-        self.workflows[index] = patched;
+        self.workflows[index] = patched.with_explorer();
         self.overlays.insert(id.clone(), source.to_string());
         self.sort();
     }

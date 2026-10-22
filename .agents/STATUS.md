@@ -2,7 +2,7 @@
 
 Living tracker for Carbon. Update it at the end of each work session. Newest entries first in logs. Scope lives in `FEATURE.md`, decisions and open questions in `PROJECT.md`, evidence in `RESEARCH.md`.
 
-**Last updated:** 2026-10-21
+**Last updated:** 2026-10-22
 
 ## Current focus
 
@@ -54,6 +54,7 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-22 | Explorer section: the left dock in every workflow holds the Explorer (first) and the workflow's own unclosable section tabs; sealed both ways; collapsible; open by default; `explorer` outside `layout.left` rejects the manifest; Paradigm gets a Blocks placeholder | user answers (section rules from the request; four choices, all the recommended ones) | `project/built/workflows.md` > Explorer section, `project/not_built/workflow-system.md` Q29 |
 | 2026-10-21 | Catalog signatures: minisign over `catalog.json`; trusted keys set = signature required, none = used unchecked | user answer (minisign); policy my design, offered with the question | `project/built/workflows.md`, `project/not_built/workflow-system.md` Q26 |
 | 2026-10-21 | Installed files are hashed at every start; a changed package is turned off with Reinstall / Keep Changes | user answer | `project/built/workflows.md`, Q27 |
 | 2026-10-21 | Catalog URL and keys set in the Catalog dialog (`catalog.toml`) until Settings exists; env overrides the URL | user answer | `project/built/workflows.md`, Q28 |
@@ -173,6 +174,11 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-22 (Explorer section; example workflows removed)
+- Done: example workflows and their test deleted (user). Explorer section: Explorer added to every workflow's `layout.left` in core (rejected elsewhere), left dock fixed through new kit patches (gpui-base 4, gpui-component 7), section tabs never close, nothing crosses its edge, repaired on load; Paradigm has a Blocks placeholder. 185 tests + 154 gpui-base dock tests; clippy, fmt green (also with `webview`). Click-tested; one fix (missing section tab after an old layout).
+- Running the vendored tests with `--manifest-path` and no `--target-dir` writes `vendor/gpui-base/target/` (thousands of untracked files) and a `vendor/gpui-component/Cargo.lock`; both were removed. Always pass `--target-dir target/vendor-test`.
+- Next: enforce grants in a webview page API.
 
 ### 2026-10-21 (Phase 4 leftovers: signatures, integrity, progress)
 - Done: minisign-signed catalogs (`minisign-verify`, trusted keys, signature required when keys are set, Signed / Not checked header, cache re-checked); Catalog Source dialog writing `catalog.toml`; installed files hashed at start, changed ones turned off with Reinstall / Keep Changes (`state.json` `changed`); `FetchControl` with gix progress shown in the Fetching dialog; Signed tag, `signed` in install records. 183 tests; clippy, fmt green (also with `webview`). Click-tested with a pure-Python minisign signer; four display fixes.

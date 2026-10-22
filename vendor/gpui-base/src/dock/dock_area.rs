@@ -110,6 +110,8 @@ pub struct DockArea {
     panels: HashMap<PanelId, Arc<dyn PanelView>>,
 
     locked: bool,
+    /// CARBON PATCH 4: docks whose panels stay in them (`set_dock_fixed`).
+    fixed: HashSet<DockPlacement>,
     zoomed: Option<Zoomed>,
     focus_handle: FocusHandle,
     renderer: Rc<dyn DockAreaRenderer>,
@@ -142,6 +144,7 @@ impl DockArea {
             splits: HashMap::new(),
             panels: HashMap::new(),
             locked: false,
+            fixed: HashSet::new(),
             zoomed: None,
             focus_handle: cx.focus_handle(),
             renderer: Rc::new(BareDockArea),
@@ -222,6 +225,32 @@ impl DockArea {
         // The lock is one of the facts every group is told, so it only takes
         // effect once the groups have been re-told.
         self.reconcile(window, cx);
+    }
+
+    /// CARBON PATCH 4: fix a dock's panels in place. Dragging still
+    /// rearranges and splits them inside the dock, but none is dragged out,
+    /// no other panel is dropped in, and none closes from its tab. The host's
+    /// own calls (`add_panel_view`, `move_panel`, `remove_panel`, `set_dock`)
+    /// are not limited. Kept across `set_dock` and `load`.
+    pub fn set_dock_fixed(
+        &mut self,
+        placement: DockPlacement,
+        fixed: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let changed = match fixed {
+            true => self.fixed.insert(placement),
+            false => self.fixed.remove(&placement),
+        };
+        if changed {
+            self.reconcile(window, cx);
+        }
+    }
+
+    /// CARBON PATCH 4: whether `set_dock_fixed` fixed this dock.
+    pub fn is_dock_fixed(&self, placement: DockPlacement) -> bool {
+        self.fixed.contains(&placement)
     }
 }
 
@@ -989,9 +1018,16 @@ impl DockArea {
         // Planned first, applied second: the plan borrows the trees, and
         // applying it needs `&mut self` to fill the caches.
         let mut plans = Vec::new();
-        plan_tree(&self.center, false, self.locked, &mut plans);
-        for pane in self.docks.values() {
-            plan_tree(&pane.tree, !pane.dock.is_open(), self.locked, &mut plans);
+        plan_tree(&self.center, false, self.locked, None, &mut plans);
+        for (placement, pane) in &self.docks {
+            let fixed = self.fixed.contains(placement).then_some(*placement);
+            plan_tree(
+                &pane.tree,
+                !pane.dock.is_open(),
+                self.locked,
+                fixed,
+                &mut plans,
+            );
         }
 
         // Sets rather than vectors: these are membership tests, run once per
@@ -1702,9 +1738,15 @@ fn sync_split_panels(
     );
 }
 
-fn plan_tree(tree: &PaneTree, collapsed: bool, locked: bool, out: &mut Vec<ContainerPlan>) {
+fn plan_tree(
+    tree: &PaneTree,
+    collapsed: bool,
+    locked: bool,
+    fixed: Option<DockPlacement>,
+    out: &mut Vec<ContainerPlan>,
+) {
     // The root has nothing beside it by definition.
-    plan_node(tree.root(), true, collapsed, locked, out);
+    plan_node(tree.root(), true, collapsed, locked, fixed, out);
 }
 
 fn plan_node(
@@ -1712,6 +1754,7 @@ fn plan_node(
     alone: bool,
     collapsed: bool,
     locked: bool,
+    fixed: Option<DockPlacement>,
     out: &mut Vec<ContainerPlan>,
 ) {
     match node.kind() {
@@ -1728,16 +1771,19 @@ fn plan_node(
             });
             let children_alone = children.len() <= 1;
             for child in children {
-                plan_node(child, children_alone, collapsed, locked, out);
+                plan_node(child, children_alone, collapsed, locked, fixed, out);
             }
         }
         PaneRef::Tabs { panels, active_ix } => out.push(ContainerPlan::Group {
             node: node.id(),
             panels: panels.to_vec(),
             active_ix,
+            // CARBON PATCH 4: a fixed dock's panels do not close from their tabs.
             constraints: TabGroupConstraints::in_split(alone)
                 .dock_locked(locked)
-                .collapsed(collapsed),
+                .collapsed(collapsed)
+                .closable(fixed.is_none())
+                .fixed_in(fixed),
         }),
     }
 }
@@ -3632,6 +3678,69 @@ mod tests {
             !cx.read(|cx| group.read(cx).is_closable(cx)),
             "the lock reaches every group through the constraints push"
         );
+    }
+
+    /// CARBON PATCH 4: a fixed dock's panels rearrange inside it, but none
+    /// is dragged out, none dropped in, and none closes from its tab.
+    #[gpui::test]
+    fn a_fixed_dock_keeps_its_panels(cx: &mut TestAppContext) {
+        let (area, cx) = setup(cx);
+        let (alpha, left_a) = cx.update(|window, cx| {
+            let alpha = TestPanel::new("Alpha", cx);
+            let left_a = TestPanel::new("LeftA", cx);
+            let left_b = TestPanel::new("LeftB", cx);
+            area.update(cx, |area, cx| {
+                area.set_center(DockLayout::tabs().panel(alpha.clone()), window, cx);
+                area.set_dock(
+                    DockPlacement::Left,
+                    DockLayout::tabs().panel(left_a.clone()).panel(left_b),
+                    window,
+                    cx,
+                );
+                area.set_dock_fixed(DockPlacement::Left, true, window, cx);
+            });
+            (alpha, left_a)
+        });
+        cx.run_until_parked();
+
+        let group_in = |placement: DockPlacement, cx: &mut VisualTestContext| {
+            cx.read(|cx| {
+                let area = area.read(cx);
+                let node = first_tab_group(area.layout(placement).unwrap().root()).unwrap();
+                area.groups.get(&node).unwrap().entity.clone()
+            })
+        };
+        let left = group_in(DockPlacement::Left, cx);
+        let center = group_in(DockPlacement::Center, cx);
+        let (left_ctx, center_ctx) = cx.read(|cx| (left.read(cx).context(cx), center.read(cx).context(cx)));
+        assert!(left_ctx.is_fixed() && !center_ctx.is_fixed());
+        assert!(!cx.read(|cx| left.read(cx).is_closable(cx)), "no close in a fixed dock");
+
+        let out = cx.read(|cx| left_ctx.drag_panel(0, cx).unwrap());
+        let inward = cx.read(|cx| center_ctx.drag_panel(0, cx).unwrap());
+        assert!(left_ctx.accepts(&out), "inside the dock: allowed");
+        assert!(!center_ctx.accepts(&out) && !left_ctx.accepts(&inward));
+
+        cx.update(|window, cx| center_ctx.drop_panel(out, None, true, window, cx));
+        cx.update(|window, cx| left_ctx.drop_panel(inward, None, true, window, cx));
+        cx.run_until_parked();
+        let panels = |placement: DockPlacement, cx: &mut VisualTestContext| -> Vec<PanelId> {
+            cx.read(|cx| area.read(cx).layout(placement).unwrap().panels().collect())
+        };
+        let id = |panel: &Entity<TestPanel>| PanelId::from(panel.entity_id());
+        assert_eq!(panels(DockPlacement::Center, cx), [id(&alpha)]);
+        assert_eq!(panels(DockPlacement::Left, cx).len(), 2);
+        assert!(panels(DockPlacement::Left, cx).contains(&id(&left_a)));
+
+        // The host's own moves are not limited.
+        let node = cx.read(|cx| first_tab_group(area.read(cx).layout(DockPlacement::Center).unwrap().root()).unwrap());
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                let target = InsertTarget::Tabs { node, ix: None, activate: true };
+                area.move_panel(id(&left_a), target, window, cx);
+            })
+        });
+        assert_eq!(panels(DockPlacement::Center, cx).len(), 2);
     }
 
     // The tests below were ported from `crates/component/src/dock/tab_panel.rs` when

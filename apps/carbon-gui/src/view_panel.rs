@@ -19,7 +19,7 @@ use crate::style::fixed;
 use crate::workflows;
 
 /// Persistence key in saved layouts. Never change it.
-const PANEL_NAME: &str = "View";
+pub const PANEL_NAME: &str = "View";
 
 /// Registers the builder that recreates view panels when a saved layout loads.
 pub fn register(cx: &mut App) {

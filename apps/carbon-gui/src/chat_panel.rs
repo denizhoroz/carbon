@@ -32,7 +32,7 @@ use crate::style::fixed;
 use crate::workspace_ops::current_core;
 
 /// Persistence key in saved layouts. Never change it.
-const PANEL_NAME: &str = "Chat";
+pub const PANEL_NAME: &str = "Chat";
 const KEY_CONTEXT: &str = "Chat";
 /// Where chats are saved (beside `layout.json`).
 pub const CHAT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/carbon-gui/chats");

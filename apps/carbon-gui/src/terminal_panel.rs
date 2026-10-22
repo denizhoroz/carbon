@@ -42,7 +42,7 @@ use colors::Palette;
 use view::{Geometry, Snapshot, grid_point};
 
 /// Persistence key in saved layouts. Never change it.
-const PANEL_NAME: &str = "Terminal";
+pub const PANEL_NAME: &str = "Terminal";
 /// Key context of a terminal (the interceptor looks for it) and its find bar.
 const KEY_CONTEXT: &str = "Terminal";
 const FIND_CONTEXT: &str = "TerminalFind";

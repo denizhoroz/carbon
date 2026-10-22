@@ -21,6 +21,7 @@ use gpui::{
 use crate::Placement;
 
 use super::layout::{NodeId, PanelId};
+use super::state::DockPlacement;
 
 /// A panel being dragged out of a tab group.
 ///
@@ -37,6 +38,8 @@ pub struct DragPanel {
     drag_offset: Rc<Cell<Point<Pixels>>>,
     preview_size: Rc<Cell<Size<Pixels>>>,
     drag_session_id: u64,
+    /// CARBON PATCH 4: the fixed dock the panel was dragged out of, if any.
+    fixed_in: Option<DockPlacement>,
 }
 
 static NEXT_DRAG_SESSION_ID: AtomicU64 = AtomicU64::new(1);
@@ -54,7 +57,21 @@ impl DragPanel {
             drag_offset: Rc::new(Cell::new(Point::default())),
             preview_size: Rc::new(Cell::new(Size::default())),
             drag_session_id: NEXT_DRAG_SESSION_ID.fetch_add(1, Ordering::Relaxed),
+            fixed_in: None,
         }
+    }
+
+    /// CARBON PATCH 4: names the fixed dock the panel leaves
+    /// ([`DockArea::set_dock_fixed`](super::DockArea::set_dock_fixed)); only
+    /// a group in that same dock takes the drop.
+    pub fn with_fixed_in(mut self, fixed_in: Option<DockPlacement>) -> Self {
+        self.fixed_in = fixed_in;
+        self
+    }
+
+    /// CARBON PATCH 4: the fixed dock the panel was dragged out of, if any.
+    pub fn fixed_in(&self) -> Option<DockPlacement> {
+        self.fixed_in
     }
 
     pub fn panel(&self) -> PanelId {

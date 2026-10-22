@@ -292,9 +292,10 @@ impl TabGroupSkin {
         let toolbar_zoom = control.is_some_and(|control| control.toolbar_visible());
         let menu_zoom = control.is_some_and(|control| control.menu_visible());
         // CARBON PATCH: always-tab panels offer Close as their last group's
-        // panel too (it goes through `request_close`, below).
-        let closable =
-            group.is_closable() || handle.is_some_and(|handle| handle.always_tab_bar(cx));
+        // panel too (it goes through `request_close`, below). CARBON PATCH 7:
+        // never in a fixed dock.
+        let closable = !group.is_fixed()
+            && (group.is_closable() || handle.is_some_and(|handle| handle.always_tab_bar(cx)));
         let buttons = handle.and_then(|handle| handle.toolbar_buttons(window, cx));
         let panel = handle.map(|handle| handle.panel());
 
@@ -521,6 +522,8 @@ impl TabGroupSkin {
                                     && self.shared.close_button_visible.get()
                                     // CARBON PATCH: always-tab panels keep their button,
                                     // unless the panel says it is not closable.
+                                    // CARBON PATCH 7: none in a fixed dock.
+                                    && !group.is_fixed()
                                     && (group.is_panel_closable(panel.panel_id(cx), cx)
                                         || (panel.closable(cx)
                                             && handle.is_some_and(|handle| handle.always_tab_bar(cx)))),
@@ -611,7 +614,13 @@ impl TabGroupSkin {
                                     })
                                 })
                                 .when(droppable, |this| {
-                                    this.drag_over::<DragPanel>(|this, _, _, cx| {
+                                    // CARBON PATCH 7: no highlight where the
+                                    // drop is refused (a fixed dock's edge).
+                                    let accepts = group.clone();
+                                    this.drag_over::<DragPanel>(move |this, drag, _, cx| {
+                                        if !accepts.accepts(drag) {
+                                            return this;
+                                        }
                                         this.rounded_l_none()
                                             .border_l_2()
                                             .border_r_0()
@@ -654,7 +663,12 @@ impl TabGroupSkin {
                     .flex_grow_1()
                     .min_w_16()
                     .when(droppable, |this| {
-                        this.drag_over::<DragPanel>(|this, _, _, cx| {
+                        // CARBON PATCH 7: no highlight where the drop is refused.
+                        let accepts = group.clone();
+                        this.drag_over::<DragPanel>(move |this, drag, _, cx| {
+                            if !accepts.accepts(drag) {
+                                return this;
+                            }
                             this.bg(cx.theme().tokens.drop_target)
                         })
                         .on_drop({

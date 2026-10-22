@@ -445,7 +445,9 @@ pub fn plan_install(
     let mut layout_changed = false;
     match (registry.get(&def.id), registry.origin(&def.id)) {
         (Some(old), Some(Origin::Installed(_))) => {
-            layout_changed = old.layout_fingerprint() != def.layout_fingerprint();
+            // The registry holds workflows with their Explorer added.
+            let new_fingerprint = def.clone().with_explorer().layout_fingerprint();
+            layout_changed = old.layout_fingerprint() != new_fingerprint;
             let new = Version::parse(&def.version).ok();
             let old_version = Version::parse(&old.version).ok();
             kind = match new.cmp(&old_version) {

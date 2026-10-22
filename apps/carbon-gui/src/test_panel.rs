@@ -13,7 +13,7 @@ use crate::style::fixed;
 use crate::terminal_panel::TerminalPanel;
 
 /// Persistence key in saved layouts. Never change it.
-const PANEL_NAME: &str = "TestPanel";
+pub const PANEL_NAME: &str = "TestPanel";
 
 pub struct TestPanel {
     title: SharedString,

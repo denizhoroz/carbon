@@ -232,6 +232,47 @@ fn bad_overlays_are_rejected_and_the_base_kept() {
 }
 
 #[test]
+fn overlays_cannot_take_the_explorer_out_of_its_section() {
+    let (_temp, dirs) = dirs();
+    // Removed from the left: it comes back first.
+    write(
+        &dirs.overlay_file("carbon.editor"),
+        "[layout.left]
+remove = [\"explorer\"]
+add = [\"notes\"]
+[panels]
+notes = { kind = \"placeholder\", title = \"Notes\" }",
+    );
+    // Moved to the bottom: rejected, the base kept.
+    write(
+        &dirs.overlay_file("carbon.paradigm-editor"),
+        "[layout.bottom]
+add = [\"explorer\"]",
+    );
+    let registry = Registry::load(Some(&dirs), &KINDS);
+    let editor = registry.get(&WorkflowId::editor()).unwrap();
+    assert_eq!(
+        editor.layout.left.as_ref().unwrap().panels,
+        ["explorer", "notes"]
+    );
+    let problems: Vec<String> = registry
+        .rejected()
+        .iter()
+        .flat_map(|r| r.problems.clone())
+        .collect();
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.contains("layout.bottom: the Explorer stays in layout.left")),
+        "{problems:?}"
+    );
+    let paradigm = registry
+        .get(&WorkflowId::new("carbon.paradigm-editor"))
+        .unwrap();
+    assert!(paradigm.layout.bottom.is_none());
+}
+
+#[test]
 fn overlay_remove_of_a_missing_panel_is_a_notice() {
     let base = Registry::builtin(&KINDS);
     let editor = base.get(&WorkflowId::editor()).unwrap();

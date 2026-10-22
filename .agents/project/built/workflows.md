@@ -40,7 +40,7 @@ hidden = false
 
 [layout.center]                # center needs at least one panel
 panels = ["editor", "chat"]
-[layout.bottom]                # left/right/bottom optional; unset = empty and closed
+[layout.bottom]                # right/bottom optional; unset = empty and closed (left: Explorer section, below)
 panels = ["terminal"]
 open = true
 size = 200                     # optional, pixels
@@ -67,6 +67,21 @@ text = "Review"
 ```
 
 Panel kinds: `editor`, `explorer`, `terminal`, `chat`, `placeholder` (needs `title`), `view` (needs `view`), and `webview` (needs a build with the `webview` cargo feature; `page` optional). Another kind loads as a "Panel `x` is not available" placeholder (warning, not an error). Unknown top-level keys warn; reserved keys (`keybindings`, `activation`, `file_types`, `settings`, `background`, `[agent]`, `derived_from`) are ignored; unknown keys inside `layout`, `panels`, `commands`, `menus` reject the file. A leading UTF-8 BOM is fine.
+
+## Explorer section (2026-10-22, user)
+
+`layout.left` is the **Explorer section**, in every workflow. The Explorer is always in it, first; the workflow lists its own section tabs there (Paradigm: Blocks). Rules:
+
+| What | Behaviour |
+|---|---|
+| Manifest | The Explorer is added first to `layout.left` when not listed (the region is created, open, when missing; `open = false` starts it collapsed) by `WorkflowDef::with_explorer`, after validation and after an overlay. An `explorer` panel in another region, listed twice, or the name `explorer` used for another kind rejects the manifest or overlay. An overlay that removes it gets it back |
+| Closing | No panel in the section closes: no tab x, no "..." > Close, `workbench::close_panel` refuses |
+| Moving | Tabs rearrange inside the section, including splitting it (drag Blocks to the bottom edge: Explorer above, Blocks below). Nothing is dragged out, nothing else is dropped in; keyboard moves (View > Panel, Ctrl+K) skip it; Add Panel never puts a panel there; presets leave it alone |
+| Collapsing | The section still collapses: Ctrl+B, View > Toggle Left Dock, drag its edge shut |
+| Switching workflow | The section's tabs are the workflow's: Paradigm shows Explorer + Blocks, the Editor only Explorer. Its arrangement is saved with the workflow's layout |
+| Old layouts | On load, after a named layout and after every layout change (`Workbench::keep_explorer_section`): a missing Explorer or section tab comes back, an Explorer elsewhere moves in (extra ones go), other panels in the section move to where their kind goes (Terminal bottom, Chat right, the rest center) |
+
+The dock side is gpui-base patch 4 (`DockArea::set_dock_fixed`: fixed docks refuse drops across their edge and close nothing from tabs) and gpui-component patch 7 (no drop highlight where refused; no x or Close in a fixed dock).
 
 ## Package files (Q22, 2026-10-21)
 
@@ -216,11 +231,11 @@ When the workflows do not fit, the list scrolls (mouse wheel) and up/down arrows
 
 | File | Role |
 |---|---|
-| `apps/carbon-core/src/workflow.rs` | `WorkflowId`, `WorkflowDef` (parse, `validate`, `layout_fingerprint`, `base_panels`, `unavailable_kinds`), `CommandDef`, `MenuDef`, `Registry` (`builtin`, `load`, `apply_overlay`, `block`, `available`, `resolve`, `default_workflow`, `origin`), `LayoutFile` (Phase 1 `layout.json`, read for migration) |
+| `apps/carbon-core/src/workflow.rs` | `WorkflowId`, `WorkflowDef` (parse, `validate`, `with_explorer`, `layout_fingerprint`, `base_panels`, `unavailable_kinds`), `CommandDef`, `MenuDef`, `Registry` (`builtin`, `load`, `apply_overlay`, `block`, `available`, `resolve`, `default_workflow`, `origin`), `LayoutFile` (Phase 1 `layout.json`, read for migration) |
 | `apps/carbon-workflow/{editor,paradigm,agent}/workflow.toml` | Carbon's own workflow packages (data, not a crate) |
 | `apps/carbon-core/src/workflow/{overlay,dirs,state}.rs` | `Overlay`/`RegionPatch` + `apply`; `shipped_dir`, `WorkflowDirs` (preferences + installed roots, discovery, newest installed version, `remove_overlay`); `StateFile` (atomic save, `set_aside`), `SavedWorkflow`, `start_entering` / `finish_entering` / `take_unfinished` |
 | `apps/carbon-gui/src/workflows.rs` | `init` at start (crash guard, safe mode, state, registry, notices), `registry` (an `Arc` snapshot), `reload`, `dirs`, `take_state`, `icon`, `commands` -> `WorkflowCommand` |
-| `apps/carbon-gui/src/workbench.rs` | `state: StateFile`, `enter` (crash mark + saved or default layout + auto-hide), `park_current` (dock + named layouts), `store_for`, `load_saved` (fingerprint, broken entry), `save`, `restore`, `migrate_layout_file`; dialog actions `set_workflow_on`, `duplicate_workflow`, `reset_workflow`, `remove_workflow`, `reload_workflows`, `workflow_flags`, `has_saved_layout` |
+| `apps/carbon-gui/src/workbench.rs` | `state: StateFile`, `enter` (crash mark + saved or default layout + auto-hide), `keep_explorer_section` (`EXPLORER_SECTION`, fixed), `park_current` (dock + named layouts), `store_for`, `load_saved` (fingerprint, broken entry), `save`, `restore`, `migrate_layout_file`; dialog actions `set_workflow_on`, `duplicate_workflow`, `reset_workflow`, `remove_workflow`, `reload_workflows`, `workflow_flags`, `has_saved_layout` |
 | `apps/carbon-gui/src/manage_workflows.rs` | Manage Workflows dialog (`WorkflowsView`, confirm dialog, Open Folder) |
 | `apps/carbon-gui/src/section_bar.rs` | Scrolling workflow list with arrows (`ScrollHandle`) |
 | `apps/carbon-gui/src/layouts.rs` | `PanelKind` (unknown kind -> placeholder), `LayoutSpec`; only `Preset::Code` left |
@@ -250,11 +265,13 @@ When the workflows do not fit, the list scrolls (mouse wheel) and up/down arrows
 
 - Phase 4 rest (2026-10-21): 180 workspace tests (new `tests/workflow_sources.rs`: git tag / branch / default branch / commit id with records and equal hashes, install from a git checkout, unknown tag and commit refused, a symlink entry refused; the same hash from a folder and a zip in another order and folder, a changed source refused at install; catalog parsing keeps good entries and picks versions by range; catalog fetch from a git repo with a good pin, a wrong version and a wrong hash; requirements: version too low, chain, extension unsupported, bad range and self reference rejected; plus an ignored network test over real HTTPS). Click-tested with local git repos and a catalog repo made by a script (hashes computed in Python matched Rust's): From Git with a Windows path and tag `v1.0.0` (Not pinned, tag + commit shown); Catalog lists three packages with Installed/Update/Install; App installs with "Needs" and stays off with **Install 2.0.0**; that button installs Base and App turns on; Sketch updates 1.0.0 -> 1.1.0 (pinned); Cancel during a fetch of `linux.git`; an unreachable host opens Cannot Install; restart keeps everything; removing Base turns App off again. Found and fixed: gix's message hid the cause ("Transport handshake failed"), the source line cut off its useful end, lower-case "needs" in rows.
 
+- Explorer section (2026-10-22): 185 workspace tests (44 GUI tests with `webview`) (new: Explorer added to every workflow and to a user manifest, kept where listed, rejected elsewhere / twice / name taken; overlays cannot remove or move it; install update plan compares with the Explorer added; placeholder layouts) plus a gpui-base test `a_fixed_dock_keeps_its_panels` (run with `cargo test --manifest-path vendor/gpui-base/Cargo.toml --target-dir target/vendor-test --lib`; needs a `README.md` at the repo root for one unrelated test file). Clippy and fmt clean with and without `webview`. Click-tested (test build, scratch folder, `target/carbon-gui` JSON restored and compared): Terminal into the section and Explorer out of it refused (Terminal into the editor area works, as a control); Explorer "..." has only Zoom In; Paradigm shows Explorer + Blocks without x; Blocks split below the Explorer; Blocks to the center and the Paradigm tab into the section refused; Editor shows only the Explorer, back to Paradigm keeps the split; Toggle Left Dock collapses and reopens. Found and fixed: a layout migrated from the old `layout.json` lacked Blocks (repair now restores missing section tabs). Not clicked: keyboard moves from or into the section (code guard only), drag-shut of the left edge with a split section.
+
 ## Limits
 
 - No hide/show in the dialog; no Repair/Remove buttons on a "not available" placeholder; no diff of a copy against its parent (`derived_from` is stored).
 - Layout merge after a default changes is a reset, not a merge.
-- `multi` / `closable` are parsed but not enforced; no scoped key bindings (Q9); `requires_workspace` stored only.
+- `multi` is parsed but not enforced; `closable` only holds in the Explorer section (where nothing closes), elsewhere it is not enforced; no scoped key bindings (Q9); `requires_workspace` stored only.
 - A placeholder for an unknown kind is saved as a plain placeholder; when the kind later exists, that workflow keeps the placeholder until Reset Layout.
 - The crash mark covers 2 s after opening; a crash later is not tied to a workflow. Killing Carbon within 2 s of start (e.g. while debugging) triggers safe mode once.
 - Registry is loaded at start and on Manage Workflows > Reload; nothing watches the folders.

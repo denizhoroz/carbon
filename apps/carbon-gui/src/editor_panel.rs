@@ -30,7 +30,7 @@ use crate::style::fixed;
 use crate::workspace_ops::current_core;
 
 /// Persistence key in saved layouts. Never change it.
-const PANEL_NAME: &str = "Editor";
+pub const PANEL_NAME: &str = "Editor";
 /// Quiet time after typing before the language server gets the new text.
 const LSP_CHANGE_DELAY: Duration = Duration::from_millis(150);
 

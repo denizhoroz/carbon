@@ -19,6 +19,7 @@ use super::{
     },
     layout::{InsertTarget, NodeId, PanelId},
     panel::PanelView,
+    state::DockPlacement,
 };
 
 /// Behavior a tab group cannot carry out on its own.
@@ -64,6 +65,7 @@ pub struct TabGroupConstraints {
     dock_locked: bool,
     collapsed: bool,
     closable: bool,
+    fixed_in: Option<DockPlacement>,
 }
 
 impl TabGroupConstraints {
@@ -75,6 +77,7 @@ impl TabGroupConstraints {
             dock_locked: true,
             collapsed: false,
             closable: false,
+            fixed_in: None,
         }
     }
 
@@ -87,6 +90,7 @@ impl TabGroupConstraints {
             dock_locked: false,
             collapsed: false,
             closable: true,
+            fixed_in: None,
         }
     }
 
@@ -107,6 +111,25 @@ impl TabGroupConstraints {
     pub fn closable(mut self, closable: bool) -> Self {
         self.closable = closable;
         self
+    }
+
+    /// CARBON PATCH 4: the group sits in a fixed dock: its panels stay in
+    /// that dock and no other panel is dropped into it. Closing is the
+    /// container's call ([`Self::closable`]).
+    pub fn fixed_in(mut self, fixed_in: Option<DockPlacement>) -> Self {
+        self.fixed_in = fixed_in;
+        self
+    }
+
+    /// CARBON PATCH 4: the fixed dock this group sits in, if any.
+    pub fn fixed_dock(&self) -> Option<DockPlacement> {
+        self.fixed_in
+    }
+
+    /// CARBON PATCH 4: whether a dragged panel may land here: only when it
+    /// comes from the same fixed dock, or neither side is in one.
+    pub fn accepts(&self, drag: &DragPanel) -> bool {
+        drag.fixed_in() == self.fixed_in
     }
 
     /// Whether nothing sits beside this group in its tree.
@@ -525,8 +548,13 @@ impl TabGroup {
             return;
         }
 
-        let placement = split_placement_at(bounds, drag.event.position);
         let dragged = drag.drag(cx);
+        // CARBON PATCH 4: no drop placeholder where the drop is refused.
+        if !self.constraints.accepts(dragged) {
+            self.clear_drop_indicator(cx);
+            return;
+        }
+        let placement = split_placement_at(bounds, drag.event.position);
         // The placeholder flies in from wherever the preview currently is.
         let source = DropPlaceholderBounds::new(
             drag.event.position - dragged.drag_offset() - bounds.origin,
@@ -631,6 +659,11 @@ impl TabGroup {
         cx: &mut Context<Self>,
     ) {
         let indicator = self.drop_indicator.take();
+        // CARBON PATCH 4: a panel does not cross a fixed dock's edge.
+        if !self.constraints.accepts(drag) {
+            cx.notify();
+            return;
+        }
         let placement = match ix {
             Some(_) => None,
             None => indicator.and_then(|indicator| indicator.placement()),
@@ -863,7 +896,22 @@ impl TabGroupContext {
     pub fn drag_panel(&self, ix: usize, cx: &App) -> Option<DragPanel> {
         self.panels
             .get(ix)
-            .map(|panel| DragPanel::new(panel.panel_id(cx), self.node))
+            .map(|panel| {
+                DragPanel::new(panel.panel_id(cx), self.node)
+                    .with_fixed_in(self.constraints.fixed_dock())
+            })
+    }
+
+    /// CARBON PATCH 4: whether the group sits in a fixed dock, whose panels
+    /// never close from their tabs.
+    pub fn is_fixed(&self) -> bool {
+        self.constraints.fixed_dock().is_some()
+    }
+
+    /// CARBON PATCH 4: whether `drag` may be dropped on this group (see
+    /// [`TabGroupConstraints::accepts`]), for a skin's drag-over highlight.
+    pub fn accepts(&self, drag: &DragPanel) -> bool {
+        self.constraints.accepts(drag)
     }
 
     /// A panel dropped on the tab bar. `ix` names the slot it lands in, or

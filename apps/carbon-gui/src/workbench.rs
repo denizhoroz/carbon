@@ -28,7 +28,7 @@ use gpui_kit::component::dock::panel_handle;
 use crate::chat_panel::ChatPanel;
 use crate::editor_panel::EditorPanel;
 use crate::explorer_panel::ExplorerPanel;
-use crate::layouts::{LayoutSpec, LayoutStore, MAX_SAVED, Preset, SavedLayout, Side};
+use crate::layouts::{LayoutSpec, LayoutStore, MAX_SAVED, PanelKind, Preset, SavedLayout, Side};
 use crate::menus::{Direction, MenuState};
 use crate::style::fixed;
 use crate::terminal_panel::TerminalPanel;
@@ -53,6 +53,11 @@ const CENTER_AND_DOCKS: [DockPlacement; 4] = [
     DockPlacement::Right,
     DockPlacement::Bottom,
 ];
+
+/// The Explorer section: the Explorer and the workflow's own tabs beside it.
+/// Fixed (`set_dock_fixed`): they rearrange and split inside it, but none
+/// closes or leaves, and no other panel comes in. It still collapses.
+const EXPLORER_SECTION: DockPlacement = DockPlacement::Left;
 
 /// A shared callback run with the window (dialog buttons and Enter share one).
 pub type WindowCallback = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -130,9 +135,10 @@ pub fn close_editor(editor: Entity<EditorPanel>, window: &mut Window, cx: &mut A
     });
 }
 
-/// Closes a panel's tab (Explorer, Chat, Terminal, ...; editors use
-/// `close_editor`). The center never goes blank: closing its last panel
-/// leaves an empty editor. Deferred: the caller is inside the panel's update.
+/// Closes a panel's tab (Chat, Terminal, ...; editors use `close_editor`).
+/// The center never goes blank: closing its last panel leaves an empty
+/// editor. Panels of the Explorer section never close. Deferred: the caller
+/// is inside the panel's update.
 pub fn close_panel<P: BasePanel>(panel: Entity<P>, window: &mut Window, cx: &mut App) {
     let Some(workbench) = current(cx) else {
         return;
@@ -150,6 +156,9 @@ pub fn close_panel<P: BasePanel>(panel: Entity<P>, window: &mut Window, cx: &mut
                 .layout(placement)
                 .is_some_and(|tree| tree.panels().eq([id]))
         });
+        if placement == Some(EXPLORER_SECTION) {
+            return;
+        }
         area.update(cx, |area, cx| {
             area.remove_panel(panel, window, cx);
             match placement {
@@ -212,6 +221,9 @@ impl Workbench {
         // No dock collapse buttons in tab bars (user): docks open and close by
         // dragging their edge, the View menu and Ctrl+B / Ctrl+Alt+B / Ctrl+J.
         skin.set_toggle_button_visible(false, cx);
+        area.update(cx, |area, cx| {
+            area.set_dock_fixed(EXPLORER_SECTION, true, window, cx)
+        });
 
         let _layout_sub = cx.subscribe_in(&area, window, |this, _, event, window, cx| {
             if let DockEvent::LayoutChanged = event {
@@ -350,9 +362,12 @@ impl Workbench {
                 }
             }
         } else {
+            // Never into the Explorer section, even beside one of its kind.
             let same: Vec<_> = panels
                 .iter()
-                .filter(|(_, _, kind, _)| kind.as_deref() == Some(name))
+                .filter(|(_, placement, kind, _)| {
+                    kind.as_deref() == Some(name) && *placement != EXPLORER_SECTION
+                })
                 .collect();
             let placement = same
                 .first()
@@ -789,6 +804,7 @@ impl Workbench {
         if !self.load_saved(window, cx) {
             self.apply_workflow_default(window, cx);
         }
+        self.keep_explorer_section(window, cx);
         // Auto-hide docks start hidden, like JetBrains unpinned tool windows.
         for side in self.store.auto_hide.clone() {
             self.set_dock_open(side.placement(), false, window, cx);
@@ -871,8 +887,10 @@ impl Workbench {
 
     /// After any change (a drag between regions, a keyboard move): the center
     /// never goes blank, an empty editor takes the place of a panel moved out;
-    /// a dock whose last panel left closes.
+    /// a dock whose last panel left closes; the Explorer section holds the
+    /// Explorer and its own tabs.
     fn repair_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.keep_explorer_section(window, cx);
         let center_empty = self
             .area
             .read(cx)
@@ -885,6 +903,98 @@ impl Workbench {
             });
         }
         self.close_empty_docks(window, cx);
+    }
+
+    /// The Explorer section holds the Explorer, first, and the active
+    /// workflow's own section tabs, nothing else. A layout saved before the
+    /// section was fixed is put right: a missing Explorer or section tab
+    /// comes back, an Explorer elsewhere moves in, and other panels move to
+    /// where their kind goes.
+    fn keep_explorer_section(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // The section's own tabs besides the Explorer, by kind.
+        let mut missing: Vec<PanelKind> = workflow_default(&self.section)
+            .and_then(|spec| spec.docks.into_iter().find(|dock| dock.side == Side::Left))
+            .map(|dock| dock.panels)
+            .unwrap_or_default();
+        missing.retain(|kind| *kind != PanelKind::Explorer);
+        let own: Vec<&'static str> = missing.iter().map(PanelKind::panel_name).collect();
+        let mut explorers = Vec::new();
+        let mut strays = Vec::new();
+        {
+            let area = self.area.read(cx);
+            for placement in CENTER_AND_DOCKS {
+                let Some(tree) = area.layout(placement) else {
+                    continue;
+                };
+                for id in tree.panels() {
+                    let Some(view) = area.panel(id) else {
+                        continue;
+                    };
+                    let name = view.panel_name(cx);
+                    if name == crate::explorer_panel::PANEL_NAME {
+                        explorers.push((id, placement, view.view()));
+                    } else if placement == EXPLORER_SECTION {
+                        match missing.iter().position(|kind| kind.panel_name() == name) {
+                            Some(ix) => _ = missing.remove(ix),
+                            None if !own.contains(&name) => {
+                                strays.push((id, default_placement(name)))
+                            }
+                            None => {}
+                        }
+                    }
+                }
+            }
+        }
+        let explorer_in_place = explorers
+            .first()
+            .is_some_and(|(_, placement, _)| *placement == EXPLORER_SECTION);
+        if explorers.len() == 1 && explorer_in_place && strays.is_empty() && missing.is_empty() {
+            return;
+        }
+        let missing: Vec<_> = missing.iter().map(|kind| kind.build(cx)).collect();
+
+        self.area.update(cx, |area, cx| {
+            // One Explorer: extra ones (from an older layout) go.
+            for (_, _, view) in explorers.iter().skip(1) {
+                if let Ok(extra) = view.clone().downcast::<ExplorerPanel>() {
+                    area.remove_panel(extra, window, cx);
+                }
+            }
+            if area.layout(EXPLORER_SECTION).is_none() {
+                area.set_dock(EXPLORER_SECTION, DockLayout::tabs(), window, cx);
+                area.set_dock_size(EXPLORER_SECTION, Side::Left.default_size(), window, cx);
+            }
+            let explorer = match explorers.first() {
+                Some((id, ..)) => *id,
+                None => {
+                    let handle = panel_handle(ExplorerPanel::new(cx));
+                    let id = handle.panel_id(cx);
+                    area.add_panel_view(handle, EXPLORER_SECTION, None, window, cx);
+                    id
+                }
+            };
+            if !explorer_in_place
+                && let Some(node) = area.layout(EXPLORER_SECTION).and_then(first_group)
+            {
+                let target = InsertTarget::Tabs {
+                    node,
+                    ix: Some(0),
+                    activate: true,
+                };
+                area.move_panel(explorer, target, window, cx);
+            }
+            for panel in missing {
+                area.add_panel_view(panel, EXPLORER_SECTION, None, window, cx);
+            }
+            for (id, to) in strays {
+                if let Some(target) = area.layout(to).map(insert_target) {
+                    area.move_panel(id, target, window, cx);
+                    if to != DockPlacement::Center && !area.is_dock_open(to) {
+                        area.toggle_dock(to, window, cx);
+                    }
+                }
+            }
+        });
     }
 
     /// Docks whose panels were all closed stay closed (older layouts saved
@@ -981,7 +1091,8 @@ impl Workbench {
             return;
         };
         let to = side.map_or(DockPlacement::Center, Side::placement);
-        if from == to {
+        // The Explorer section keeps its panels and takes no others.
+        if from == to || from == EXPLORER_SECTION || to == EXPLORER_SECTION {
             return;
         }
         let Some(target) = self.area.read(cx).layout(to).map(insert_target) else {
@@ -1012,8 +1123,11 @@ impl Workbench {
         let Some(center) = self.area.read(cx).layout(DockPlacement::Center) else {
             return;
         };
-        // Alone in the editor area there is nothing to sit beside.
-        if from == DockPlacement::Center && center.panels().eq([panel]) {
+        // Alone in the editor area there is nothing to sit beside; the
+        // Explorer section keeps its panels.
+        if from == EXPLORER_SECTION
+            || (from == DockPlacement::Center && center.panels().eq([panel]))
+        {
             return;
         }
         let target = InsertTarget::Split {
@@ -1065,9 +1179,12 @@ impl Workbench {
 
     // ---- presets and named layouts ---------------------------------------
 
+    /// A preset arranges the center and the right and bottom docks; the
+    /// Explorer section stays the workflow's.
     pub fn apply_preset(&mut self, preset: Preset, window: &mut Window, cx: &mut Context<Self>) {
-        let built = preset.build(cx);
-        self.apply_built(built, window, cx);
+        let (center, mut docks) = preset.build(cx);
+        docks.retain(|(side, ..)| side.placement() != EXPLORER_SECTION);
+        self.apply_built((center, docks), window, cx);
     }
 
     fn apply_built(
@@ -1134,6 +1251,7 @@ impl Workbench {
         }
         self.store.auto_hide = layout.auto_hide;
         self.schedule_save(cx);
+        self.keep_explorer_section(window, cx);
         self.close_empty_docks(window, cx);
         cx.emit(MenusChanged);
     }
@@ -1298,16 +1416,21 @@ fn next_title(name: &str, titles: &[SharedString]) -> String {
         .unwrap_or_else(|| name.to_string())
 }
 
-/// Where a moved panel lands: the first tab group of the target, or a new group
-/// when the target is empty.
-fn insert_target(tree: &PaneTree) -> InsertTarget {
+/// The first tab group of a region, if it has one.
+fn first_group(tree: &PaneTree) -> Option<NodeId> {
     let mut tabs: Option<NodeId> = None;
     tree.root().walk(&mut |node| {
         if tabs.is_none() && matches!(node.kind(), PaneRef::Tabs { .. }) {
             tabs = Some(node.id());
         }
     });
-    match tabs {
+    tabs
+}
+
+/// Where a moved panel lands: the first tab group of the target, or a new group
+/// when the target is empty.
+fn insert_target(tree: &PaneTree) -> InsertTarget {
+    match first_group(tree) {
         Some(node) => InsertTarget::Tabs {
             node,
             ix: None,

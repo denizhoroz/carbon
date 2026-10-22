@@ -13,5 +13,10 @@ order = 200
 [layout.center]
 panels = ["canvas"]
 
+# The Explorer section: Carbon puts the Explorer first; Blocks sits beside it.
+[layout.left]
+panels = ["blocks"]
+
 [panels]
 canvas = { kind = "placeholder", title = "Paradigm Editor" }
+blocks = { kind = "placeholder", title = "Blocks" }

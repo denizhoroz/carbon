@@ -32,7 +32,7 @@ use crate::style::fixed;
 use crate::terminal_panel::input::app_keeps;
 
 /// Persistence key in saved layouts. Never change it.
-const PANEL_NAME: &str = "Webview";
+pub const PANEL_NAME: &str = "Webview";
 
 /// The spike's test page.
 const SPIKE_PAGE: &str = include_str!("webview_panel/spike.html");

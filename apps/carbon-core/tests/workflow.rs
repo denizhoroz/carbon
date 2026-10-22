@@ -92,8 +92,95 @@ fn placeholders_have_a_titled_center_panel() {
             def.panels[&center.panels[0]].title.as_deref(),
             Some(def.name.as_str())
         );
-        assert!(def.layout.left.is_none() && def.layout.bottom.is_none());
+        assert!(def.layout.bottom.is_none());
     }
+    // Every workflow gets the Explorer first in its Explorer section.
+    let left_kinds = |id: &str| -> Vec<String> {
+        let def = registry.get(&WorkflowId::new(id)).unwrap();
+        let left = def.layout.left.as_ref().unwrap();
+        assert!(left.open);
+        left.panels
+            .iter()
+            .map(|name| def.panel_kind(name).to_string())
+            .collect()
+    };
+    assert_eq!(left_kinds("carbon.agent-automation"), ["explorer"]);
+    assert_eq!(
+        left_kinds("carbon.paradigm-editor"),
+        ["explorer", "placeholder"]
+    );
+}
+
+#[test]
+fn the_explorer_lives_in_the_explorer_section() {
+    // Added first to `layout.left`, which is created open when missing.
+    let registry = Registry::from_sources(&[("r.toml", &manifest(""))], &KINDS, false);
+    let def = &registry.workflows()[0];
+    let left = def.layout.left.as_ref().unwrap();
+    assert_eq!(left.panels, ["explorer"]);
+    assert!(left.open);
+    assert!(!def.panels["explorer"].closable);
+
+    // A left region of its own keeps its panels and settings, Explorer first.
+    let text = manifest("").replace(
+        "[panels]",
+        "[layout.left]
+panels = [\"notes\"]
+open = false
+
+[panels]
+notes = { kind = \"placeholder\", title = \"Notes\" }",
+    );
+    let registry = Registry::from_sources(&[("r.toml", &text)], &KINDS, false);
+    let left = registry.workflows()[0].layout.left.clone().unwrap();
+    assert_eq!(left.panels, ["explorer", "notes"]);
+    assert!(!left.open);
+
+    // Listed by the manifest: kept where it is, not added twice.
+    let text = manifest("").replace(
+        "[panels]",
+        "[layout.left]
+panels = [\"notes\", \"files\"]
+
+[panels]
+notes = { kind = \"placeholder\", title = \"Notes\" }
+files = { kind = \"explorer\" }",
+    );
+    let registry = Registry::from_sources(&[("r.toml", &text)], &KINDS, false);
+    let def = &registry.workflows()[0];
+    assert_eq!(def.layout.left.as_ref().unwrap().panels, ["notes", "files"]);
+    assert!(!def.panels.contains_key("explorer"));
+
+    // Anywhere else, twice, or the name taken: rejected.
+    let text = manifest("").replace(
+        "panels = [\"editor\"]",
+        "panels = [\"editor\", \"explorer\"]",
+    );
+    let text = text.replace(
+        "editor = {}",
+        "editor = {}
+explorer = {}",
+    );
+    assert!(has(
+        &problems(&text),
+        "layout.center: the Explorer stays in layout.left"
+    ));
+    let text = manifest("").replace(
+        "[panels]",
+        "[layout.left]
+panels = [\"explorer\", \"files\"]
+
+[panels]
+explorer = {}
+files = { kind = \"explorer\" }",
+    );
+    assert!(has(&problems(&text), "listed more than once"));
+    let text = manifest("").replace(
+        "editor = {}",
+        "editor = {}
+explorer = { kind = \"placeholder\", title = \"Files\" }",
+    );
+    assert!(has(&problems(&text), "the name is kept for the Explorer"));
 }
 
 #[test]

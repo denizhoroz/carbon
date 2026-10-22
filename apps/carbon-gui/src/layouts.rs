@@ -3,8 +3,12 @@
 //! `state.json` (`workflows.md`); the old global `layouts.json` is read once
 //! as the Editor's.
 
+use std::sync::Arc;
+
 use carbon_core::workflow::{Region, VIEW_KIND, WorkflowDef, WorkflowId};
-use gpui_kit::component::dock::{DockAreaState, DockLayout, DockPlacement, panel_handle};
+use gpui_kit::component::dock::{
+    BasePanelView, DockAreaState, DockLayout, DockPlacement, panel_handle,
+};
 use gpui_kit::*;
 use serde::{Deserialize, Serialize};
 
@@ -128,8 +132,27 @@ impl PanelKind {
         }
     }
 
+    /// The dock's name for panels of this kind (`Panel::panel_name`).
+    pub fn panel_name(&self) -> &'static str {
+        match self {
+            PanelKind::Explorer => crate::explorer_panel::PANEL_NAME,
+            PanelKind::Editor => crate::editor_panel::PANEL_NAME,
+            PanelKind::Terminal => crate::terminal_panel::PANEL_NAME,
+            PanelKind::Chat => crate::chat_panel::PANEL_NAME,
+            PanelKind::Placeholder(_) => crate::test_panel::PANEL_NAME,
+            PanelKind::View(..) => crate::view_panel::PANEL_NAME,
+            #[cfg(feature = "webview")]
+            PanelKind::Webview(..) => crate::webview_panel::PANEL_NAME,
+        }
+    }
+
     fn add_to(&self, layout: DockLayout, cx: &mut App) -> DockLayout {
-        let panel = match self {
+        layout.panel_view(self.build(cx), cx)
+    }
+
+    /// A new panel of this kind.
+    pub fn build(&self, cx: &mut App) -> Arc<dyn BasePanelView> {
+        match self {
             PanelKind::Explorer => panel_handle(ExplorerPanel::new(cx)),
             PanelKind::Editor => panel_handle(EditorPanel::new(cx)),
             PanelKind::Terminal => panel_handle(TerminalPanel::new(None, None, None, cx)),
@@ -145,8 +168,7 @@ impl PanelKind {
             PanelKind::Webview(title, source) => panel_handle(
                 crate::webview_panel::WebviewPanel::new(title.clone(), source.clone(), cx),
             ),
-        };
-        layout.panel_view(panel, cx)
+        }
     }
 }
 
@@ -323,23 +345,34 @@ mod tests {
         assert_eq!(LayoutSpec::of_workflow(editor), LayoutSpec::code());
     }
 
+    /// Placeholder workflows: one center panel, the Explorer section open
+    /// (Paradigm adds Blocks beside the Explorer), the other docks closed.
     #[test]
-    fn placeholder_workflows_have_one_panel_and_closed_docks() {
+    fn placeholder_workflows_have_the_explorer_section_and_closed_docks() {
         let registry = registry();
-        let def = registry
-            .get(&WorkflowId::new("carbon.paradigm-editor"))
-            .unwrap();
-        let spec = LayoutSpec::of_workflow(def);
+        let spec = |id: &str| LayoutSpec::of_workflow(registry.get(&WorkflowId::new(id)).unwrap());
+        let paradigm = spec("carbon.paradigm-editor");
         assert_eq!(
-            spec.center,
+            paradigm.center,
             [PanelKind::Placeholder("Paradigm Editor".into())]
         );
-        assert_eq!(spec.docks.len(), 3);
-        assert!(
-            spec.docks
-                .iter()
-                .all(|dock| dock.panels.is_empty() && !dock.open)
+        assert_eq!(paradigm.docks.len(), 3);
+        let left = &paradigm.docks[0];
+        assert_eq!(left.side, Side::Left);
+        assert!(left.open);
+        assert_eq!(
+            left.panels,
+            [PanelKind::Explorer, PanelKind::Placeholder("Blocks".into())]
         );
+        let agent = spec("carbon.agent-automation");
+        assert_eq!(agent.docks[0].panels, [PanelKind::Explorer]);
+        for spec in [paradigm, agent] {
+            assert!(
+                spec.docks[1..]
+                    .iter()
+                    .all(|dock| dock.panels.is_empty() && !dock.open)
+            );
+        }
     }
 
     #[test]

@@ -165,6 +165,7 @@ Built 2026-10-21 (folder/zip/git sources, checks, dialog, grants, update diff, u
 | Q27 | Installed files changed | Checked at start; turned off with Reinstall / Keep Changes (user, 2026-10-21) (built) |
 | Q28 | Catalog source before Settings | Catalog dialog > Source… writes `catalog.toml`; env overrides the URL (user, 2026-10-21) (built) |
 | Q22 | Package folder | Free; only root `workflow.toml` fixed; path rules (built) |
+| Q29 | Explorer section | `layout.left` in every workflow: Explorer first and fixed there, plus the workflow's own unclosable section tabs; sealed both ways (nothing in or out); collapsible; open by default; `explorer` elsewhere rejects the manifest (user, 2026-10-22) (built) |
 
 Risks: the kit breaks every minor (only the GUI adapter touches GPUI types); the webview is a native window above GPUI (every new overlay must hide pages; kept in `Workbench::sync_webviews`); thin evidence for Blender, Zed modes, Cursor, VS Code crash semantics.
 
