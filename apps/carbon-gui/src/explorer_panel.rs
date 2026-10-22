@@ -32,7 +32,7 @@ use file_ops::{Edit, EditKind, FileClipboard};
 use filter::Filter;
 
 /// Persistence key in saved layouts. Never change it.
-const PANEL_NAME: &str = "Explorer";
+pub const PANEL_NAME: &str = "Explorer";
 const KEY_CONTEXT: &str = "Explorer";
 
 actions!(
@@ -642,8 +642,8 @@ impl BasePanel for ExplorerPanel {
         PANEL_NAME
     }
 
-    /// No close button on its tab (user); "..." > Close still hides it and
-    /// View > Add Panel > Explorer brings it back.
+    /// Never closes (user): it is the Explorer section's, which collapses
+    /// but keeps its panels (`workbench.rs`).
     fn closable(&self, _: &App) -> bool {
         false
     }
@@ -658,10 +658,11 @@ impl Panel for ExplorerPanel {
         "Explorer"
     }
 
-    /// Alone in its dock it shows the plain "Explorer" title, not a tab
-    /// (user): the main panel, not one of many.
+    /// A tab even when alone (user, 2026-10-22): the plain title it had
+    /// alone looked unlike the tab bar of other panels (no bar background,
+    /// no tab borders). No x either way (`closable`).
     fn always_tab_bar(&self, _: &App) -> bool {
-        false
+        true
     }
 
     fn inner_padding(&self, _: &App) -> bool {
