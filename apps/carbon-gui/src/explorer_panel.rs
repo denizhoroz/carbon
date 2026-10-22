@@ -35,6 +35,28 @@ use filter::Filter;
 pub const PANEL_NAME: &str = "Explorer";
 const KEY_CONTEXT: &str = "Explorer";
 
+/// Ask before Delete moves entries to the Recycle Bin / Trash.
+const CONFIRM_DELETE: &str = "explorer.confirm_delete";
+
+/// The Explorer's settings.
+pub fn settings() -> Vec<carbon_core::settings::Setting> {
+    use carbon_core::settings::{Kind, Setting};
+    vec![
+        Setting::new(
+            CONFIRM_DELETE,
+            &["Explorer"],
+            "Confirm Delete",
+            Kind::Bool,
+            true,
+        )
+        .description(&format!(
+            "Ask before deleting files and folders. They go to the {} either way.",
+            file_ops::TRASH_LABEL
+        ))
+        .keywords(&["trash", "recycle bin", "remove"]),
+    ]
+}
+
 actions!(
     explorer,
     [

@@ -27,7 +27,7 @@ pub const REVEAL_LABEL: &str = if cfg!(windows) {
     "Open Containing Folder"
 };
 
-const TRASH_LABEL: &str = if cfg!(windows) {
+pub(super) const TRASH_LABEL: &str = if cfg!(windows) {
     "Recycle Bin"
 } else {
     "Trash"
@@ -217,7 +217,8 @@ impl ExplorerPanel {
         cx.notify();
     }
 
-    /// Asks first, then moves the selected entries to the Recycle Bin / Trash.
+    /// Asks first (unless the Confirm Delete setting is off), then moves the
+    /// selected entries to the Recycle Bin / Trash.
     pub(super) fn delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
         if self.edit.is_some() {
             return;
@@ -244,6 +245,10 @@ impl ExplorerPanel {
                 window.push_notification(format!("Cannot delete: {err}"), cx);
             }
         });
+        if !crate::settings::get(cx).get_bool(super::CONFIRM_DELETE) {
+            confirm(window, cx);
+            return;
+        }
         window.open_dialog(cx, move |dialog, _, cx| {
             let on_ok = confirm.clone();
             let on_click = confirm.clone();

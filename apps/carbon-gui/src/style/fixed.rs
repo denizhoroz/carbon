@@ -53,6 +53,28 @@ pub const MANAGE_WIDTH: Pixels = px(720.);
 pub const MANAGE_BODY_HEIGHT: Pixels = px(420.);
 pub const MANAGE_EMPTY_ICON_SIZE: Pixels = px(28.);
 
+/// Settings dialog: share of the window and limits of its size, the category
+/// tree's width, padding of the top bar and of setting rows, the gap between a
+/// row's text and its control, control widths (text, number, choice), and the
+/// tree's chevrons.
+pub const SETTINGS_WIDTH_SHARE: f32 = 0.8;
+pub const SETTINGS_MAX_WIDTH: Pixels = px(1100.);
+pub const SETTINGS_MIN_WIDTH: Pixels = px(640.);
+pub const SETTINGS_HEIGHT_SHARE: f32 = 0.85;
+pub const SETTINGS_MAX_HEIGHT: Pixels = px(760.);
+pub const SETTINGS_MIN_HEIGHT: Pixels = px(420.);
+/// Room the dialog's title takes above the settings body.
+pub const SETTINGS_TITLE_HEIGHT: Pixels = px(52.);
+pub const SETTINGS_TREE_WIDTH: Pixels = px(220.);
+pub const SETTINGS_BAR_PADDING: Pixels = px(12.);
+pub const SETTINGS_ROW_PADDING_X: Pixels = px(20.);
+pub const SETTINGS_ROW_PADDING_Y: Pixels = px(10.);
+pub const SETTINGS_ROW_GAP: Pixels = px(24.);
+pub const SETTINGS_TEXT_WIDTH: Pixels = px(260.);
+pub const SETTINGS_NUMBER_WIDTH: Pixels = px(120.);
+pub const SETTINGS_CHOICE_MIN_WIDTH: Pixels = px(180.);
+pub const SETTINGS_CHEVRON_SIZE: Pixels = px(14.);
+
 /// Inner padding of panel bodies (DESIGN.md s4: 16 px) and gap between their items.
 pub const PANEL_PADDING: Rems = rems(1.);
 pub const PANEL_GAP: Rems = rems(0.5);

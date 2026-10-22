@@ -1,6 +1,6 @@
-//! Manage dialogs, opened from the title bar's app menu (the three lines),
-//! File > Preferences and the command palette: Extensions, Settings. Contents
-//! are placeholders for now.
+//! Manage dialogs, opened from the status bar's app menu (the three lines),
+//! File > Preferences and the command palette: Extensions (a placeholder for
+//! now) and Settings (`settings.rs`).
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme, Icon, Sizable, Size, WindowExt, v_flex};
@@ -43,8 +43,13 @@ impl Manage {
     }
 }
 
-/// Opens `target`'s dialog: title and an empty placeholder body.
+/// Opens `target`'s dialog; Extensions is a title and an empty placeholder
+/// body for now.
 pub fn open(target: Manage, window: &mut Window, cx: &mut App) {
+    if target == Manage::Settings {
+        crate::settings::open_dialog(window, cx);
+        return;
+    }
     window.open_dialog(cx, move |dialog, _, cx| {
         let muted = cx.theme().muted_foreground;
         dialog.title(target.label()).w(fixed::MANAGE_WIDTH).child(

@@ -156,7 +156,7 @@ Status: **Committed** (inherent to the pillar or already a decision in PROJECT.m
 | Narrow-API escape hatch (MCP) because Zed has no custom panels                                                            | EX-07                      | Proposed                |
 | Manage Extensions dialog (status bar app menu since 2026-10-22; was Section Bar bottom): official + user-added extensions/plugins, VS Code-like (compilers, linters, appearances, ...) | EX-01, EX-03               | Committed (user 2026-10-19) |
 | Workflows (= Section Bar sections): Code Editor now; Paradigm Editor, Agent Automation planned; users add custom-built workflows; Manage Workflows dialog adds/removes them | -                          | Dropped (user 2026-10-22): workflows are extensions; extensions contribute panels and Explorer-section tabs (`project/archived/workflow-system.md`) |
-| Manage Settings dialog (status bar app menu since 2026-10-22; was Section Bar bottom): every user option (system, appearance, agents, ...) | ST-01                      | Committed (user 2026-10-19) |
+| Manage Settings dialog (status bar app menu since 2026-10-22; was Section Bar bottom): every user option (system, appearance, agents, ...) | ST-01                      | Built 2026-10-22 (dialog, registry, User + Workspace; `project/built/settings.md`) |
 
 ## 1.3 Cross-cutting decisions and constraints
 

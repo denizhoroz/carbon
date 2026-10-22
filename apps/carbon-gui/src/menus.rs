@@ -266,6 +266,8 @@ pub fn app_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("f1", CommandPalette, None),
         KeyBinding::new("secondary-p", QuickOpen, None),
         KeyBinding::new("secondary-g", GoToLine, None),
+        // VS Code: Ctrl+, opens Settings.
+        KeyBinding::new("secondary-,", ManageSettings, None),
         // VS Code: Ctrl+K Ctrl+O opens a folder.
         KeyBinding::new("secondary-k secondary-o", OpenFolder, None),
         KeyBinding::new("secondary-b", ToggleDock { side: Side::Left }, None),

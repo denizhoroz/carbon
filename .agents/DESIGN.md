@@ -155,8 +155,9 @@ Unresearched (see `PROJECT.md` open questions). Design rules below come from the
 
 ## Settings
 - Opened from **Settings** in the status bar's app menu (also File > Preferences, the palette). Holds every option the user can change (system, appearance, agents, ...).
+- **Layout (user decision 2026-10-22):** a modal dialog; search bar across the top, a tree of setting categories on the left, all settings in one long scroll on the right (clicking a node scrolls there, the tree follows the scroll). Search filters: only matching settings, matched text highlighted, tree narrowed to matching branches with counts. Built: `project/built/settings.md`. **[N]**
 - One searchable settings view in plain language, plus a JSON view for power users; both edit the same data. Sections by concern: Appearance, Editor, Agents (models, keys, approvals, sandbox), Extensions, System. Common settings first, advanced ones behind "Show advanced". **[R][N]**
-- Layered scopes (user, workspace, folder) shown as a badge on each changed setting. **[R]**
+- Layered scopes shown as a badge on each changed setting; User + Workspace in the first version (user 2026-10-22), switched in the top bar. **[R]**
 - API keys show "Saved" only, never any part of the key; the line under the field is the "Where to find the token" link; purpose goes in the label's info tip. **[K]**
 - System limits sized to the machine (concurrent jobs up to cores and memory, with an info tip). **[K]**
 

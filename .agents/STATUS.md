@@ -6,7 +6,7 @@ Living tracker for Carbon. Update it at the end of each work session. Newest ent
 
 ## Current focus
 
-Core panels work on Windows (shell, layout, Explorer, editor with rust-analyzer, terminal, command palette, chat GUI with a demo agent). Next: a real chat backend (ACP/API), Manage dialog contents (Extensions, Settings; workflows are extensions since 2026-10-22), paradigm editor research, then macOS/Linux builds and CI.
+Core panels work on Windows (shell, layout, Explorer, editor with rust-analyzer, terminal, command palette, chat GUI with a demo agent). Settings dialog built (2026-10-22). Next: a real chat backend (ACP/API), Manage Extensions contents (workflows are extensions since 2026-10-22), paradigm editor research, then macOS/Linux builds and CI.
 
 ## Progress
 
@@ -53,6 +53,7 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-22 | Settings menu: modal dialog; search bar on top, category tree on the left, one long scroll on the right; search filters (matches highlighted, tree narrowed with counts); scopes User + Workspace in v1. Own view on a typed registry, not the kit `Settings` component | user decision (layout, dialog, filter, scopes, scroll); registry, files and phases my design | `project/built/settings.md`, `DESIGN.md` Settings |
 | 2026-10-22 | Explorer section on `main`: the left dock is fixed (Explorer unclosable, nothing out or in, rearrange/split inside, collapsible); sealed: only the Explorer until extensions add section tabs; Explorer always drawn as a tab; kit patches gpui-base 4 / gpui-component 7 taken from `feature/workflow` | user decision (rules from the branch; "sealed, extensions later") | `project/built/panel-layout.md` s8 |
 | 2026-10-22 | Appearance rework: Section Bar and sections removed (one layout; old `layout.json` migrated); command center (search box opening the palette) centered in the title bar; app menu button (three lines) at the status bar's right end (user correction: "activity bar" meant the status bar) with Extensions, Settings, Command Palette; File > Preferences; Manage Workflows removed | user decision; box text, sizes and menu contents my design | `project/built/title-bar-menu.md`, `project/archived/section-bar.md` |
 | 2026-10-22 | No separate workflow system: workflows are just extensions (extensions contribute panels and Explorer-section tabs). Branch `feature/workflow` (workflow system, built 2026-10-20 to 22) stays but is not developed; nothing carried over for now; its design doc archived | user decision | `project/archived/workflow-system.md`, `PROJECT.md` |
@@ -143,6 +144,11 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-22 (Settings dialog)
+- Done: research (VS Code, Zed, JetBrains, kit `Settings`), user decisions (modal dialog, top search that filters, category tree, one long scroll, User + Workspace). Core `settings/` (typed registry, user + workspace JSONC files with comment-keeping edits, resolution, search with `@modified` / `@id:` / `@ext:`); gui `settings.rs` (global, 1 s file poll, JSON file opening) + `settings/{view,row,tree}.rs`; 13 settings wired live (theme, UI text size, code font, tab size, wrap, line numbers, indent guides, whitespace, confirm delete); `style/settings.json` removed (theme choice moved to the user file); Ctrl+, opens it. Clippy, fmt, 36 GUI tests + core settings tests; click-tested (`project/built/settings.md` s6).
+- Fixed while testing: the user settings file opened read-only in the editor (path compare without canonicalizing).
+- Next: more settings as features read them (terminal, auto save); settings in the palette; VS Code settings import.
 
 ### 2026-10-22 (Explorer section on main)
 - Done: kit patches gpui-base 4 / gpui-component 7 applied from `feature/workflow` (vendor only); `EXPLORER_SECTION` fixed, `keep_explorer_section` repair, close/move/add guards in `workbench.rs`; Explorer always a tab (it lacked the tab bar look when alone). Clippy, fmt, 33 GUI tests, 154 gpui-base dock tests; click-tested.

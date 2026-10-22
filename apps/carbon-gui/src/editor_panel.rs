@@ -15,12 +15,15 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use carbon_core::lsp::{self as core_lsp, lsp_types};
+use carbon_core::settings::{Kind, Setting};
 use carbon_core::{BufferId, Core, CoreError};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::dock::{
     BasePanel, Panel, PanelEvent, PanelInfo, PanelState, panel_handle, register_panel,
 };
-use gpui_kit::component::input::{Editor, EditorState, GoToDefinition, InputEvent, RopeExt as _};
+use gpui_kit::component::input::{
+    Editor, EditorState, GoToDefinition, InputEvent, RopeExt as _, TabSize,
+};
 use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::{ActiveTheme, Sizable, WindowExt, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -36,6 +39,74 @@ const LSP_CHANGE_DELAY: Duration = Duration::from_millis(150);
 
 actions!(editor, [SaveFile, CloseEditor]);
 
+const TAB_SIZE: &str = "editor.tab_size";
+const INSERT_SPACES: &str = "editor.insert_spaces";
+const SOFT_WRAP: &str = "editor.soft_wrap";
+const LINE_NUMBERS: &str = "editor.line_numbers";
+const INDENT_GUIDES: &str = "editor.indent_guides";
+const SHOW_WHITESPACE: &str = "editor.show_whitespace";
+
+/// The editor's settings (its font is in `style::theme`, which applies it).
+/// Defaults are the kit editor's own.
+pub fn settings() -> Vec<Setting> {
+    vec![
+        Setting::new(
+            TAB_SIZE,
+            &["Editor", "Indentation"],
+            "Tab Size",
+            Kind::integer(1, 16),
+            2,
+        )
+        .description("Columns per indentation level.")
+        .keywords(&["indent", "width"]),
+        Setting::new(
+            INSERT_SPACES,
+            &["Editor", "Indentation"],
+            "Insert Spaces",
+            Kind::Bool,
+            true,
+        )
+        .description("Tab inserts spaces; off inserts a tab character.")
+        .keywords(&["indent", "tabs", "hard tabs"]),
+        Setting::new(
+            SOFT_WRAP,
+            &["Editor", "Display"],
+            "Word Wrap",
+            Kind::Bool,
+            false,
+        )
+        .description("Wrap long lines at the editor's width instead of scrolling sideways.")
+        .keywords(&["soft wrap", "line wrap"]),
+        Setting::new(
+            LINE_NUMBERS,
+            &["Editor", "Display"],
+            "Line Numbers",
+            Kind::Bool,
+            true,
+        )
+        .description("Show line numbers beside the code.")
+        .keywords(&["gutter"]),
+        Setting::new(
+            INDENT_GUIDES,
+            &["Editor", "Display"],
+            "Indent Guides",
+            Kind::Bool,
+            true,
+        )
+        .description("Draw a thin line at each indentation level.")
+        .keywords(&["indentation", "rulers"]),
+        Setting::new(
+            SHOW_WHITESPACE,
+            &["Editor", "Display"],
+            "Show Whitespace",
+            Kind::Bool,
+            false,
+        )
+        .description("Mark spaces and tabs with faint symbols.")
+        .keywords(&["invisible characters", "render whitespace"]),
+    ]
+}
+
 pub struct EditorPanel {
     core: Entity<Core>,
     focus_handle: FocusHandle,
@@ -43,6 +114,7 @@ pub struct EditorPanel {
     /// "Don't Save" was chosen: drop the unsaved text when the tab goes.
     discard: bool,
     _core_sub: Subscription,
+    _settings_sub: Subscription,
 }
 
 /// The open buffer and the kit editor showing it.
@@ -60,6 +132,8 @@ struct Doc {
     diagnostics: u64,
     /// Sends the text to the language server once typing pauses.
     lsp_change: Task<()>,
+    /// The settings generation the editor's options were last set from.
+    settings: Option<u64>,
     _events: Subscription,
 }
 
@@ -69,6 +143,8 @@ impl EditorPanel {
         let core = current_core(cx);
         cx.new(|cx| Self {
             _core_sub: cx.observe(&core, |_, _, cx| cx.notify()),
+            // Render re-applies the editor options when they changed.
+            _settings_sub: cx.observe_global::<crate::settings::AppSettings>(|_, cx| cx.notify()),
             core,
             focus_handle: cx.focus_handle(),
             doc: None,
@@ -136,9 +212,11 @@ impl EditorPanel {
             .map(language::for_path)
             .unwrap_or(language::PLAIN);
         // Files outside the folder (a library a definition led to) are for
-        // reading only.
+        // reading only; the user settings file is not.
         let readonly = match (&path, core.workspace()) {
-            (Some(path), Some(workspace)) => !path.starts_with(workspace.root()),
+            (Some(path), Some(workspace)) => {
+                !path.starts_with(workspace.root()) && !crate::settings::is_settings_file(path, cx)
+            }
             _ => false,
         };
         // No code folding for now: the kit's folding delays the redraw after
@@ -162,6 +240,7 @@ impl EditorPanel {
             readonly,
             diagnostics: 0,
             lsp_change: Task::ready(()),
+            settings: None,
             _events,
         });
         cx.notify();
@@ -734,9 +813,42 @@ impl Panel for EditorPanel {
     }
 }
 
+impl EditorPanel {
+    /// Sets the editor's options from the settings, when they changed since
+    /// the last time.
+    fn apply_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let generation = crate::settings::generation(cx);
+        let Some(doc) = self.doc.as_mut() else {
+            return;
+        };
+        if doc.settings == Some(generation) {
+            return;
+        }
+        doc.settings = Some(generation);
+        let store = crate::settings::get(cx);
+        let tab = TabSize {
+            tab_size: store.get_i64(TAB_SIZE).max(1) as usize,
+            hard_tabs: !store.get_bool(INSERT_SPACES),
+        };
+        let (wrap, numbers) = (store.get_bool(SOFT_WRAP), store.get_bool(LINE_NUMBERS));
+        let (guides, whitespace) = (
+            store.get_bool(INDENT_GUIDES),
+            store.get_bool(SHOW_WHITESPACE),
+        );
+        doc.state.update(cx, |state, cx| {
+            state.set_tab_size(tab, cx);
+            state.set_soft_wrap(wrap, window, cx);
+            state.set_line_number(numbers, window, cx);
+            state.set_indent_guides(guides, window, cx);
+            state.set_show_whitespaces(whitespace, window, cx);
+        });
+    }
+}
+
 impl Render for EditorPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_from_core(window, cx);
+        self.apply_settings(window, cx);
         let muted = cx.theme().muted_foreground;
         let base = v_flex()
             .track_focus(&self.focus_handle)

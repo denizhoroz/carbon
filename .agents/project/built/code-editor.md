@@ -72,7 +72,7 @@ Pass (budget: open < 1 s, keystroke < 16 ms) with folding off and soft wrap off.
 ## Limits
 
 - No code folding (kit cost and crash above); no soft-wrap setting.
-- No Save As for files that have a path; no auto save yet (comes with settings, user 2026-10-17); undo back to the saved text still shows the file as unsaved (dirty is by revision).
+- No Save As for files that have a path; no auto save yet (to be a setting, user 2026-10-17; the Settings dialog exists since 2026-10-22); undo back to the saved text still shows the file as unsaved (dirty is by revision).
 - Language servers: rust-analyzer only, from a fixed table; no settings sent; full-text sync (no incremental edits); no signature help, references, rename, code actions, formatting.
 - Completion items insert the kit's way (no snippets); the kit does not filter, Carbon narrows by subsequence.
 - Kit columns are characters, LSP columns UTF-16: converted for diagnostics and requests; other kit features (kit-side definition jumps within a file) use the kit's own conversion.

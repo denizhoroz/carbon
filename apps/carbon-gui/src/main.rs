@@ -9,6 +9,7 @@ mod manage;
 mod menus;
 mod palette;
 mod save_ops;
+mod settings;
 mod status_bar;
 mod style;
 mod terminal_panel;
@@ -80,10 +81,12 @@ impl CarbonApp {
         let _menus_sub = cx.subscribe(&workbench, |this, _, _: &MenusChanged, cx| {
             this.refresh_menus(cx)
         });
-        // Close Folder is enabled only with a folder open.
+        // Close Folder is enabled only with a folder open; workspace
+        // settings follow the folder.
         let _core_sub = cx.observe(&core, |this, _, cx| {
             this.refresh_menus(cx);
             this.sync_watch(cx);
+            this.sync_settings(cx);
         });
         // With nothing focused, actions start at the window root and miss the
         // handlers below (closing a menu or dialog can leave focus empty).
@@ -107,7 +110,18 @@ impl CarbonApp {
         };
         this.refresh_menus(cx);
         this.sync_watch(cx);
+        this.sync_settings(cx);
         this
+    }
+
+    /// Points the workspace settings at the open folder.
+    fn sync_settings(&self, cx: &mut App) {
+        let root = self
+            .core
+            .read(cx)
+            .workspace()
+            .map(|workspace| workspace.root().to_path_buf());
+        settings::sync_workspace(root.as_deref(), cx);
     }
 
     fn menu_state(&self, cx: &App) -> MenuState {
@@ -321,6 +335,7 @@ fn main() {
     let folder = std::env::args_os().nth(1).map(PathBuf::from);
     application().with_assets(app_assets::AppAssets).run(|cx| {
         init(cx);
+        settings::init(cx);
         style::theme::init(cx);
         menus::init(cx);
         test_panel::register(cx);

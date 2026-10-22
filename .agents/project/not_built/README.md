@@ -12,9 +12,9 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Explorer leftovers: file nesting, redo, compact-folders setting, OS clipboard for files; agent markers fed by agent sessions (problem markers now come from language servers); whole-project search (go-to-file built: `../built/command-palette.md`) | WB-03, SC-01, AG-01 | T1-T3 built (`../built/file-tree.md`) |
 | Code Editor section contents: problems/output | WB-03, WB-04 | Editor, Terminal and Chat built (`../built/code-editor.md`, `../built/terminal.md`, `../built/chat.md`) |
 | Paradigm Editor, Agent Automation and other modes as extensions (contributed panels and Explorer-section tabs); no workflow system (user 2026-10-22, `../archived/workflow-system.md`) | `DESIGN.md` s4, `PROJECT.md` open questions | Presets Paradigm/Agents exist as layouts only |
-| Manage dialog contents: Extensions (list/add/remove official + user plugins: compilers, linters, appearances, panels), Settings (all options: system, appearance, agents, ...); opened from the status bar app menu (2026-10-22) | EX-03, ST-01, `DESIGN.md` s4 | Menu entries + empty dialogs built (`../built/title-bar-menu.md`) |
+| Manage Extensions contents (list/add/remove official + user plugins: compilers, linters, appearances, panels); opened from the status bar app menu (2026-10-22) | EX-03, `DESIGN.md` s4 | Menu entry + empty dialog built (`../built/title-bar-menu.md`); Settings built (`../built/settings.md`) |
 | Per-workspace layout (now one global file; editor tabs of another folder are dropped on start) | WB-09 | Needs workspace concept |
-| Settings UI, keymap, VS Code settings/keymap/theme import | ST-01, ST-04, ST-06 | |
+| Settings leftovers: more settings as features read them (terminal font/scrollback/cursor, auto save, telemetry), "Show advanced", `@lang:` per-language values, list/object settings in the dialog, workspace trust; keymap editor; VS Code settings/keymap/theme import | ST-01, ST-04, ST-06 | Settings dialog + registry built (`../built/settings.md`) |
 | Palette leftovers: `@` / `#` symbol search, live Go to Line preview, query history (Up), settings in the palette | WB-01 | Commands, files, line, help built (`../built/command-palette.md`) |
 | Accessibility audit (Narrator, VoiceOver, Orca) | AX-01, `DESIGN.md` s3 | Kit a11y "partial" (R-4) |
 
@@ -22,7 +22,7 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 
 | Feature | Refs |
 |---|---|
-| Editor leftovers: code folding (kit folding delays every keystroke ~25 ms and can crash on big broken files: fix or fork the kit), soft-wrap setting, find/replace UI check, format, Save As, auto save (with settings, user 2026-10-17) / hot exit, diff editor, preview tabs, signature help, references, rename, code actions, anchors + agent range edits, incremental LSP sync | ED-01..04, ED-11, LS-02 | Tier 1 built (`../built/code-editor.md`) |
+| Editor leftovers: code folding (kit folding delays every keystroke ~25 ms and can crash on big broken files: fix or fork the kit), find/replace UI check, format, Save As, auto save (with settings, user 2026-10-17) / hot exit, diff editor, preview tabs, signature help, references, rename, code actions, anchors + agent range edits, incremental LSP sync | ED-01..04, ED-11, LS-02 | Tier 1 built (`../built/code-editor.md`) |
 | Installable language packages: each language (rust-analyzer, Python server, ...) installed on demand instead of a fixed table; more servers and grammars | LS-01, LS-03, EX-06 | User request 2026-10-17; table is `SERVERS` in core `lsp.rs`. 2026-10-19: no preinstalled language tools, all via Manage Extensions; binary source model open (`../../documents/language-tools.md`) |
 | Tabs/splits for explorer, problems; Problems panel | WB-02, WB-03, WB-04 | Editor tabs built |
 | Language intelligence rest: navigation/refactor, semantic tokens | LS-02..04, LS-06 | Diagnostics, hover, completion, definition built |

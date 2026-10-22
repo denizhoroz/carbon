@@ -48,6 +48,8 @@ pub enum CoreError {
     Lsp(String),
     #[error("chat: {0}")]
     Chat(String),
+    #[error("settings: {0}")]
+    Settings(String),
 }
 
 impl CoreError {

@@ -36,7 +36,9 @@ icon_assets!(
         MessageSquare,
         Eraser,
         // Extensions (app menu, palette); Settings, Menu and Search are in the kit default set.
-        Puzzle
+        Puzzle,
+        // Settings dialog: open the JSON file.
+        Braces
     ]
 );
 

@@ -18,6 +18,7 @@ mod id;
 mod jobs;
 pub mod lsp;
 mod marks;
+pub mod settings;
 pub mod terminal;
 mod vcs;
 mod watcher;
