@@ -91,7 +91,7 @@ impl Preset {
             fixed::BOTTOM_DOCK_SIZE,
         );
         match self {
-            // Also the Code Editor section's default layout.
+            // Also Carbon's default layout (Reset Layout).
             Preset::Code => (
                 tabs(&["Editor"], cx),
                 vec![

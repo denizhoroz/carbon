@@ -17,11 +17,12 @@ Built 2026-10-19. User request: a slick command palette on top of the app, after
 |---|---|
 | Ctrl+Shift+P, F1, View > Command Palette | Opens with `>`: every command that can run where focus was, grouped by menu (File, Edit, View, Help, Editor, Terminal, Explorer), "Recently used" (5) on top |
 | Ctrl+P, View > Go to File... | Opens empty: open editors, then workspace files; typing fuzzy-matches paths (file name scores higher) |
+| Command center (2026-10-22) | The search box in the middle of the title bar opens the palette with `>`; also in the status bar's app menu (`status-bar.md`) |
 | Ctrl+G, View > Go to Line... | Opens with `:`: shows the current line/column and line count; `:42`, `:42:7`, `:42,7` go there (clamped to the last line) |
 | `?` | Lists the modes; Enter on one switches to it. `@` and `#` (symbols) say "coming soon" |
 | Typing | Fuzzy match, fzf scoring; words in any order must all match ("dock left"); smart case; matched letters blue and semibold; synonyms match too ("quit" finds File: Exit) without a highlight |
 | Ranking | Best match first; equal matches: more used first. Usage (count, last use) in `target/carbon-gui/command-usage.json` |
-| Row | Icon, muted category ("View: "), name, full shortcut on the right (every key of a chord: Ctrl+K Ctrl+O), check mark for on/off items (current section, auto-hide) |
+| Row | Icon, muted category ("View: "), name, full shortcut on the right (every key of a chord: Ctrl+K Ctrl+O), check mark for on/off items (auto-hide) |
 | Enter / click | Focus goes back to where it was, then the command runs there (File: Save saves the focused editor; Explorer: Rename renames the selected row). Files open in an editor tab; Go to line moves the cursor and focuses the editor |
 | Up / Down | Move the highlight (wraps, skips message rows) |
 | Esc | Closes at once (even with text typed) and gives focus back |

@@ -1,45 +1,44 @@
-//! Manage dialogs opened from the bottom of the Section Bar: Manage Extensions,
-//! Manage Workflows, Manage Settings. Contents are placeholders for now.
+//! Manage dialogs, opened from the title bar's app menu (the three lines),
+//! File > Preferences and the command palette: Extensions, Settings. Contents
+//! are placeholders for now.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme, Icon, Sizable, Size, WindowExt, v_flex};
 use gpui_kit::*;
 
+use crate::menus::{ManageExtensions, ManageSettings};
 use crate::style::fixed;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Manage {
     Extensions,
-    Workflows,
     Settings,
 }
 
 impl Manage {
-    /// Top to bottom, as shown in the Section Bar.
-    pub const ALL: [Manage; 3] = [Manage::Extensions, Manage::Workflows, Manage::Settings];
+    /// In menu order.
+    pub const ALL: [Manage; 2] = [Manage::Extensions, Manage::Settings];
 
-    /// Button tooltip and dialog title.
+    /// Menu item and dialog title.
     pub fn label(self) -> &'static str {
         match self {
-            Manage::Extensions => "Manage Extensions",
-            Manage::Workflows => "Manage Workflows",
-            Manage::Settings => "Manage Settings",
+            Manage::Extensions => "Extensions",
+            Manage::Settings => "Settings",
         }
     }
 
     pub fn icon(self) -> IconName {
         match self {
             Manage::Extensions => IconName::Puzzle,
-            Manage::Workflows => IconName::Workflow,
             Manage::Settings => IconName::Settings,
         }
     }
 
-    pub fn id(self) -> &'static str {
+    /// The action that opens this dialog.
+    pub fn action(self) -> Box<dyn Action> {
         match self {
-            Manage::Extensions => "manage-extensions",
-            Manage::Workflows => "manage-workflows",
-            Manage::Settings => "manage-settings",
+            Manage::Extensions => Box::new(ManageExtensions),
+            Manage::Settings => Box::new(ManageSettings),
         }
     }
 }

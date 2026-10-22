@@ -13,7 +13,8 @@ use gpui_kit::component::status_bar::StatusBar;
 use gpui_kit::component::{ActiveTheme, Icon, Sizable, Size, h_flex};
 use gpui_kit::*;
 
-use crate::menus::{CloseFolder, CreateFolder, OpenFolder};
+use crate::manage::Manage;
+use crate::menus::{CloseFolder, CommandPalette, CreateFolder, OpenFolder};
 use crate::style::fixed;
 
 /// How often the branch is re-read from `.git/HEAD` (a tiny file read).
@@ -111,6 +112,30 @@ fn language_server(ix: usize, entry: &ServerEntry, cx: &App) -> impl IntoElement
     }
 }
 
+/// The three-line button at the bar's right end: extensions, settings and
+/// the palette in one place (menu opens upward).
+fn app_menu_button() -> impl IntoElement {
+    Button::new("app-menu")
+        .ghost()
+        .xsmall()
+        .icon(Icon::new(IconName::Menu).with_size(Size::Size(fixed::APP_MENU_ICON_SIZE)))
+        .tooltip("Manage")
+        .accessibility_label("Manage")
+        .dropdown_menu_with_anchor(Anchor::BottomRight, |menu, _, _| {
+            Manage::ALL
+                .into_iter()
+                .fold(menu, |menu, target| {
+                    menu.menu_with_icon(target.label(), target.icon(), target.action())
+                })
+                .separator()
+                .menu_with_icon(
+                    "Command Palette",
+                    IconName::Search,
+                    Box::new(CommandPalette),
+                )
+        })
+}
+
 impl Render for CarbonStatusBar {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let core = self.core.read(cx);
@@ -141,6 +166,6 @@ impl Render for CarbonStatusBar {
         for (ix, entry) in servers.into_iter().enumerate() {
             bar = bar.right(language_server(ix, entry, cx));
         }
-        bar
+        bar.right(app_menu_button())
     }
 }

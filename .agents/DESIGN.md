@@ -60,7 +60,7 @@ Rules that follow:
 Zed-style docks with VS Code's familiar panels. **[R][N]**
 
 ```
-┌ title bar: project / branch, command palette, window controls ──────────┐
+┌ title bar: logo, menus, command center (palette), window controls ─────┐
 │ left dock          │ editor area (groups, tabs,      │ right dock       │
 │ (files by default; │ splits; code + paradigm +       │ (agents tab by   │
 │ search, git,       │ viewers)                        │ default)         │
@@ -72,9 +72,11 @@ Zed-style docks with VS Code's familiar panels. **[R][N]**
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Section Bar** (user decision 2026-10-16): a vertical icon strip at the far left, like VS Code's activity bar, but it switches **sections** (Code Editor first; later paradigm, agents), each with its own remembered dock layout. It does not toggle single panels. Sections were called **workflows** (2026-10-19); since 2026-10-22 there is no workflow system: panels and Explorer-section tabs come from extensions (`project/archived/workflow-system.md`). What a Section Bar icon is under that model is open (`PROJECT.md`). **[N]**
-- **Section Bar bottom group** (user decision 2026-10-19), top to bottom: **Manage Extensions** (puzzle icon), **Manage Workflows** (workflow icon), **Manage Settings** (gear). Each opens a dialog, never a dock panel; never shown as selected. Extensions = official and user-added plugins, VS Code-like (compilers, linters, appearances); Workflows = add/remove workflows (built-in and custom; dropped 2026-10-22, button still in code, its fate open); Settings = all user options (see Settings). **[N]**
-- **Docks inside a section.** Left, right and bottom docks hold panels; each panel has a status-bar toggle button with a tooltip and shortcut. Panels can be dragged between docks. **[N]**
+- **No Section Bar, no sections** (user decision 2026-10-22, replacing the 2026-10-16 Section Bar; `project/archived/section-bar.md`): one layout. The title bar holds the **command center**, a search box centered on the window that opens the command palette (VS Code), so people see and click it; shortcuts stay. **[N]**
+- **App menu** (user decision 2026-10-22): a three-line button at the right end of the status bar, after the language servers; opens upward; Extensions, Settings and other app-level places live there (also File > Preferences and the palette). **[N]**
+- *(Superseded 2026-10-22.)* **Section Bar** (user decision 2026-10-16): a vertical icon strip at the far left, like VS Code's activity bar, but it switches **sections** (Code Editor first; later paradigm, agents), each with its own remembered dock layout. It does not toggle single panels. Sections were called **workflows** (2026-10-19); since 2026-10-22 there is no workflow system: panels and Explorer-section tabs come from extensions (`project/archived/workflow-system.md`). What a Section Bar icon is under that model is open (`PROJECT.md`). **[N]**
+- *(Superseded 2026-10-22: the Manage dialogs open from the app menu.)* **Section Bar bottom group** (user decision 2026-10-19), top to bottom: **Manage Extensions** (puzzle icon), **Manage Workflows** (workflow icon), **Manage Settings** (gear). Each opens a dialog, never a dock panel; never shown as selected. Extensions = official and user-added plugins, VS Code-like (compilers, linters, appearances); Workflows = add/remove workflows (built-in and custom; dropped 2026-10-22, button still in code, its fate open); Settings = all user options (see Settings). **[N]**
+- **Docks.** Left, right and bottom docks hold panels; each panel has a status-bar toggle button with a tooltip and shortcut. Panels can be dragged between docks. **[N]**
 - **Default first screen:** left dock with file tree, editor area, thin status bar; right and bottom docks closed. **[N]**
 - **Menus:** classic menu row (File, Edit, View, Help) inside the custom title bar on Windows/Linux, after the logo; system menu bar on macOS. Same commands as the palette; no in-window toolbar. (User decision 2026-10-16, replaces hamburger.) **[N]**
 - **Tabs and rows are compact:** one-line tabs with close on hover, tree rows in small steps, breadcrumbs optional and off by default. **[N]**
@@ -152,7 +154,7 @@ Unresearched (see `PROJECT.md` open questions). Design rules below come from the
 - Output pickers: one pattern everywhere ("Save as new" default / "Overwrite source" with an "I understand" checkbox); suggested names are `<input>-<suffix>`. **[K]**
 
 ## Settings
-- Opened from **Manage Settings** (Section Bar bottom). Holds every option the user can change (system, appearance, agents, ...).
+- Opened from **Settings** in the status bar's app menu (also File > Preferences, the palette). Holds every option the user can change (system, appearance, agents, ...).
 - One searchable settings view in plain language, plus a JSON view for power users; both edit the same data. Sections by concern: Appearance, Editor, Agents (models, keys, approvals, sandbox), Extensions, System. Common settings first, advanced ones behind "Show advanced". **[R][N]**
 - Layered scopes (user, workspace, folder) shown as a badge on each changed setting. **[R]**
 - API keys show "Saved" only, never any part of the key; the line under the field is the "Where to find the token" link; purpose goes in the label's info tip. **[K]**

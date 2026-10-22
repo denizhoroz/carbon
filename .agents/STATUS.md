@@ -53,6 +53,7 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-22 | Appearance rework: Section Bar and sections removed (one layout; old `layout.json` migrated); command center (search box opening the palette) centered in the title bar; app menu button (three lines) at the status bar's right end (user correction: "activity bar" meant the status bar) with Extensions, Settings, Command Palette; File > Preferences; Manage Workflows removed | user decision; box text, sizes and menu contents my design | `project/built/title-bar-menu.md`, `project/archived/section-bar.md` |
 | 2026-10-22 | No separate workflow system: workflows are just extensions (extensions contribute panels and Explorer-section tabs). Branch `feature/workflow` (workflow system, built 2026-10-20 to 22) stays but is not developed; nothing carried over for now; its design doc archived | user decision | `project/archived/workflow-system.md`, `PROJECT.md` |
 | 2026-10-19 | No preinstalled language tools (servers, linters, formatters, compilers); users install them via Manage Extensions. Binary source model (config only / download PATH-first / bundled) open | user decision after research on VS Code, Zed, Neovim/Mason, Helix, JetBrains | `documents/language-tools.md`, `PROJECT.md` |
 | 2026-10-19 | (Workflows part superseded 2026-10-22.) Section Bar bottom group: Manage Extensions, Manage Workflows, Manage Settings (dialogs, placeholders now). Workflows = sections (Code Editor; planned Paradigm Editor, Agent Automation; user custom workflows). Extensions = official + user-added plugins, VS Code-like (compilers, linters, appearances). Settings = all user options (system, appearance, agents, ...) | user decision | `PROJECT.md`, `DESIGN.md` s4, `project/built/section-bar.md` |
@@ -68,7 +69,7 @@ Format: date | decision | reason | where recorded.
 | 2026-10-17 | Language servers from a fixed table now; installable per-language packages later | user decision | `project/not_built/README.md` |
 | 2026-10-17 | Git reads with gitoxide (`gix` 0.89, status only) for Explorer markers; problem/agent markers as API first; Explorer T3 extras: copy/cut/paste + undo, no file nesting | user decision | `project/built/file-tree.md`, FEATURE SC-06 |
 | 2026-10-16 | In-process `carbon-core` crate before real panels (option a); daemon later | keep panel state out of views; cheap now | `project/built/carbon-core.md`, `PROJECT.md` |
-| 2026-10-16 | Section Bar: left vertical bar switching sections, each with own layout; first section Code Editor | user decision | `project/built/section-bar.md`, `DESIGN.md` s4 |
+| 2026-10-16 | (Superseded 2026-10-22: removed.) Section Bar: left vertical bar switching sections, each with own layout; first section Code Editor | user decision | `project/built/section-bar.md`, `DESIGN.md` s4 |
 | 2026-10-16 | Panel layout scope: T1 + T2 now, T3 (pop-out windows, top dock, guide diamond) later | user decision after comparison | `project/built/panel-layout.md` s7 |
 | 2026-10-16 | Custom title bar with classic menu row (Win/Linux), native menu bar (macOS); placeholder "C" logo | user decision | `DESIGN.md` s4 |
 | 2026-10-16 | Native desktop GUI, no webview | user decision | `PROJECT.md`, `documents/gui-framework.md` |
@@ -141,6 +142,11 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-22 (appearance rework)
+- Done: Section Bar and the section system removed (`section_bar.rs`, `SwitchSection`, View > Section, per-section layouts; `layout.json` is `{dock}`, old files migrated); command center in the title bar; app menu (three lines) at the status bar's right end with Extensions / Settings / Command Palette; File > Preferences; Manage Workflows gone. Clippy, fmt, 33 GUI tests. Section Bar doc archived.
+- Fixed after the user's report: a real mouse click on the command center started a window drag (the title bar's mouse-down handler) and never opened the palette; the box now `occlude`s the bar. My first click-test sent window messages straight to the client area, which skips that path; re-tested with real input (`SetCursorPos` + `mouse_event`): the box opens the palette, the status bar menu opens.
+- Next: decide the extension model's open questions (`PROJECT.md`), then Manage Extensions.
 
 ### 2026-10-22 (workflow system shelved)
 - Done: user dropped the workflow system (workflows are extensions); `main` docs updated; final workflow design archived in `project/archived/` (new folder, with index).

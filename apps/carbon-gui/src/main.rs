@@ -9,7 +9,6 @@ mod manage;
 mod menus;
 mod palette;
 mod save_ops;
-mod section_bar;
 mod status_bar;
 mod style;
 mod terminal_panel;
@@ -22,26 +21,24 @@ use std::path::PathBuf;
 
 use carbon_core::{Core, FsChanges};
 use editor_panel::{CloseEditor, SaveFile};
-use gpui_kit::component::{ActiveTheme, TitleBar, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme, TitleBar, v_flex};
 use gpui_kit::*;
 use menus::{
     AddPanel, ApplyLayout, ApplyPreset, CloseFolder, CommandPalette, CreateFolder, DeleteLayout,
-    GoToLine, MenuState, MoveBesideEditor, MovePanel, NewFile, OpenFolder, QuickOpen, ResetLayout,
-    ResizeDock, SaveLayoutAs, SwitchSection, ToggleAutoHide, ToggleDock,
+    GoToLine, ManageExtensions, ManageSettings, MenuState, MoveBesideEditor, MovePanel, NewFile,
+    OpenFolder, QuickOpen, ResetLayout, ResizeDock, SaveLayoutAs, ToggleAutoHide, ToggleDock,
 };
 use palette::{FileIndex, Palette};
-use section_bar::SectionBar;
 use status_bar::CarbonStatusBar;
 use style::fixed;
 use title_bar::AppTitleBar;
 use workbench::{MenusChanged, Workbench};
 
-/// Root view: title bar on top; Section Bar and dock workbench in the middle;
-/// status bar at the bottom. Holds the window's base focus so menu actions
+/// Root view: title bar on top (with the command center and the app menu),
+/// the dock workbench in the middle, status bar at the bottom. Holds the window's base focus so menu actions
 /// reach these handlers even before a panel is focused.
 struct CarbonApp {
     title_bar: Entity<AppTitleBar>,
-    section_bar: Entity<SectionBar>,
     status_bar: Entity<CarbonStatusBar>,
     core: Entity<Core>,
     workbench: Entity<Workbench>,
@@ -80,8 +77,6 @@ impl CarbonApp {
         let title_bar = cx.new(|cx| AppTitleBar::new(cx));
         let workbench = cx.new(|cx| Workbench::new(window, cx));
         cx.set_global(workbench::CurrentWorkbench(workbench.downgrade()));
-        let section = workbench.read(cx).menu_state().section;
-        let section_bar = cx.new(|_| SectionBar::new(section));
         let _menus_sub = cx.subscribe(&workbench, |this, _, _: &MenusChanged, cx| {
             this.refresh_menus(cx)
         });
@@ -99,7 +94,6 @@ impl CarbonApp {
         window.on_window_should_close(cx, save_ops::can_close);
         let mut this = Self {
             title_bar,
-            section_bar,
             status_bar,
             core,
             _core_sub,
@@ -124,8 +118,6 @@ impl CarbonApp {
 
     fn refresh_menus(&self, cx: &mut App) {
         let state = self.menu_state(cx);
-        self.section_bar
-            .update(cx, |bar, cx| bar.set_active(state.section, cx));
         menus::refresh(&state, cx);
         self.title_bar
             .update(cx, |title_bar, cx| title_bar.reload_menus(cx));
@@ -236,10 +228,6 @@ impl Render for CarbonApp {
                 cx,
             ))
             .on_action(self.on(
-                |w, a: &SwitchSection, window, cx| w.switch_section(a.section, window, cx),
-                cx,
-            ))
-            .on_action(self.on(
                 |w, _: &SaveLayoutAs, window, cx| w.open_save_dialog(window, cx),
                 cx,
             ))
@@ -271,6 +259,12 @@ impl Render for CarbonApp {
                 workspace_ops::close_folder(&this.core, cx)
             }))
             .on_action(|_: &NewFile, window, cx| editor_panel::new_file(window, cx))
+            .on_action(|_: &ManageExtensions, window, cx| {
+                manage::open(manage::Manage::Extensions, window, cx)
+            })
+            .on_action(|_: &ManageSettings, window, cx| {
+                manage::open(manage::Manage::Settings, window, cx)
+            })
             .on_action(cx.listener(|this, _: &CommandPalette, window, cx| {
                 this.open_palette(">", window, cx)
             }))
@@ -311,17 +305,11 @@ impl Render for CarbonApp {
             .bg(cx.theme().background)
             .child(self.title_bar.clone())
             .child(
-                h_flex()
+                div()
                     .flex_1()
                     .min_h_0()
-                    .child(self.section_bar.clone())
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .h_full()
-                            .child(self.workbench.clone()),
-                    ),
+                    .w_full()
+                    .child(self.workbench.clone()),
             )
             .child(self.status_bar.clone())
             .children(palette)

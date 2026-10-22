@@ -1,4 +1,8 @@
-# Section Bar
+# Section Bar (archived 2026-10-22)
+
+**Removed.** User decision 2026-10-22 (appearance rework): no sections and no Section Bar. Carbon has one layout; the command palette sits in the title bar (command center) and Extensions / Settings are under the status bar's app menu button (three lines). Current shell: `../built/title-bar-menu.md`. The text below is the doc as it was; the code it names was deleted (`section_bar.rs`, `SwitchSection`, View > Section, per-section `layout.json`).
+
+---
 
 Built 2026-10-16. User decision: a vertical bar like VS Code's activity bar, called the **Section Bar**; its icons switch the whole app to a different section, each with its own layout. Section contents are not built; placeholders only. Sections were called **workflows** (2026-10-19); the workflow system was dropped on 2026-10-22 (workflows are extensions; `../archived/workflow-system.md`). The code below is unchanged: the Manage Workflows button still opens its placeholder dialog, and its fate is open (`PROJECT.md`).
 

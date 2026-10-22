@@ -35,9 +35,8 @@ icon_assets!(
         TextCursorInput,
         MessageSquare,
         Eraser,
-        // Section Bar Manage buttons (Settings is in the kit default set).
-        Puzzle,
-        Workflow
+        // Extensions (app menu, palette); Settings, Menu and Search are in the kit default set.
+        Puzzle
     ]
 );
 

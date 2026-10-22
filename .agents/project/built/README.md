@@ -12,9 +12,8 @@ One file per feature that exists in code. Each says what was built, where, how t
 | carbon-core: workspace, file tree, buffers, terminals (PTY), agent session model | `carbon-core.md` | `apps/carbon-core/` | 2026-10-16 | n/a (library; 45 tests pass + 2 ignored) |
 | Workspace folders: open / create / close (File menu, status bar button, Explorer empty state) + real Explorer panel shell | `workspace-folders.md` | `apps/carbon-gui/src/{workspace_ops,explorer_panel}.rs`, core `workspace.rs` | 2026-10-16 | Click-tested 2026-10-17 (Ctrl+K Ctrl+O untested) |
 | Status bar (workspace, git branch, jobs) + `carbon-gui <folder>` | `status-bar.md` | `apps/carbon-gui/src/status_bar.rs`, core `vcs.rs`, `jobs.rs` | 2026-10-16 | Screenshot only |
-| Custom title bar + menu bar | `title-bar-menu.md` | `apps/carbon-gui/src/{title_bar,menus}.rs` | 2026-10-16 | No (opens, no crash) |
+| Custom title bar + menu bar; command center since 2026-10-22 (app menu with Extensions, Settings in the status bar: `status-bar.md`), replacing the Section Bar (archived: `../archived/section-bar.md`) | `title-bar-menu.md` | `apps/carbon-gui/src/{title_bar,menus,manage}.rs` | 2026-10-16, 2026-10-22 | Click-tested 2026-10-22 |
 | Theming and fixed styles | `theming.md` | `apps/carbon-gui/src/style/` | 2026-10-16 | No (themes load, test passes) |
-| Section Bar (vertical section switcher; Code Editor section with Explorer/Editor/Chat/Terminal; all real panels now) | `section-bar.md` | `apps/carbon-gui/src/{section_bar,app_assets}.rs`, `workbench.rs` | 2026-10-16 | No (starts, layout file checked) |
 | Panel layout T1 + T2 (docks, drag/snap, named layouts, presets, keyboard move/resize, auto-hide); any panel into any region incl. terminal/chat beside the code (2026-10-19, click-tested) | `panel-layout.md` (comparison + scope + implementation) | `apps/carbon-gui/src/{workbench,layouts,test_panel}.rs` | 2026-10-16 | No (T2 not yet run) |
 
 Platforms: built and started on Windows only; macOS and Linux untested for every row.

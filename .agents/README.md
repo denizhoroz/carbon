@@ -36,7 +36,7 @@ Docs for AI agents (and people) working on Carbon. Read the files that match you
 | `documents/` | Decision documents; `gui-framework.md` compares native Rust GUI frameworks (tables); `code-editor.md` and `terminal.md` compare editor engines and terminals; `language-tools.md` compares how editors ship language servers, linters, compilers |
 | `project/built/` | One file per built feature (what, code, usage, limits, verified); index in `README.md`. Panel layout comparison + implementation: `panel-layout.md` |
 | `project/not_built/` | Index of committed features with no code yet (refs to `FEATURE.md` IDs); research/design docs for unbuilt features go here |
-| `project/archived/` | Designs of dropped or shelved features, reference only (index in `README.md`); `workflow-system.md` (2026-10-22) |
+| `project/archived/` | Designs of dropped or shelved features, reference only (index in `README.md`): `workflow-system.md`, `section-bar.md` (2026-10-22) |
 | `project/ui/` | Working knowledge for the chosen stack; `ui-framework.md` is the GPUI Kit knowledge base |
 | `knowledge/` | **Read-only** knowledge from previous projects: `DESIGN`, `ARCHITECTURE`, `SECURITY`, `EXPERIENCE`, plus per-language folders (`css`, `html`, `python`, `rust`, `shell`); see `knowledge/README.md` |
 

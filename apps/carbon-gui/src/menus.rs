@@ -8,7 +8,6 @@ use gpui_kit::*;
 use crate::editor_panel::SaveFile;
 
 use crate::layouts::{MAX_SAVED, Preset, Side};
-use crate::section_bar::Section;
 
 // About is a placeholder: it has no handler yet.
 actions!(
@@ -24,7 +23,9 @@ actions!(
         About,
         Quit,
         ResetLayout,
-        SaveLayoutAs
+        SaveLayoutAs,
+        ManageExtensions,
+        ManageSettings
     ]
 );
 
@@ -83,13 +84,6 @@ pub enum Direction {
     Down,
 }
 
-/// Switch the workbench to a section (Section Bar icon or View > Section).
-#[derive(Clone, PartialEq, Action)]
-#[action(namespace = carbon, no_json)]
-pub struct SwitchSection {
-    pub section: Section,
-}
-
 #[derive(Clone, PartialEq, Action)]
 #[action(namespace = carbon, no_json)]
 pub struct ApplyPreset {
@@ -110,29 +104,14 @@ pub struct DeleteLayout {
 }
 
 /// What the dynamic part of the menus shows.
+#[derive(Default)]
 pub struct MenuState {
-    pub section: Section,
     pub has_workspace: bool,
     pub saved: Vec<String>,
     pub auto_hide: Vec<Side>,
 }
 
-impl Default for MenuState {
-    fn default() -> Self {
-        Self {
-            section: Section::Code,
-            has_workspace: false,
-            saved: Vec::new(),
-            auto_hide: Vec::new(),
-        }
-    }
-}
-
 pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
-    let sections = Section::ALL.map(|section| {
-        MenuItem::action(section.label(), SwitchSection { section })
-            .checked(section == state.section)
-    });
     let toggles = Side::ALL
         .map(|side| MenuItem::action(format!("Toggle {} Dock", side.label()), ToggleDock { side }));
     let auto_hide = Side::ALL.map(|side| {
@@ -229,6 +208,12 @@ pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
             MenuItem::action("New File", NewFile),
             MenuItem::action("Save", SaveFile),
             MenuItem::separator(),
+            // Also under the title bar's three-line button (VS Code: File > Preferences).
+            MenuItem::submenu(Menu::new("Preferences").items([
+                MenuItem::action("Extensions", ManageExtensions),
+                MenuItem::action("Settings", ManageSettings),
+            ])),
+            MenuItem::separator(),
             MenuItem::action("Exit", Quit),
         ]),
         Menu::new("Edit").items([
@@ -244,8 +229,6 @@ pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
                 MenuItem::action("Command Palette", CommandPalette),
                 MenuItem::action("Go to File...", QuickOpen),
                 MenuItem::action("Go to Line...", GoToLine),
-                MenuItem::separator(),
-                MenuItem::submenu(Menu::new("Section").items(sections)),
                 MenuItem::separator(),
             ]
             .into_iter()

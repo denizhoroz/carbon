@@ -27,7 +27,6 @@ use crate::editor_panel::EditorPanel;
 use crate::explorer_panel::ExplorerPanel;
 use crate::layouts::{LayoutStore, MAX_SAVED, Preset, SavedLayout, Side};
 use crate::menus::{Direction, MenuState};
-use crate::section_bar::Section;
 use crate::style::fixed;
 use crate::terminal_panel::TerminalPanel;
 use crate::test_panel::TestPanel;
@@ -163,30 +162,31 @@ pub fn close_panel<P: BasePanel>(panel: Entity<P>, window: &mut Window, cx: &mut
     });
 }
 
-/// Section, saved layouts or auto-hide flags changed; the owner rebuilds the
-/// menus and updates the Section Bar.
+/// Saved layouts or auto-hide flags changed; the owner rebuilds the menus.
 pub struct MenusChanged;
 
-/// `layout.json`: the active section and each visited section's last layout.
+/// The layout Carbon starts with (and resets to).
+const DEFAULT_PRESET: Preset = Preset::Code;
+
+/// `layout.json`: the current layout. Files from before sections were removed
+/// (2026-10-22) hold `{ active, sections: { code: ... } }`; the Code Editor's
+/// layout is read from there once and the file is rewritten in this shape.
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
 struct LayoutFile {
-    active: Option<Section>,
-    sections: HashMap<Section, DockAreaState>,
+    dock: Option<DockAreaState>,
+    #[serde(skip_serializing)]
+    sections: HashMap<String, DockAreaState>,
 }
 
-/// The layout a section starts with (and resets to).
-fn section_preset(section: Section) -> Preset {
-    match section {
-        Section::Code => Preset::Code,
+impl LayoutFile {
+    fn into_dock(mut self) -> Option<DockAreaState> {
+        self.dock.or_else(|| self.sections.remove("code"))
     }
 }
 
 pub struct Workbench {
     area: Entity<DockArea>,
-    section: Section,
-    /// Layouts of sections other than the active one (the active one lives in `area`).
-    section_layouts: HashMap<Section, DockAreaState>,
     store: LayoutStore,
     _layout_sub: Subscription,
     _save_task: Task<()>,
@@ -211,14 +211,12 @@ impl Workbench {
 
         let mut this = Self {
             area,
-            section: Section::Code,
-            section_layouts: HashMap::new(),
             store: LayoutStore::load(),
             _layout_sub,
             _save_task: Task::ready(()),
         };
         if !this.restore(window, cx) {
-            this.apply_preset(section_preset(this.section), window, cx);
+            this.apply_preset(DEFAULT_PRESET, window, cx);
         }
         this.close_empty_docks(window, cx);
         // Auto-hide docks start hidden, like JetBrains unpinned tool windows.
@@ -402,43 +400,14 @@ impl Workbench {
 
     pub fn menu_state(&self) -> MenuState {
         MenuState {
-            section: self.section,
             has_workspace: false,
             saved: self.store.names(),
             auto_hide: self.store.auto_hide.clone(),
         }
     }
 
-    // ---- sections --------------------------------------------------------
-
-    /// Keeps the current section's layout, then shows the target's last layout
-    /// (or its default the first time).
-    pub fn switch_section(
-        &mut self,
-        section: Section,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if section == self.section {
-            return;
-        }
-        let current = self.area.read(cx).dump(cx);
-        self.section_layouts.insert(self.section, current);
-        self.section = section;
-        let loaded = self.section_layouts.remove(&section).is_some_and(|state| {
-            self.area
-                .update(cx, |area, cx| area.load(state, window, cx))
-                .is_ok()
-        });
-        if !loaded {
-            self.apply_preset(section_preset(section), window, cx);
-        }
-        self.schedule_save(cx);
-        cx.emit(MenusChanged);
-    }
-
     pub fn reset_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.apply_preset(section_preset(self.section), window, cx);
+        self.apply_preset(DEFAULT_PRESET, window, cx);
     }
 
     // ---- docks -----------------------------------------------------------
@@ -790,11 +759,9 @@ impl Workbench {
     }
 
     fn save(&self, cx: &App) {
-        let mut sections = self.section_layouts.clone();
-        sections.insert(self.section, self.area.read(cx).dump(cx));
         let file = LayoutFile {
-            active: Some(self.section),
-            sections,
+            dock: Some(self.area.read(cx).dump(cx)),
+            sections: HashMap::new(),
         };
         let result = serde_json::to_string_pretty(&file)
             .map_err(|err| err.to_string())
@@ -808,26 +775,23 @@ impl Workbench {
         }
     }
 
-    /// Loads the saved sections and shows the active one; false (fall back to the
-    /// section default) when missing or invalid.
+    /// Loads the saved layout; false (fall back to the default) when missing,
+    /// invalid or from an older schema.
     fn restore(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Ok(text) = std::fs::read_to_string(LAYOUT_FILE) else {
             return false;
         };
-        let mut file: LayoutFile = match serde_json::from_str(&text) {
+        let file: LayoutFile = match serde_json::from_str(&text) {
             Ok(file) => file,
             Err(err) => {
                 eprintln!("invalid layout {LAYOUT_FILE}: {err}; using default");
                 return false;
             }
         };
-        self.section = file.active.unwrap_or(Section::Code);
-        // Layouts from an older schema are dropped; sections fall back to defaults.
-        file.sections
-            .retain(|_, state| state.version == Some(LAYOUT_VERSION));
-        let state = file.sections.remove(&self.section);
-        self.section_layouts = file.sections;
-        let Some(state) = state else {
+        let Some(state) = file
+            .into_dock()
+            .filter(|state| state.version == Some(LAYOUT_VERSION))
+        else {
             return false;
         };
         match self

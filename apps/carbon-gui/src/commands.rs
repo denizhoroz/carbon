@@ -26,7 +26,7 @@ pub struct CommandSpec {
     pub keywords: &'static [&'static str],
     pub icon: Option<IconName>,
     pub action: Box<dyn Action>,
-    /// A menu check mark (current section, auto-hide on).
+    /// A menu check mark (auto-hide on).
     pub checked: bool,
     pub disabled: bool,
 }
@@ -233,7 +233,14 @@ fn decorate(spec: &mut CommandSpec) {
             &["open file", "find file", "quick open"],
         ),
         "GoToLine" => (Some(IconName::ListOrdered), &["jump", "line number"]),
-        "SwitchSection" => (Some(IconName::Code), &["mode", "workspace"]),
+        "ManageExtensions" => (
+            Some(IconName::Puzzle),
+            &["plugins", "install", "preferences"],
+        ),
+        "ManageSettings" => (
+            Some(IconName::Settings),
+            &["preferences", "options", "configure"],
+        ),
         "ToggleDock" | "ToggleAutoHide" => (
             Some(side_icon(&spec.label)),
             &["sidebar", "panel", "show", "hide"],
@@ -294,7 +301,6 @@ mod tests {
             has_workspace: true,
             saved: vec!["Mine".into(), "Review".into()],
             auto_hide: vec![Side::Left],
-            ..MenuState::default()
         }
     }
 

@@ -20,18 +20,24 @@ pub const BAR_HEIGHT: Pixels = px(30.);
 /// Gap between items in the title bar row (logo, menu bar).
 pub const TITLE_BAR_GAP: Rems = rems(0.5);
 
+/// Command center (title bar search box that opens the palette): share of
+/// the window width, its limits, the room kept free on each side for the
+/// menus and the buttons, height, icon size, gap between its parts.
+pub const COMMAND_CENTER_SHARE: f32 = 0.32;
+pub const COMMAND_CENTER_MAX_WIDTH: Pixels = px(520.);
+pub const COMMAND_CENTER_MIN_WIDTH: Pixels = px(200.);
+pub const COMMAND_CENTER_CLEARANCE: Pixels = px(300.);
+pub const COMMAND_CENTER_HEIGHT: Pixels = px(22.);
+pub const COMMAND_CENTER_ICON_SIZE: Pixels = px(14.);
+pub const COMMAND_CENTER_GAP: Rems = rems(0.375);
+
+/// Icon of the status bar's app menu button (three lines).
+pub const APP_MENU_ICON_SIZE: Pixels = px(16.);
+
 /// Default dock sizes (width for left/right, height for bottom); users resize from here.
 pub const LEFT_DOCK_SIZE: Pixels = px(240.);
 pub const RIGHT_DOCK_SIZE: Pixels = px(320.);
 pub const BOTTOM_DOCK_SIZE: Pixels = px(200.);
-
-/// Section Bar (left icon strip): width, padding at its top/bottom edge, spacing between icons.
-pub const SECTION_BAR_WIDTH: Pixels = px(52.);
-pub const SECTION_BAR_PADDING: Rems = rems(0.5);
-/// Section Bar button (square) and its icon; (52 - 36) / 2 = 8 px clear on each side.
-pub const SECTION_BUTTON_SIZE: Pixels = px(36.);
-pub const SECTION_ICON_SIZE: Pixels = px(20.);
-pub const SECTION_BAR_GAP: Rems = rems(0.25);
 
 /// Status bar (bottom): side padding, icon size, icon-to-text gap.
 pub const STATUS_BAR_PADDING: Rems = rems(0.75);
@@ -41,7 +47,7 @@ pub const STATUS_ITEM_GAP: Rems = rems(0.25);
 /// Width of small dialogs (Create Folder).
 pub const DIALOG_WIDTH: Pixels = px(480.);
 
-/// Manage dialogs (Extensions, Workflows, Settings): width, body height,
+/// Manage dialogs (Extensions, Settings): width, body height,
 /// placeholder icon size.
 pub const MANAGE_WIDTH: Pixels = px(720.);
 pub const MANAGE_BODY_HEIGHT: Pixels = px(420.);
