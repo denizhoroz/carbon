@@ -1,6 +1,6 @@
 # Section Bar
 
-Built 2026-10-16. User decision: a vertical bar like VS Code's activity bar, called the **Section Bar**; its icons switch the whole app to a different section, each with its own layout. Section contents are not built; placeholders only. In user-facing terms a section is a **workflow** (2026-10-19): Code Editor now; Paradigm Editor and Agent Automation planned; users can add custom-built workflows.
+Built 2026-10-16. User decision: a vertical bar like VS Code's activity bar, called the **Section Bar**; its icons switch the whole app to a different section, each with its own layout. Section contents are not built; placeholders only. Sections were called **workflows** (2026-10-19); the workflow system was dropped on 2026-10-22 (workflows are extensions; `../archived/workflow-system.md`). The code below is unchanged: the Manage Workflows button still opens its placeholder dialog, and its fate is open (`PROJECT.md`).
 
 ## What
 
@@ -9,7 +9,7 @@ Built 2026-10-16. User decision: a vertical bar like VS Code's activity bar, cal
 | Bar | Fixed 52 px strip left of the dock area, under the title bar; theme `title_bar` colours, right border; 8 px top padding |
 | Icons | One ghost icon button per section, 36 px square (8 px clear each side), 20 px icon; active one shows selected; tooltip + accessibility label = section name |
 | Switching | Click icon or View > Section (checkmark). Current section's layout is kept in memory, target's last layout loads (default the first time) |
-| Bottom group | Pinned to the bar's bottom, top to bottom: Manage Extensions (Lucide `puzzle`), Manage Workflows (`workflow`), Manage Settings (`settings`). Same button style, never selected; tooltip = dialog title = that name; each opens its dialog (720 px wide, placeholder body: icon, "Nothing here yet."). No content yet. Planned: Extensions = official + user-added plugins, VS Code-like (compilers, linters, appearances); Workflows = add/remove workflows (built-in + custom); Settings = all user options (system, appearance, agents, ...) |
+| Bottom group | Pinned to the bar's bottom, top to bottom: Manage Extensions (Lucide `puzzle`), Manage Workflows (`workflow`), Manage Settings (`settings`). Same button style, never selected; tooltip = dialog title = that name; each opens its dialog (720 px wide, placeholder body: icon, "Nothing here yet."). No content yet. Planned: Extensions = official + user-added plugins, VS Code-like (compilers, linters, appearances); Workflows = add/remove workflows (dropped 2026-10-22: workflows are extensions); Settings = all user options (system, appearance, agents, ...) |
 | Persistence | `target/carbon-gui/layout.json` = `{ active, sections: { <section>: DockAreaState } }`; restart reopens the active section with its layout |
 | Reset Layout | Resets the active section to its default |
 

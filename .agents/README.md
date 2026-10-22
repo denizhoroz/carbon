@@ -36,6 +36,7 @@ Docs for AI agents (and people) working on Carbon. Read the files that match you
 | `documents/` | Decision documents; `gui-framework.md` compares native Rust GUI frameworks (tables); `code-editor.md` and `terminal.md` compare editor engines and terminals; `language-tools.md` compares how editors ship language servers, linters, compilers |
 | `project/built/` | One file per built feature (what, code, usage, limits, verified); index in `README.md`. Panel layout comparison + implementation: `panel-layout.md` |
 | `project/not_built/` | Index of committed features with no code yet (refs to `FEATURE.md` IDs); research/design docs for unbuilt features go here |
+| `project/archived/` | Designs of dropped or shelved features, reference only (index in `README.md`); `workflow-system.md` (2026-10-22) |
 | `project/ui/` | Working knowledge for the chosen stack; `ui-framework.md` is the GPUI Kit knowledge base |
 | `knowledge/` | **Read-only** knowledge from previous projects: `DESIGN`, `ARCHITECTURE`, `SECURITY`, `EXPERIENCE`, plus per-language folders (`css`, `html`, `python`, `rust`, `shell`); see `knowledge/README.md` |
 
@@ -44,6 +45,7 @@ Docs for AI agents (and people) working on Carbon. Read the files that match you
 - **Never modify `knowledge/`.** Read it, cite it, put Carbon-specific rules in `DESIGN.md`, `PROJECT.md` or `project/`.
 - **Keep research inside `.agents/`.** No `research_notes/` or `reports/` at the repo root.
 - **Built vs not built:** when a feature ships, add `project/built/<feature>.md` and its index row, and delete its row in `project/not_built/README.md`.
+- **Archived:** a dropped or shelved feature's design moves to `project/archived/` with a header saying why and where its code lives; add its row to `project/archived/README.md`.
 - **Update the right file:** progress, errors and decisions -> `STATUS.md`; scope -> `FEATURE.md`; settled decisions and open questions -> `PROJECT.md`; UI rules -> `DESIGN.md`; evidence -> `RESEARCH.md`; GPUI Kit facts -> `project/ui/ui-framework.md`.
 - **Log errors once** in `STATUS.md` (symptom, cause, fix, prevention); reusable lessons may later move to `project/`.
 - **Evidence labels:** M measured, V vendor, A anecdotal, S secondary, doc docs/spec; `(?)` = unverified. Keep them when copying facts.

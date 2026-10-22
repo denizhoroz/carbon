@@ -2,11 +2,11 @@
 
 Living tracker for Carbon. Update it at the end of each work session. Newest entries first in logs. Scope lives in `FEATURE.md`, decisions and open questions in `PROJECT.md`, evidence in `RESEARCH.md`.
 
-**Last updated:** 2026-10-20
+**Last updated:** 2026-10-22
 
 ## Current focus
 
-Core panels work on Windows (shell, layout, Explorer, editor with rust-analyzer, terminal, command palette, chat GUI with a demo agent). Next: a real chat backend (ACP/API), Manage dialog contents (Extensions, Workflows, Settings), paradigm editor research, then macOS/Linux builds and CI.
+Core panels work on Windows (shell, layout, Explorer, editor with rust-analyzer, terminal, command palette, chat GUI with a demo agent). Next: a real chat backend (ACP/API), Manage dialog contents (Extensions, Settings; workflows are extensions since 2026-10-22), paradigm editor research, then macOS/Linux builds and CI.
 
 ## Progress
 
@@ -53,8 +53,9 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-22 | No separate workflow system: workflows are just extensions (extensions contribute panels and Explorer-section tabs). Branch `feature/workflow` (workflow system, built 2026-10-20 to 22) stays but is not developed; nothing carried over for now; its design doc archived | user decision | `project/archived/workflow-system.md`, `PROJECT.md` |
 | 2026-10-19 | No preinstalled language tools (servers, linters, formatters, compilers); users install them via Manage Extensions. Binary source model (config only / download PATH-first / bundled) open | user decision after research on VS Code, Zed, Neovim/Mason, Helix, JetBrains | `documents/language-tools.md`, `PROJECT.md` |
-| 2026-10-19 | Section Bar bottom group: Manage Extensions, Manage Workflows, Manage Settings (dialogs, placeholders now). Workflows = sections (Code Editor; planned Paradigm Editor, Agent Automation; user custom workflows). Extensions = official + user-added plugins, VS Code-like (compilers, linters, appearances). Settings = all user options (system, appearance, agents, ...) | user decision | `PROJECT.md`, `DESIGN.md` s4, `project/built/section-bar.md` |
+| 2026-10-19 | (Workflows part superseded 2026-10-22.) Section Bar bottom group: Manage Extensions, Manage Workflows, Manage Settings (dialogs, placeholders now). Workflows = sections (Code Editor; planned Paradigm Editor, Agent Automation; user custom workflows). Extensions = official + user-added plugins, VS Code-like (compilers, linters, appearances). Settings = all user options (system, appearance, agents, ...) | user decision | `PROJECT.md`, `DESIGN.md` s4, `project/built/section-bar.md` |
 | 2026-10-19 | Chat panel v1 is GUI only: `ChatBackend` interface in the core + streaming demo agent (labelled); IDE layout; edit & retry, context chips, status label; chats saved per tab in `target/carbon-gui/chats/`; chat model separate from `AgentSession`; files kept when a tab closes | user decision (no model loader or API now) after comparing VS Code, Zed, Cursor, JetBrains | `project/built/chat.md` |
 | 2026-10-19 | Every panel can move into every region, both ways (terminal/chat into the editor area, editor into docks); a region's last panel is draggable (kit patch 6); emptied center refills, emptied dock closes | user request after VS Code (terminal in editor area) and Zed (center terminal) | `project/built/panel-layout.md` s8 |
 | 2026-10-19 | Command palette: Ctrl+Shift+P / F1 (Ctrl+K stays a chord prefix), Ctrl+P files, Ctrl+G line; one input with VS Code prefixes; `nucleo-matcher` fuzzy + usage tie-break; Zed look (under the title bar, no backdrop), drawn by `CarbonApp` not the kit Dialog; menus are the command source; Ctrl+P / F1 taken from the terminal's shell | user decision after comparing Superhuman, Linear, Raycast, VS Code, Retool, Warp, Zed | `project/built/command-palette.md` |
@@ -140,6 +141,10 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-22 (workflow system shelved)
+- Done: user dropped the workflow system (workflows are extensions); `main` docs updated; final workflow design archived in `project/archived/` (new folder, with index).
+- Next: decide the extension model's open questions (`PROJECT.md`), then Manage Extensions.
 
 ### 2026-10-20 (docs refresh)
 - Done: read the project state; fixed stale docs (`PROJECT.md` status, sequencing, open question and docs map; `STATUS.md` focus, next steps, Agents pillar row; `README.md` git note and file table); removed `research_notes/` (staged `git rm`, user commits).

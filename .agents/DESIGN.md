@@ -72,8 +72,8 @@ Zed-style docks with VS Code's familiar panels. **[R][N]**
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Section Bar** (user decision 2026-10-16): a vertical icon strip at the far left, like VS Code's activity bar, but it switches **sections** (Code Editor first; later paradigm, agents), each with its own remembered dock layout. It does not toggle single panels. In user-facing text a section is a **workflow** (Code Editor now; Paradigm Editor, Agent Automation planned; user-built custom workflows). **[N]**
-- **Section Bar bottom group** (user decision 2026-10-19), top to bottom: **Manage Extensions** (puzzle icon), **Manage Workflows** (workflow icon), **Manage Settings** (gear). Each opens a dialog, never a dock panel; never shown as selected. Extensions = official and user-added plugins, VS Code-like (compilers, linters, appearances); Workflows = add/remove workflows (built-in and custom); Settings = all user options (see Settings). **[N]**
+- **Section Bar** (user decision 2026-10-16): a vertical icon strip at the far left, like VS Code's activity bar, but it switches **sections** (Code Editor first; later paradigm, agents), each with its own remembered dock layout. It does not toggle single panels. Sections were called **workflows** (2026-10-19); since 2026-10-22 there is no workflow system: panels and Explorer-section tabs come from extensions (`project/archived/workflow-system.md`). What a Section Bar icon is under that model is open (`PROJECT.md`). **[N]**
+- **Section Bar bottom group** (user decision 2026-10-19), top to bottom: **Manage Extensions** (puzzle icon), **Manage Workflows** (workflow icon), **Manage Settings** (gear). Each opens a dialog, never a dock panel; never shown as selected. Extensions = official and user-added plugins, VS Code-like (compilers, linters, appearances); Workflows = add/remove workflows (built-in and custom; dropped 2026-10-22, button still in code, its fate open); Settings = all user options (see Settings). **[N]**
 - **Docks inside a section.** Left, right and bottom docks hold panels; each panel has a status-bar toggle button with a tooltip and shortcut. Panels can be dragged between docks. **[N]**
 - **Default first screen:** left dock with file tree, editor area, thin status bar; right and bottom docks closed. **[N]**
 - **Menus:** classic menu row (File, Edit, View, Help) inside the custom title bar on Windows/Linux, after the logo; system menu bar on macOS. Same commands as the palette; no in-window toolbar. (User decision 2026-10-16, replaces hamburger.) **[N]**
@@ -122,7 +122,7 @@ Unresearched (see `PROJECT.md` open questions). Design rules below come from the
 - Hosts give a section: theme tokens, spacing and type scale, focus/keyboard routing, accessibility hooks, and a standard toolbar/empty-state/error frame. Sections never draw their own chrome. **[N]**
 - Sections run isolated (sandboxed); a crashing section shows an error card with Reload and never takes down the window. **[R]**
 - Installing a section is one action with a visible capability list and a Remove button that confirms (6). **[R][K]**
-- All extensions (official and user-added: compilers, linters, appearances, viewers) are listed, installed and removed in the **Manage Extensions** dialog, VS Code-like. Custom workflows (whole workspace modes, s4) are managed in **Manage Workflows**, not here. **[N]**
+- All extensions (official and user-added: compilers, linters, appearances, viewers) are listed, installed and removed in the **Manage Extensions** dialog, VS Code-like. Workflows are extensions too since 2026-10-22 (no separate Manage Workflows content; `project/archived/workflow-system.md`). **[N]**
 - Image/media sets use one gallery grid with a viewer dialog (arrows step, Esc closes), never bare thumbnails or raw file links. **[K]**
 
 

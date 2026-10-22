@@ -29,13 +29,15 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 - **Panel layout (user decision, 2026-10-16):** T1 (kit docking: drag/snap/split/resize/close/zoom/persist) + T2 (named layouts on hotkeys, task presets, keyboard move/resize, auto-hide) now; T3 (pop-out OS windows, top dock, guide diamond, float inside window) later. `project/built/panel-layout.md`.
 - **Section Bar (user decision, 2026-10-16):** left vertical bar of section icons; each section has its own layout; first section Code Editor (`< >` icon). `project/built/section-bar.md`.
 - **Manage dialogs (user decision, 2026-10-19):** bottom of the Section Bar, top to bottom: Manage Extensions, Manage Workflows, Manage Settings; each opens a dialog (placeholders now).
-  - **Workflows:** a workflow is a workspace mode with its own layout; the code calls it a `Section` (one Section Bar icon each). Now: Code Editor. Planned: Paradigm Editor (pillar 2), Agent Automation. Users can add their own custom-built workflows. Manage Workflows adds and removes them.
+  - **Workflows:** dropped as a system of their own (user decision, 2026-10-22). Workflows are just extensions: extensions contribute panels and Explorer-section tabs; nothing is built only for workflows. The workflow system built on branch `feature/workflow` is shelved and nothing from it is carried over for now (`project/archived/workflow-system.md`). The Manage Workflows button and per-section layouts still exist in code.
   - **Extensions:** works like VS Code. Official (bundled) and user-added extensions/plugins: compilers, linters, appearances (themes), and more (pillar 6). Manage Extensions lists, adds and removes them.
   - **Settings:** every user-changeable option: system, appearance, agents, etc. (`DESIGN.md` Settings).
 - **Core first, in-process (user decision, 2026-10-16, option a):** `apps/carbon-core` holds workspace, file tree, buffers, terminals, agent sessions as plain Rust; the GUI calls it directly; daemon split later keeps the same API. `project/built/carbon-core.md`.
 - **Sequencing (revised 2026-10-20):** in-process core + native UI shell and core panels (done) -> agent backend (ACP/MCP) -> extensions and Manage dialogs -> paradigm editor (after its research) -> daemon split -> macOS/Linux + CI.
 
 ## Open questions
+
+- Under the extension model (2026-10-22): what a Section Bar icon is (an extension-contributed mode that swaps the layout, or a view container like VS Code's activity bar); whether the Manage Workflows button goes; whether Paradigm Editor and Agent Automation become first-party extensions; how extensions add Explorer-section tabs.
 
 - Paradigm editor (pillar 2) is unresearched: run a short follow-up on diagram/architecture tools (Excalidraw, tldraw, draw.io, Mermaid, PlantUML, Structurizr/C4, Lucidchart, Miro AI, Cursor/Claude canvases, VS Code Canvases): file format, AI integration, code round-trip, licences.
 - Still to verify on GPUI Kit (editor speed gate and terminal embed passed on Windows; see `project/built/`): accessibility (Narrator, VoiceOver, Orca), IME in the editor, macOS and Linux behaviour, RAM on all three OSes (published numbers conflict 2x-15x), docking across windows (panel layout T3).
@@ -61,6 +63,7 @@ Routing for agents (which file for which task): `README.md`.
 | `documents/` | Decision documents: `gui-framework.md` (native GUI comparison), `code-editor.md`, `terminal.md`, `language-tools.md` (how editors ship language servers, linters, compilers) | Why a technology was chosen; revisiting it |
 | `project/built/` | One file per built feature + index (shell, theming, panel layout, Explorer, editor, terminal, command palette, chat, core) | What exists in code |
 | `project/not_built/` | Index of committed features not built yet (FEATURE.md IDs) | Picking the next feature |
+| `project/archived/` | Designs of dropped or shelved features (`workflow-system.md`, 2026-10-22) | Why something was dropped; what a shelved branch holds |
 | `project/ui/ui-framework.md` | GPUI Kit knowledge base: versions, setup, components, theming, docking, editor, accessibility, gotchas | Building UI with GPUI Kit |
 | `knowledge/` | Read-only knowledge from previous projects (design, architecture, security, experience, Rust/Dioxus/CSS/HTML/Python/uv/shell) | Reuse proven rules and avoid known problems; never edit |
 | `RESEARCH.md` | Landscape, common stack, VS Code reference, comparison and synthesis, sentiment, gaps, evidence caveats, key source URLs | Why a decision was made; checking evidence strength |
