@@ -4,6 +4,7 @@ Copied unchanged from crates.io `gpui-component` 0.7.3 (Apache-2.0, `LICENSE-APA
 
 | # | Date | File | Change | Why |
 |---|---|---|---|---|
+| 10 | 2026-10-23 | `src/input/input.rs`, `src/input/number_input.rs`, `src/input/group.rs` | Defaults: `Input::focus_bordered`, `NumberInput` and `InputGroup` `focus_ring` are `false` (were `true`) | No blue border on a focused entry box, now and for every new one (user); opt back in with `.focus_bordered(true)` / `.focus_ring(true)` |
 | 9 | 2026-10-23 | `src/highlighter/registry.rs` | New `LanguageRegistry::unregister(lang)`: removes a language and its parser factory | Extensions remove their WASM grammars when turned off or uninstalled (`.agents/documents/extensions.md`) |
 | 8 | 2026-10-23 | `src/theme/registry.rs` | New `ThemeRegistry::set_custom_themes(sources)`: replaces all non-default themes with the given theme sets; returns parse errors per source | Themes come from Carbon's own file, extensions and the user's folder; a removed extension's themes must go (`watch_dir`/`reload` knew one folder) |
 | 7 | 2026-10-22 | `src/dock/tab_panel.rs` | Tab bar drag-over highlights only where `TabGroupContext::accepts` the drag; no tab x and no "..." > Close in a fixed dock (`is_fixed`), also for always-tab panels | Explorer section (gpui-base patch 4) |

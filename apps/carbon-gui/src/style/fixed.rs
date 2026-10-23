@@ -51,6 +51,8 @@ pub const DIALOG_WIDTH: Pixels = px(480.);
 /// title, tab row, footer and spacing, the rest is the list.
 pub const MANAGE_CHROME_HEIGHT: Pixels = px(148.);
 /// Icon of an extension in Manage Extensions and the install dialog.
+/// Top and bottom padding of an Extensions dialog row.
+pub const EXTENSION_ROW_PADDING: Pixels = px(6.);
 pub const EXTENSION_ICON_SIZE: Pixels = px(20.);
 
 /// Settings dialog: share of the window and limits of its size, the category

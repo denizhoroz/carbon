@@ -138,6 +138,9 @@ Unresearched (see `PROJECT.md` open questions). Design rules below come from the
 - Rows with many settings put them on a line under the row so the table never scrolls sideways. A flex wrapper goes inside a cell; the cell itself never becomes flex. Special rows get a bordered badge. **[K]**
 - Large lists are virtualized; rendering cost is independent of list length. **[R](?)**
 
+## Entry boxes
+- **No focus border or ring on entry boxes** (search bars, text and number inputs): the kit default is off (gpui-component patch 10); never turn it back on for a new input (user, 2026-10-23). **[K]**
+
 ## Explanations, warnings, feedback
 - **Explanations are hover "i" icons** next to labels (shown on hover, kept on focus/click), not lines of small text. Small text stays for live values, errors and must-see safety notes. **[K]**
 - **Warnings are icons**: a warning icon in the card header lists them on hover/focus. **[K]**

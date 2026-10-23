@@ -40,7 +40,8 @@ impl NumberInput {
             prefix: None,
             suffix: None,
             appearance: true,
-            focus_ring_enabled: true,
+            // CARBON PATCH 10: no focus border/ring on entry boxes by default (user).
+            focus_ring_enabled: false,
             disabled: false,
             style: StyleRefinement::default(),
         }

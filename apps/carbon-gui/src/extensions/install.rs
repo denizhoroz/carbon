@@ -1037,7 +1037,8 @@ impl CatalogView {
             h_flex()
                 .w_full()
                 .gap(fixed::PANEL_GAP)
-                .py(fixed::PANEL_GAP)
+                .items_start()
+                .py(fixed::EXTENSION_ROW_PADDING)
                 .border_b_1()
                 .border_color(border)
                 .child(icon(catalog_icon(super::dirs(cx), listed)))
@@ -1045,7 +1046,7 @@ impl CatalogView {
                     v_flex()
                         .flex_1()
                         .min_w_0()
-                        .gap_1()
+                        .gap_0p5()
                         .child(
                             h_flex()
                                 .gap_1()

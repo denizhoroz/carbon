@@ -9,11 +9,14 @@ use std::rc::Rc;
 use carbon_core::extension::{
     Blocked, ExtensionId, Loaded, Origin, describe_capability, installed_hash,
 };
+use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::menu::DropdownMenu as _;
 use gpui_kit::component::tag::Tag;
-use gpui_kit::component::{ActiveTheme, Disableable, Sizable, Size, WindowExt, h_flex, v_flex};
+use gpui_kit::component::{
+    ActiveTheme, Disableable, Icon, Sizable, Size, WindowExt, h_flex, v_flex,
+};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
@@ -197,25 +200,6 @@ impl ManageView {
                 .count();
             (allowed, def.capabilities.len())
         });
-        let mut contributes = Vec::new();
-        let count = |n: usize, one: &str, many: &str| match n {
-            0 => None,
-            1 => Some(format!("1 {one}")),
-            n => Some(format!("{n} {many}")),
-        };
-        contributes.extend(count(def.languages.len(), "language", "languages"));
-        contributes.extend(count(
-            def.language_servers.len(),
-            "language server",
-            "language servers",
-        ));
-        contributes.extend(count(def.themes.len(), "theme file", "theme files"));
-        contributes.extend(count(def.panels.len(), "panel", "panels"));
-        contributes.extend(count(def.commands.len(), "command", "commands"));
-        contributes.extend(count(def.settings.len(), "setting", "settings"));
-        if def.wasm.is_some() {
-            contributes.push("code".into());
-        }
         let action = |label: &'static str, suffix: &str| {
             Button::new(SharedString::from(format!("ext-{suffix}-{id}")))
                 .label(label)
@@ -345,8 +329,9 @@ impl ManageView {
         };
         h_flex()
             .w_full()
+            .items_start()
             .gap(fixed::PANEL_GAP)
-            .py(fixed::PANEL_GAP)
+            .py(fixed::EXTENSION_ROW_PADDING)
             .border_b_1()
             .border_color(border)
             .child(install::icon(loaded.icon_file().map(Into::into)))
@@ -354,7 +339,7 @@ impl ManageView {
                 v_flex()
                     .flex_1()
                     .min_w_0()
-                    .gap_1()
+                    .gap_0p5()
                     .child(
                         h_flex()
                             .gap_1()
@@ -367,11 +352,11 @@ impl ManageView {
                             .when(installed && def.id.is_official(), |row| {
                                 row.child(install::official_tag())
                             })
-                            .child(Tag::secondary().outline().small().child(origin))
-                            .child(status.small())
                             .when_some(trust, |row, trust| {
                                 row.child(Tag::success().outline().small().child(trust))
-                            }),
+                            })
+                            .child(Tag::secondary().outline().small().child(origin))
+                            .child(status.small()),
                     )
                     .child(div().text_xs().text_color(muted).child(details))
                     .when(!def.description.is_empty(), |column| {
@@ -380,53 +365,6 @@ impl ManageView {
                                 .text_sm()
                                 .text_color(muted)
                                 .child(def.description.clone()),
-                        )
-                    })
-                    .when(!contributes.is_empty(), |column| {
-                        column.child(
-                            div()
-                                .text_xs()
-                                .text_color(muted)
-                                .child(format!("Adds {}", contributes.join(", "))),
-                        )
-                    })
-                    .when_some(record, |column, record| {
-                        let from = match (&record.commit, &record.path) {
-                            (Some(commit), Some(path)) => format!(
-                                "{} /{path} @ {}",
-                                record.source,
-                                commit.chars().take(10).collect::<String>()
-                            ),
-                            (Some(commit), None) => format!(
-                                "{} @ {}",
-                                record.source,
-                                commit.chars().take(10).collect::<String>()
-                            ),
-                            _ => record.source.clone(),
-                        };
-                        column.child(
-                            div()
-                                .text_xs()
-                                .text_color(muted)
-                                // Keep the end (revision, commit, hash) visible.
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis_start()
-                                .child(format!(
-                                    "From {from} · {}",
-                                    install::short_hash(&record.hash)
-                                )),
-                        )
-                    })
-                    .when(!installed, |column| {
-                        column.child(
-                            div()
-                                .text_xs()
-                                .text_color(muted)
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis_start()
-                                .child(format!("Linked from {}", loaded.dir.display())),
                         )
                     })
                     .children(missing.iter().map(|missing| {
@@ -503,15 +441,23 @@ impl Render for ManageView {
         let theme = cx.theme();
         let (muted, danger) = (theme.muted_foreground, theme.danger);
         let installed_count = registry.all().len();
+        // Like the Settings dialog: the search takes the row, a line below.
         let tabs = h_flex()
+            .flex_none()
             .gap_1()
+            .pb(fixed::SETTINGS_BAR_PADDING)
+            .border_b_1()
+            .border_color(theme.border)
             .child(self.tab_button(Tab::Catalog, "Catalog".into(), cx))
             .child(self.tab_button(Tab::Installed, format!("Installed ({installed_count})"), cx))
-            .child(div().flex_1())
             .child(
-                div()
-                    .w(fixed::SETTINGS_TEXT_WIDTH)
-                    .child(Input::new(&self.search).small()),
+                div().flex_1().min_w_0().ml(fixed::PANEL_GAP).child(
+                    Input::new(&self.search).small().prefix(
+                        Icon::new(IconName::Search)
+                            .with_size(Size::Small)
+                            .text_color(muted),
+                    ),
+                ),
             );
         let body: Vec<AnyElement> =
             match self.tab {
