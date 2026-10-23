@@ -55,7 +55,9 @@ Locations: preferences in `<config>/extensions/` (`state.json`, `catalog.toml`, 
 3. Code: a `cdylib` crate on `carbon-extension-api`, `cargo build --release --target wasm32-wasip2` (`rustup target add wasm32-wasip2`), `wasm = "<file>.wasm"`.
 4. Grammars: a tree-sitter `.wasm` (`tree-sitter build --wasm`, or the grammar's release asset) exporting `tree_sitter_<name>`, plus `highlights.scm`.
 
-## Publishing official extensions (not done; needs the user)
+## Publishing official extensions
+
+Since 2026-10-23 (later): the default catalog is `OFFICIAL_CATALOG` = `github.com/denizhoroz/carbon-extensions-basic`; `catalog.py` there builds `catalog.json`; until a key is set, `carbon.*` from that URL install unsigned (security: trust rests on HTTPS to GitHub and the repo's push access). Signing (below) is still to do.
 
 The catalog is a git repository with `catalog.json` at its root, each version pinned by commit (+ `path`, e.g. `languages/rust`) and content hash; `carbon.*` ids install only when `catalog.json.minisig` is signed by a key in the user's trusted keys. Steps: create a minisign key pair (keep the secret key private), make the catalog repo (or a branch), list each package folder (`languages/<name>`, `themes/<name>`) at a commit of `carbon-extensions-basic` with its hash, sign `catalog.json`, and put the public key as Carbon's default trusted key and the repo as the default catalog URL (both still empty in code).
 

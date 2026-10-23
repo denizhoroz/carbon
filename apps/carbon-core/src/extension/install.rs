@@ -82,7 +82,10 @@ pub struct Pin {
     pub version: String,
     /// `content_hash` format.
     pub hash: String,
-    /// The pin comes from a catalog signed by a trusted key.
+    /// The pin comes from a trusted catalog ([`Catalog::is_trusted`]:
+    /// signed by a trusted key, or the official one).
+    ///
+    /// [`Catalog::is_trusted`]: super::Catalog::is_trusted
     pub signed: bool,
 }
 
@@ -493,7 +496,7 @@ pub fn plan_install(
     }
     if def.id.is_official() && !package.pin.as_ref().is_some_and(|pin| pin.signed) {
         problems.push(format!(
-            "`{OFFICIAL_PREFIX}*` extensions install only from a catalog signed by a trusted key"
+            "`{OFFICIAL_PREFIX}*` extensions install only from Carbon's catalog or one signed by a trusted key"
         ));
     }
     if let Some(pin) = &package.pin {

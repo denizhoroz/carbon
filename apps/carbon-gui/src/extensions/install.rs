@@ -17,7 +17,7 @@ use carbon_core::extension::{
     CATALOG_ENV, CATALOG_SIGNATURE, Catalog, CatalogConfig, CatalogFiles, CatalogPackage,
     ExtensionDirs, ExtensionId, FetchControl, InstallKind, InstallPlan, InstallRecord,
     InstallSource, Origin, Package, Pin, Signing, describe_capability, env_url, fetch_catalog,
-    fetch_from_catalog, fetch_git_path, plan_install, read_package,
+    fetch_from_catalog, fetch_git_path, is_official_url, plan_install, read_package,
 };
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -51,6 +51,11 @@ pub fn icon(image: Option<ImageSource>) -> AnyElement {
             .into_any_element(),
         None => placeholder(),
     }
+}
+
+/// Marks Carbon's own extensions (`carbon.*` from a trusted catalog).
+pub fn official_tag() -> Tag {
+    Tag::primary().outline().small().child("Official")
 }
 
 /// An icon file's bytes as an image (by its file type).
@@ -385,7 +390,7 @@ fn install_dialog(package: Package, window: &mut Window, cx: &mut App) {
         };
         let record = package.record();
         let pin = if record.signed {
-            "Pinned by a signed catalog: commit and content hash checked."
+            "Pinned by a trusted catalog: commit and content hash checked."
         } else if package.pin.is_some() {
             "Pinned: commit and content hash checked."
         } else if record.pinned {
@@ -610,7 +615,11 @@ pub fn catalog(cx: &App) -> Option<Arc<Catalog>> {
         signature: std::fs::read_to_string(signature).ok(),
         icons: Vec::new(),
     };
-    let (catalog, _) = Catalog::load(&files, &catalog_config(dirs).keys).ok()?;
+    let config = catalog_config(dirs);
+    let (mut catalog, _) = Catalog::load(&files, &config.keys).ok()?;
+    catalog.official = config
+        .effective_url()
+        .is_some_and(|url| is_official_url(&url));
     let catalog = Arc::new(catalog);
     if let Ok(mut slot) = CATALOG.write() {
         *slot = Some(catalog.clone());
@@ -700,7 +709,7 @@ pub fn install_listed(
     let Some(listed) = catalog.get(id).cloned() else {
         return;
     };
-    install_from_catalog(listed, range, catalog.is_signed(), window, cx);
+    install_from_catalog(listed, range, catalog.is_trusted(), window, cx);
 }
 
 fn install_from_catalog(
@@ -910,7 +919,8 @@ impl CatalogView {
         cx.notify();
         let fetch = cx.background_executor().spawn(async move {
             let files = fetch_catalog(&url, &FetchControl::default())?;
-            let (catalog, problems) = Catalog::load(&files, &config.keys)?;
+            let (mut catalog, problems) = Catalog::load(&files, &config.keys)?;
+            catalog.official = is_official_url(&url);
             Ok::<_, String>((files, catalog, problems))
         });
         self._task = Some(cx.spawn(async move |this, cx| {
@@ -1009,7 +1019,7 @@ impl CatalogView {
         let signed = self
             .catalog
             .as_ref()
-            .is_some_and(|catalog| catalog.is_signed());
+            .is_some_and(|catalog| catalog.is_trusted());
         let locked = super::dirs(cx).is_none();
         let install = action.map(|label| {
             let listed = listed.clone();
@@ -1044,6 +1054,9 @@ impl CatalogView {
                                         .font_weight(FontWeight::MEDIUM)
                                         .child(listed.name.clone()),
                                 )
+                                .when(listed.id.is_official() && signed, |row| {
+                                    row.child(official_tag())
+                                })
                                 .when_some(installed.as_ref(), |row, (version, _)| {
                                     row.child(
                                         Tag::secondary()

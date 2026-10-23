@@ -32,8 +32,8 @@ use serde::{Deserialize, Serialize};
 pub use capability::{check_capability, describe_capability};
 pub use catalog::{
     CATALOG_ENV, CATALOG_FILE, CATALOG_SCHEMA, CATALOG_SIGNATURE, Catalog, CatalogConfig,
-    CatalogFiles, CatalogPackage, CatalogVersion, Signing, check_signature, env_url, fetch_catalog,
-    fetch_from_catalog,
+    CatalogFiles, CatalogIcon, CatalogPackage, CatalogVersion, OFFICIAL_CATALOG, Signing,
+    check_signature, env_url, fetch_catalog, fetch_from_catalog, is_official_url,
 };
 pub use dirs::{DIR_ENV, ExtensionDirs};
 pub use git::{FetchControl, GitCheckout, fetch_git, fetch_git_path, is_commit_id};

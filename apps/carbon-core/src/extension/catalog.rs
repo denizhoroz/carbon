@@ -39,6 +39,18 @@ use super::{
     check_package_path, git, is_commit_id,
 };
 
+/// Carbon's official catalog (and extensions): the default catalog. Until it
+/// is signed and its key is trusted, `carbon.*` extensions from it are
+/// accepted on the strength of the URL (HTTPS to GitHub) and its pins.
+pub const OFFICIAL_CATALOG: &str = "https://github.com/denizhoroz/carbon-extensions-basic";
+
+/// Whether `url` is [`OFFICIAL_CATALOG`] (case, a trailing `/` or `.git` aside).
+pub fn is_official_url(url: &str) -> bool {
+    let url = url.trim().trim_end_matches('/');
+    let url = url.strip_suffix(".git").unwrap_or(url);
+    url.eq_ignore_ascii_case(OFFICIAL_CATALOG)
+}
+
 /// Overrides the catalog repository's URL.
 pub const CATALOG_ENV: &str = "CARBON_EXTENSION_CATALOG";
 /// Version of the `catalog.json` format this build reads.
@@ -79,15 +91,18 @@ impl CatalogConfig {
         std::fs::write(path, text).map_err(|err| format!("{}: {err}", path.display()))
     }
 
-    /// The URL in use: `CARBON_EXTENSION_CATALOG`, else the file's.
+    /// The URL in use: `CARBON_EXTENSION_CATALOG`, else the file's, else
+    /// [`OFFICIAL_CATALOG`].
     pub fn effective_url(&self) -> Option<String> {
-        env_url().or_else(|| {
-            self.url
-                .as_deref()
-                .map(str::trim)
-                .filter(|url| !url.is_empty())
-                .map(str::to_string)
-        })
+        env_url()
+            .or_else(|| {
+                self.url
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|url| !url.is_empty())
+                    .map(str::to_string)
+            })
+            .or_else(|| Some(OFFICIAL_CATALOG.to_string()))
     }
 
     /// Problems with the keys (each must be a minisign public key).
@@ -193,6 +208,9 @@ pub struct Catalog {
     /// How its signature was judged (set by [`Catalog::load`]).
     #[serde(skip)]
     pub signing: Option<Signing>,
+    /// Fetched from [`OFFICIAL_CATALOG`] (set by whoever knows the URL).
+    #[serde(skip)]
+    pub official: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -374,6 +392,12 @@ impl Catalog {
     /// Signed by a trusted key.
     pub fn is_signed(&self) -> bool {
         matches!(self.signing, Some(Signing::Trusted { .. }))
+    }
+
+    /// May install `carbon.*` extensions: signed by a trusted key, or the
+    /// official catalog (which, once keys are set, must be signed too).
+    pub fn is_trusted(&self) -> bool {
+        self.is_signed() || self.official
     }
 
     pub fn get(&self, id: &ExtensionId) -> Option<&CatalogPackage> {

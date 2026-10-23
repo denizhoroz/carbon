@@ -182,7 +182,7 @@ impl ManageView {
         };
         let trust = record.as_ref().and_then(|record| {
             if record.signed {
-                Some("Signed")
+                Some("Verified")
             } else {
                 record.pinned.then_some("Pinned")
             }
@@ -363,6 +363,10 @@ impl ManageView {
                                     .font_weight(FontWeight::MEDIUM)
                                     .child(def.name.clone()),
                             )
+                            // `carbon.*` installs only from a trusted catalog.
+                            .when(installed && def.id.is_official(), |row| {
+                                row.child(install::official_tag())
+                            })
                             .child(Tag::secondary().outline().small().child(origin))
                             .child(status.small())
                             .when_some(trust, |row, trust| {
