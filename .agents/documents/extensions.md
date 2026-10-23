@@ -41,13 +41,13 @@ Written 2026-10-23. User request: build the extension system so language servers
 | Official extensions | download on demand / bundled on / bundled off | **Download on demand**: suggested when a matching file opens, first-run picker; nothing preinstalled |
 | Stays in base Carbon | - | **Terminal, Chat panel, Git markers, LSP client** |
 | Sources | own catalog + folder/zip/git / + Open VSX / catalog only | Own signed catalog + folder/zip/git; **Open VSX deferred** (its grammars are TextMate, Carbon highlights with tree-sitter) |
-| Official extensions live in | `extensions/` here / separate repo | **`extensions/` in this repo**, built by a script; the catalog pins this repo's commits |
+| Official extensions live in | `extensions/` here / separate repo | First **`extensions/` in this repo**; same day moved to its own repo `github.com/denizhoroz/carbon-extensions-basic` (an install fetches a commit snapshot, ~17 MB from the Carbon repo); the catalog pins that repo's commits |
 
 ## 4. Design
 
 Built 2026-10-23: `../project/built/extensions.md`.
 
-Package = folder with `extension.toml` (schema 1): `id` (`publisher.name`), `name`, `version`, `carbon_api` range, `[capabilities]`, `[requires]`, contributions; optional `extension.wasm`, `grammars/`, `themes/`, `views/`, `pages/`.
+Package = folder with `extension.toml` (schema 1): `id` (`publisher.name`), `name`, `version`, `carbon_api` range, `[capabilities]`, `[requires]`, contributions; optional `icon` (image file; placeholder without), `extension.wasm`, `grammars/`, `themes/`, `views/`, `pages/`.
 
 | Contribution | Form |
 |---|---|

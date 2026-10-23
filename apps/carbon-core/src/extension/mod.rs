@@ -43,9 +43,10 @@ pub use install::{
     verify_installed,
 };
 pub use manifest::{
-    API_VERSION, Archive, CATEGORIES, CommandDef, Download, ExtensionDef, GrammarDef, LanguageDef,
-    LanguageServerDef, MANIFEST, MENUS, MenuDef, PLACEMENTS, PanelDef, PanelKind, SCHEMA_VERSION,
-    SettingDef, SettingKind, TARGETS, ThemeDef, current_target,
+    API_VERSION, Archive, CATEGORIES, CommandDef, Download, ExtensionDef, GrammarDef, ICON_TYPES,
+    LanguageDef, LanguageServerDef, MANIFEST, MAX_ICON_BYTES, MENUS, MenuDef, PLACEMENTS, PanelDef,
+    PanelKind, SCHEMA_VERSION, SettingDef, SettingKind, TARGETS, ThemeDef, check_icon_type,
+    current_target,
 };
 pub use package::{MAX_PACKAGE_PATH, check_package_path, resolve_package_file};
 pub use requires::{Missing, RequireKind, Requires};
@@ -138,6 +139,14 @@ impl Loaded {
     /// A file the manifest names, checked to stay inside the package.
     pub fn file(&self, path: &str) -> Result<PathBuf, String> {
         resolve_package_file(&self.dir, path)
+    }
+
+    /// Its icon file, when the manifest names one that is there and within
+    /// `MAX_ICON_BYTES`.
+    pub fn icon_file(&self) -> Option<PathBuf> {
+        let file = self.file(self.def.icon.as_deref()?).ok()?;
+        let size = std::fs::metadata(&file).ok()?.len();
+        (size <= MAX_ICON_BYTES).then_some(file)
     }
 }
 

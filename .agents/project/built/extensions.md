@@ -18,7 +18,7 @@ Built 2026-10-23. User request: separate workflow tools, language servers and ot
 | App menu (three lines) > Extensions, File > Preferences > Extensions, palette | Manage Extensions (as big as Settings; opens on Catalog): Catalog / Installed (n) tabs, search, footer Install â–¾ (From Folderâ€¦ / From Zipâ€¦ / From Gitâ€¦ / Link Development Folderâ€¦), Catalog Sourceâ€¦, Open Folder, Refresh, Close |
 | Installed row | Icon, name, origin (Installed / Development), state (On / Off / Needs more / Turned off after a failure / Files changed), Signed / Pinned, id Â· version Â· permissions allowed, description, what it adds, source + commit + hash or the linked folder; missing requirements with Install when the catalog has them; buttons Turn Off/On, Permissions (installed ones), Remove (installed) / Unlink (linked), Reinstall + Keep Changes (files changed) |
 | Install from folder / zip / git (tag, branch or commit, optional folder in the repo) / catalog | Fetching dialog with Cancel; install dialog: new / update / reinstall / downgrade, file count and size, source, pin level and short hash, permissions (new ones tagged), requirements, problems; "Allow and Install" grants what it lists; a notification when done |
-| Catalog tab | The catalog repository (`catalog.toml`, Catalog Sourceâ€¦; `CARBON_EXTENSION_CATALOG` overrides), Signed / Not checked, its extensions with Install / Update / Installed n |
+| Catalog tab | The catalog repository (`catalog.toml`, Catalog Sourceâ€¦; `CARBON_EXTENSION_CATALOG` overrides), Signed / Not checked, its extensions with Install / Update / Installed n; package icons (catalog `icon` = image file in the catalog repo + `icon_sha256`, read from the same commit as `catalog.json`, cached as `catalog-icons/<sha256>.<type>`, unlisted ones deleted), puzzle placeholder without one or when the image does not load |
 | Open a file whose type no extension covers but the (cached) catalog lists | Notification "Install <name>?" with Install (once per extension per session) |
 | First start with no extensions | Notification "Carbon starts light" with Open Extensions (once) |
 | A language server whose program is not on PATH and whose extension has a download for this computer | Status bar "<server>: not installed" (tooltip: version, host); click: "Download <server> <version>?" dialog (what, from where, SHA-256 check, folder); Download: a job "Downloading <server>: x / y MB", then the server starts |
@@ -32,7 +32,7 @@ Built 2026-10-23. User request: separate workflow tools, language servers and ot
 
 | Part | File | What |
 |---|---|---|
-| Manifest | core `extension/manifest.rs` | `extension.toml` schema 1: languages, grammars, language_servers (+ per-target downloads), themes, settings, commands, menus, panels, views, `wasm`, capabilities, requires; validation (language servers need `process.exec:<command>`, downloads `net:<host>`, `https://` only, SHA-256) |
+| Manifest | core `extension/manifest.rs` | `extension.toml` schema 1: languages, grammars, language_servers (+ per-target downloads), themes, settings, commands, menus, panels, views, `wasm`, `icon` (package image file: png / svg / jpg / webp, at most 256 KB, else the placeholder; 2026-10-23), capabilities, requires; validation (language servers need `process.exec:<command>`, downloads `net:<host>`, `https://` only, SHA-256) |
 | Registry | core `extension/mod.rs` | `Registry::load` (installed newest version + linked dev folders, dev wins), blocked reasons (`Blocked`), requires check, contributions (`languages`, `language_for_path`, `grammars`, `language_servers`, `themes`, `settings`, `commands`, `panels`, keys `<id>/<item>`), `server_table` for the LSP client; `carbon.*` installs only from a signed catalog |
 | Install, catalog, git, package rules, capabilities, state | core `extension/{install,catalog,git,package,capability,requires,state,dirs}.rs` | Ported from branch `feature/workflow` (renamed); catalog and git gained `path` (a folder in the repo) |
 | Tools | core `extension/tools.rs` | `download_tool` (reqwest blocking, progress, cancel, 512 MB cap), `install_tool_file` (SHA-256 check, unpack none/gz/zip/tar.gz with package path rules, executable bit), `downloaded_program` |
@@ -44,9 +44,9 @@ Built 2026-10-23. User request: separate workflow tools, language servers and ot
 | Panels | gui `extension_panel.rs`, `webview_panel.rs` (`webview` feature) | Declarative views (static or dynamic); web pages (ported, off by default) |
 | Wiring | gui `editor_panel.rs` (language from registry), `lsp_ops.rs` (server command from code), `status_bar.rs`, `menus.rs` (`RunExtensionCommand`, extension items), `commands.rs`, `palette.rs` (owned keywords), `workbench.rs` (extension panels, Explorer-section tabs), `style/theme.rs`, `main.rs`, `build.rs` (8 MB main stack) | |
 | Kit patches | gpui-component 8 (`ThemeRegistry::set_custom_themes`), 9 (`LanguageRegistry::unregister`) | `vendor/gpui-component/CARBON-PATCHES.md` |
-| Official extensions | `extensions/` | `rust` (grammar + rust-analyzer 2026-10-19 downloads for 6 targets), `toml`, `markdown` (+ markdown_inline), `yaml`, `python`, `javascript`, `typescript` (+ tsx), `html`, `css`, `bash`, `gruvbox`; `grammars.toml` pins every `.wasm` (upstream release builds of the versions Carbon compiled in) by SHA-256; `fetch_grammars.py` downloads / `--check`s them; queries copied from the kit / grammar crates |
+| Official extensions | `github.com/denizhoroz/carbon-extensions-basic` (moved out 2026-10-23; local checkout `carbon-extensions-basic/`, ignored by git; grouped by type: `languages/<name>`, `themes/<name>`) | `rust` (grammar + rust-analyzer 2026-10-19 downloads for 6 targets), `toml`, `markdown` (+ markdown_inline), `yaml`, `python`, `javascript`, `typescript` (+ tsx), `html`, `css`, `bash`, `gruvbox`; `grammars.toml` pins every `.wasm` (upstream release builds of the versions Carbon compiled in) by SHA-256; `fetch_grammars.py` downloads / `--check`s them; queries copied from the kit / grammar crates |
 
-Locations: preferences in `<config>/extensions/` (`state.json`, `catalog.toml`, cached `catalog.json`); packages in `%LOCALAPPDATA%\Carbon\extensions\<id>\<version>\`; tools in `%LOCALAPPDATA%\Carbon\tools\<id>\<server>\<version>\`. `CARBON_EXTENSIONS_DIR` puts all in one folder; with only `CARBON_CONFIG_DIR` set, data goes under it too.
+Locations: preferences in `<config>/extensions/` (`state.json`, `catalog.toml`, cached `catalog.json`, `catalog-icons/`); packages in `%LOCALAPPDATA%\Carbon\extensions\<id>\<version>\`; tools in `%LOCALAPPDATA%\Carbon\tools\<id>\<server>\<version>\`. `CARBON_EXTENSIONS_DIR` puts all in one folder; with only `CARBON_CONFIG_DIR` set, data goes under it too.
 
 ## Developing an extension
 
@@ -57,7 +57,7 @@ Locations: preferences in `<config>/extensions/` (`state.json`, `catalog.toml`, 
 
 ## Publishing official extensions (not done; needs the user)
 
-The catalog is a git repository with `catalog.json` at its root, each version pinned by commit (+ `path`, e.g. `extensions/rust`) and content hash; `carbon.*` ids install only when `catalog.json.minisig` is signed by a key in the user's trusted keys. Steps: create a minisign key pair (keep the secret key private), make the catalog repo (or a branch), list each `extensions/<name>` at a commit of this repo with its hash, sign `catalog.json`, and put the public key as Carbon's default trusted key and the repo as the default catalog URL (both still empty in code).
+The catalog is a git repository with `catalog.json` at its root, each version pinned by commit (+ `path`, e.g. `languages/rust`) and content hash; `carbon.*` ids install only when `catalog.json.minisig` is signed by a key in the user's trusted keys. Steps: create a minisign key pair (keep the secret key private), make the catalog repo (or a branch), list each package folder (`languages/<name>`, `themes/<name>`) at a commit of `carbon-extensions-basic` with its hash, sign `catalog.json`, and put the public key as Carbon's default trusted key and the repo as the default catalog URL (both still empty in code).
 
 ## Measurements (Windows)
 
@@ -78,7 +78,7 @@ The catalog is a git repository with `catalog.json` at its root, each version pi
 
 ## Limits
 
-- No official catalog yet (needs the user's signing key, above); until then official extensions are used by linking `extensions/<name>` folders.
+- No official catalog yet (needs the user's signing key, above); until then official extensions are used by linking `carbon-extensions-basic/<type>/<name>` folders.
 - Grammars cost ~1.5x on a full parse; every parse makes a new `WasmStore` (~8 ms, background).
 - Host calls that wait (`run-process`, `http-get`) count toward the 5 s limit.
 - Extension code reaches the app only through `notify`, `log` and dynamic views; no editor or file API yet; views tier 2 (inputs, tables) not built.

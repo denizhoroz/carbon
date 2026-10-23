@@ -34,20 +34,42 @@ use semver::VersionReq;
 use crate::style::fixed;
 use crate::workbench::WindowCallback;
 
-/// An extension's icon: its manifest's Lucide name, else a puzzle piece.
-pub fn icon(name: Option<&str>) -> Icon {
-    let path = name.map(|name| format!("icons/{name}.svg"));
-    match path {
-        Some(path)
-            if matches!(
-                AssetSource::load(&crate::app_assets::AppAssets, &path),
-                Ok(Some(_))
-            ) =>
-        {
-            Icon::empty().path(path)
-        }
-        _ => Icon::new(IconName::Puzzle),
+/// An extension's icon: its image, else (none, or it does not load) a
+/// puzzle piece.
+pub fn icon(image: Option<ImageSource>) -> AnyElement {
+    let size = fixed::EXTENSION_ICON_SIZE;
+    let placeholder = move || {
+        Icon::new(IconName::Puzzle)
+            .with_size(Size::Size(size))
+            .into_any_element()
+    };
+    match image {
+        Some(image) => img(image)
+            .size(size)
+            .flex_none()
+            .with_fallback(placeholder)
+            .into_any_element(),
+        None => placeholder(),
     }
+}
+
+/// An icon file's bytes as an image (by its file type).
+fn icon_image(path: &str, bytes: Vec<u8>) -> Option<ImageSource> {
+    let kind = std::path::Path::new(path).extension()?.to_str()?;
+    let format = match kind.to_ascii_lowercase().as_str() {
+        "png" => ImageFormat::Png,
+        "jpg" | "jpeg" => ImageFormat::Jpeg,
+        "webp" => ImageFormat::Webp,
+        "svg" => ImageFormat::Svg,
+        _ => return None,
+    };
+    Some(Arc::new(Image::from_bytes(format, bytes)).into())
+}
+
+/// A catalog package's cached icon (fetched with the catalog).
+fn catalog_icon(dirs: Option<&ExtensionDirs>, listed: &CatalogPackage) -> Option<ImageSource> {
+    let file = dirs?.catalog_icons_dir().join(listed.icon_file_name()?);
+    file.is_file().then(|| file.into())
 }
 
 /// The footer's Install menu.
@@ -330,6 +352,13 @@ fn install_dialog(package: Package, window: &mut Window, cx: &mut App) {
         .cloned()
         .unwrap_or_default();
     let plan = plan_install(&package, &super::registry(cx), &granted);
+    // Read once: the dialog draws every frame.
+    let image = package
+        .def
+        .icon
+        .as_deref()
+        .zip(package.icon())
+        .and_then(|(path, bytes)| icon_image(path, bytes));
     let package = Rc::new(package);
     let plan = Rc::new(plan);
     window.open_dialog(cx, move |dialog, _, cx| {
@@ -392,10 +421,7 @@ fn install_dialog(package: Package, window: &mut Window, cx: &mut App) {
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(
-                                icon(def.icon.as_deref())
-                                    .with_size(Size::Size(fixed::EXTENSION_ICON_SIZE)),
-                            )
+                            .child(icon(image.clone()))
                             .child(
                                 div()
                                     .font_weight(FontWeight::MEDIUM)
@@ -582,6 +608,7 @@ pub fn catalog(cx: &App) -> Option<Arc<Catalog>> {
     let files = CatalogFiles {
         text: std::fs::read_to_string(text).ok()?,
         signature: std::fs::read_to_string(signature).ok(),
+        icons: Vec::new(),
     };
     let (catalog, _) = Catalog::load(&files, &catalog_config(dirs).keys).ok()?;
     let catalog = Arc::new(catalog);
@@ -591,8 +618,39 @@ pub fn catalog(cx: &App) -> Option<Arc<Catalog>> {
     Some(catalog)
 }
 
+/// Keeps the catalog's icons in the icon folder and drops the ones it no
+/// longer names.
+fn remember_icons(dirs: &ExtensionDirs, files: &CatalogFiles, catalog: &Catalog) {
+    let folder = dirs.catalog_icons_dir();
+    let named: std::collections::HashSet<String> = catalog
+        .packages
+        .iter()
+        .filter_map(CatalogPackage::icon_file_name)
+        .collect();
+    for entry in std::fs::read_dir(&folder).into_iter().flatten().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !named.contains(&name) {
+            _ = std::fs::remove_file(entry.path());
+        }
+    }
+    for icon in &files.icons {
+        let file = folder.join(&icon.file_name);
+        if file.is_file() || !named.contains(&icon.file_name) {
+            continue;
+        }
+        let saved =
+            std::fs::create_dir_all(&folder).and_then(|_| std::fs::write(&file, &icon.bytes));
+        if let Err(err) = saved {
+            eprintln!("cannot write {}: {err}", file.display());
+        }
+    }
+}
+
 /// Keeps `files` as the cached catalog and `catalog` as the loaded one.
 fn remember(dirs: Option<&ExtensionDirs>, files: &CatalogFiles, catalog: Arc<Catalog>) {
+    if let Some(dirs) = dirs {
+        remember_icons(dirs, files, &catalog);
+    }
     if let Some((text, signature)) = cache_paths(dirs) {
         let saved = text
             .parent()
@@ -622,6 +680,9 @@ fn forget_catalog(dirs: Option<&ExtensionDirs>) {
     if let Some((text, signature)) = cache_paths(dirs) {
         let _ = std::fs::remove_file(text);
         let _ = std::fs::remove_file(signature);
+    }
+    if let Some(dirs) = dirs {
+        let _ = std::fs::remove_dir_all(dirs.catalog_icons_dir());
     }
 }
 
@@ -969,9 +1030,7 @@ impl CatalogView {
                 .py(fixed::PANEL_GAP)
                 .border_b_1()
                 .border_color(border)
-                .child(
-                    icon(listed.icon.as_deref()).with_size(Size::Size(fixed::EXTENSION_ICON_SIZE)),
-                )
+                .child(icon(catalog_icon(super::dirs(cx), listed)))
                 .child(
                     v_flex()
                         .flex_1()

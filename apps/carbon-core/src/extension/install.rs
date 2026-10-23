@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::{
-    ExtensionDef, ExtensionDirs, ExtensionId, GitCheckout, MANIFEST, Missing, OFFICIAL_PREFIX,
-    Origin, Registry, check_package_path, resolve_package_file,
+    ExtensionDef, ExtensionDirs, ExtensionId, GitCheckout, MANIFEST, MAX_ICON_BYTES, Missing,
+    OFFICIAL_PREFIX, Origin, Registry, check_package_path, resolve_package_file,
 };
 
 /// Most files a package may hold.
@@ -104,6 +104,36 @@ pub struct Package {
 }
 
 impl Package {
+    /// Its icon's bytes, when the manifest names one within
+    /// `MAX_ICON_BYTES` (shown before installing).
+    pub fn icon(&self) -> Option<Vec<u8>> {
+        let path = self.def.icon.as_deref()?;
+        check_package_path(path).ok()?;
+        match &self.source {
+            InstallSource::Zip(zip_path) => {
+                let file = fs::File::open(zip_path).ok()?;
+                let mut archive = zip::ZipArchive::new(file).ok()?;
+                let entry = archive.by_name(&format!("{}{path}", self.prefix)).ok()?;
+                if entry.size() > MAX_ICON_BYTES {
+                    return None;
+                }
+                let mut bytes = Vec::new();
+                entry
+                    .take(MAX_ICON_BYTES + 1)
+                    .read_to_end(&mut bytes)
+                    .ok()?;
+                (bytes.len() as u64 <= MAX_ICON_BYTES).then_some(bytes)
+            }
+            source => {
+                let file = resolve_package_file(source.folder()?, path).ok()?;
+                let size = fs::metadata(&file).ok()?.len();
+                (size <= MAX_ICON_BYTES)
+                    .then(|| fs::read(&file).ok())
+                    .flatten()
+            }
+        }
+    }
+
     /// What `state.json` keeps about this install.
     pub fn record(&self) -> InstallRecord {
         let (source, rev, commit, path, commit_pinned) = match &self.source {

@@ -107,6 +107,11 @@ impl ExtensionDirs {
         self.root.join("catalog.json")
     }
 
+    /// The cached catalog's package icons, `<sha256>.<type>`.
+    pub fn catalog_icons_dir(&self) -> PathBuf {
+        self.root.join("catalog-icons")
+    }
+
     /// The catalog repository and trusted keys (`CatalogConfig`).
     pub fn catalog_config_file(&self) -> PathBuf {
         self.root.join("catalog.toml")

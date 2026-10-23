@@ -6,6 +6,7 @@
 //! version = "0.1.0"
 //! schema_version = 1
 //! carbon_api = ">=0.1, <0.2"
+//! icon = "icon.png"
 //! categories = ["language"]
 //! capabilities = ["process.exec:rust-analyzer", "net:github.com"]
 //!
@@ -61,6 +62,26 @@ pub const CATEGORIES: [&str; 6] = ["language", "theme", "tool", "panel", "agent"
 pub const MENUS: [&str; 4] = ["File", "Edit", "View", "Help"];
 /// Where a panel opens first.
 pub const PLACEMENTS: [&str; 4] = ["center", "left", "right", "bottom"];
+/// File types an extension icon may be (lowercase extensions).
+pub const ICON_TYPES: [&str; 5] = ["png", "svg", "jpg", "jpeg", "webp"];
+/// Largest icon file; a larger one is not shown (the placeholder is).
+pub const MAX_ICON_BYTES: u64 = 256 * 1024;
+
+/// Problems with an icon path's file type (`ICON_TYPES`).
+pub fn check_icon_type(path: &str) -> Result<(), String> {
+    let kind = Path::new(path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(str::to_ascii_lowercase);
+    match kind {
+        Some(kind) if ICON_TYPES.contains(&kind.as_str()) => Ok(()),
+        _ => Err(format!(
+            "icon `{path}` must be one of {}",
+            ICON_TYPES.join(", ")
+        )),
+    }
+}
+
 /// Download targets: `<os>-<cpu>`.
 pub const TARGETS: [&str; 6] = [
     "windows-x64",
@@ -106,7 +127,8 @@ pub struct ExtensionDef {
     pub authors: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repository: Option<String>,
-    /// Lucide icon name; the GUI falls back to a generic one.
+    /// Package path of its icon (`ICON_TYPES`, at most `MAX_ICON_BYTES`;
+    /// square, 128 px or SVG); the GUI shows a placeholder without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
     /// From `CATEGORIES`.
@@ -436,6 +458,7 @@ impl ExtensionDef {
     pub fn files(&self) -> Vec<&str> {
         let mut files: Vec<&str> = Vec::new();
         files.extend(self.wasm.as_deref());
+        files.extend(self.icon.as_deref());
         for grammar in &self.grammars {
             files.push(&grammar.wasm);
             files.push(&grammar.highlights);
@@ -502,6 +525,9 @@ impl ExtensionDef {
             if let Err(problem) = check_package_path(path) {
                 problems.push(problem);
             }
+        }
+        if let Some(Err(problem)) = self.icon.as_deref().map(check_icon_type) {
+            problems.push(problem);
         }
         self.validate_languages(&mut problems);
         self.validate_servers(&mut problems);

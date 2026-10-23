@@ -349,10 +349,7 @@ impl ManageView {
             .py(fixed::PANEL_GAP)
             .border_b_1()
             .border_color(border)
-            .child(
-                install::icon(def.icon.as_deref())
-                    .with_size(Size::Size(fixed::EXTENSION_ICON_SIZE)),
-            )
+            .child(install::icon(loaded.icon_file().map(Into::into)))
             .child(
                 v_flex()
                     .flex_1()

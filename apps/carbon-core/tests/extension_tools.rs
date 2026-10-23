@@ -163,8 +163,13 @@ fn the_rust_extension_downloads_rust_analyzer() {
     let temp = tempfile::tempdir().unwrap();
     let dirs = ExtensionDirs::new(temp.path());
     let mut state = StateFile::default();
-    let rust = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../extensions/rust");
-    state.dev.insert(dunce::canonicalize(rust).unwrap());
+    // A checkout of the official extensions repo, `carbon-extensions-basic/` in
+    // the repo root (ignored by git).
+    let rust =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../carbon-extensions-basic/languages/rust");
+    let rust = dunce::canonicalize(&rust)
+        .unwrap_or_else(|_| panic!("{} missing: clone carbon-extensions-basic", rust.display()));
+    state.dev.insert(rust);
     let registry = Registry::load(Some(&dirs), &state);
     let loaded = registry.get(&ExtensionId::new("carbon.rust")).unwrap();
     let server = &loaded.def.language_servers[0];

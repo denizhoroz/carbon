@@ -10,11 +10,18 @@
 //! and must come from one of them; without keys the catalog is used and
 //! shown as not checked.
 //!
+//! Icons: a package may name an image file in the catalog repository
+//! (`icon`, `ICON_TYPES`) pinned by its SHA-256 (`icon_sha256`, so the
+//! signature covers it). They are read from the same commit as
+//! `catalog.json` and cached as `<sha256>.<type>`; a package without one
+//! (or whose file does not match) shows a placeholder.
+//!
 //! The repository URL and the keys: `catalog.toml` in the preferences folder
 //! ([`CatalogConfig`]); `CARBON_EXTENSION_CATALOG` overrides the URL.
 //!
 //! ```json
 //! { "schema": 1, "packages": [ { "id": "acme.sketch", "name": "Sketch",
+//!   "icon": "icons/sketch.png", "icon_sha256": "<64 hex>",
 //!   "versions": [ { "version": "1.2.0", "git": "https://example.com/sketch.git",
 //!     "commit": "<40 hex>", "hash": "sha256:<64 hex>" } ] } ] }
 //! ```
@@ -25,7 +32,12 @@ use minisign_verify::{PublicKey, Signature};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
-use super::{ExtensionId, FetchControl, Package, Pin, check_id, git, is_commit_id};
+use sha2::{Digest, Sha256};
+
+use super::{
+    ExtensionId, FetchControl, MAX_ICON_BYTES, Package, Pin, check_icon_type, check_id,
+    check_package_path, git, is_commit_id,
+};
 
 /// Overrides the catalog repository's URL.
 pub const CATALOG_ENV: &str = "CARBON_EXTENSION_CATALOG";
@@ -117,6 +129,17 @@ fn parse_key(key: &str) -> Result<PublicKey, String> {
 pub struct CatalogFiles {
     pub text: String,
     pub signature: Option<String>,
+    /// The icons it names, fetched and checked (none when read from the
+    /// cache: those are already in the icon folder).
+    pub icons: Vec<CatalogIcon>,
+}
+
+/// A package icon fetched with the catalog; its bytes match `icon_sha256`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CatalogIcon {
+    /// [`CatalogPackage::icon_file_name`].
+    pub file_name: String,
+    pub bytes: Vec<u8>,
 }
 
 /// How a catalog's signature was judged.
@@ -178,9 +201,13 @@ pub struct CatalogPackage {
     pub name: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
-    /// Lucide icon name, as in a manifest.
+    /// Image file in the catalog repository (`ICON_TYPES`, at most
+    /// `MAX_ICON_BYTES`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// SHA-256 of the icon file, 64 lowercase hex digits; required with `icon`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_sha256: Option<String>,
     /// As in the manifest (`CATEGORIES`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub categories: Vec<String>,
@@ -238,6 +265,48 @@ impl CatalogVersion {
 }
 
 impl CatalogPackage {
+    /// Name of its cached icon file, `<sha256>.<type>`; `None` without an icon.
+    pub fn icon_file_name(&self) -> Option<String> {
+        let kind = Path::new(self.icon.as_deref()?).extension()?.to_str()?;
+        Some(format!(
+            "{}.{}",
+            self.icon_sha256.as_deref()?,
+            kind.to_ascii_lowercase()
+        ))
+    }
+
+    /// Problems with `icon` / `icon_sha256`.
+    fn check_icon(&self) -> Result<(), String> {
+        let Some(icon) = &self.icon else {
+            return Ok(());
+        };
+        check_package_path(icon).map_err(|err| format!("icon {err}"))?;
+        check_icon_type(icon)?;
+        let sha_ok = self.icon_sha256.as_deref().is_some_and(|hex| {
+            hex.len() == 64
+                && hex
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        });
+        if !sha_ok {
+            return Err("icon needs `icon_sha256`: 64 lowercase hex digits".into());
+        }
+        Ok(())
+    }
+
+    /// Its icon read with `read`, when it is there, small enough and matches
+    /// `icon_sha256`.
+    fn read_icon(&self, read: &git::ReadFile<'_>) -> Option<CatalogIcon> {
+        let file_name = self.icon_file_name()?;
+        let bytes = read(self.icon.as_deref()?, MAX_ICON_BYTES).ok()??;
+        let digest: String = Sha256::digest(&bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        (Some(digest.as_str()) == self.icon_sha256.as_deref())
+            .then_some(CatalogIcon { file_name, bytes })
+    }
+
     /// The highest version whose number fits `range` (any when `None`).
     pub fn best(&self, range: Option<&VersionReq>) -> Option<&CatalogVersion> {
         self.versions
@@ -274,6 +343,13 @@ impl Catalog {
                 problems.push(format!("`{id}` is listed twice"));
                 return false;
             }
+            if let Err(problem) = package.check_icon() {
+                problems.push(format!("`{id}` {problem}"));
+                package.icon = None;
+            }
+            if package.icon.is_none() {
+                package.icon_sha256 = None;
+            }
             package.versions.retain(|entry| match entry.check() {
                 Ok(_) => true,
                 Err(problem) => {
@@ -305,30 +381,35 @@ impl Catalog {
     }
 }
 
-/// Fetches the catalog repository's `catalog.json` and its signature
-/// (default branch). Blocking and network-bound: run it off the UI thread.
+/// Fetches the catalog repository's `catalog.json`, its signature and the
+/// icons it names (default branch). Blocking and network-bound: run it off
+/// the UI thread.
 pub fn fetch_catalog(url: &str, control: &FetchControl) -> Result<CatalogFiles, String> {
-    let text = |bytes: Vec<u8>, name: &str| {
+    let utf8 = |bytes: Vec<u8>, name: &str| {
         String::from_utf8(bytes).map_err(|_| format!("{name} is not UTF-8"))
     };
-    let mut files = git::fetch_files(
-        url,
-        &[CATALOG_FILE, CATALOG_SIGNATURE],
-        MAX_CATALOG_BYTES,
-        control,
-    )?
-    .into_iter();
-    let catalog = files
-        .next()
-        .flatten()
-        .ok_or_else(|| format!("{url}: no {CATALOG_FILE} at the root"))?;
-    Ok(CatalogFiles {
-        text: text(catalog, CATALOG_FILE)?,
-        signature: files
-            .next()
-            .flatten()
-            .map(|bytes| text(bytes, CATALOG_SIGNATURE))
-            .transpose()?,
+    git::read_head(url, control, |read| {
+        let catalog = read(CATALOG_FILE, MAX_CATALOG_BYTES)?
+            .ok_or_else(|| format!("{url}: no {CATALOG_FILE} at the root"))?;
+        let text = utf8(catalog, CATALOG_FILE)?;
+        let signature = read(CATALOG_SIGNATURE, MAX_CATALOG_BYTES)?
+            .map(|bytes| utf8(bytes, CATALOG_SIGNATURE))
+            .transpose()?;
+        // Icons of a catalog that does not parse are not needed.
+        let icons = Catalog::parse(&text)
+            .map(|(catalog, _)| {
+                catalog
+                    .packages
+                    .iter()
+                    .filter_map(|package| package.read_icon(read))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(CatalogFiles {
+            text,
+            signature,
+            icons,
+        })
     })
 }
 

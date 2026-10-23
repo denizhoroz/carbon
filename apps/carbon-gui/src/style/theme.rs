@@ -290,12 +290,16 @@ mod tests {
     use super::{CARBON_THEMES, DARK_THEME, LIGHT_THEME, settings};
     use gpui_kit::component::ThemeSet;
 
-    /// Carbon's own theme file and the theme files of the official
-    /// extensions in the repo (`extensions/*/themes/*.json`).
+    /// Carbon's own theme file and, when a checkout of the official
+    /// extensions repo is in the repo root (`carbon-extensions-basic/`,
+    /// ignored by git), its theme files (`themes/*/themes/*.json`).
     fn theme_files() -> Vec<(String, String)> {
         let mut files = vec![("carbon.json".to_string(), CARBON_THEMES.to_string())];
-        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../extensions");
-        for extension in std::fs::read_dir(root).unwrap() {
+        let root = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../carbon-extensions-basic/themes"
+        );
+        for extension in std::fs::read_dir(root).into_iter().flatten() {
             let themes = extension.unwrap().path().join("themes");
             for entry in std::fs::read_dir(themes).into_iter().flatten() {
                 let path = entry.unwrap().path();
@@ -315,7 +319,6 @@ mod tests {
         // must survive a parse and re-serialize.
         let mut unknown = Vec::new();
         let files = theme_files();
-        assert!(files.len() > 1, "the extensions' themes are found");
         for (path, text) in &files {
             let raw: serde_json::Value = serde_json::from_str(text).unwrap();
             let set: ThemeSet =

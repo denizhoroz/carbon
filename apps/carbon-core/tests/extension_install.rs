@@ -588,6 +588,7 @@ fn signed_catalogs_need_a_trusted_key() {
     let files = CatalogFiles {
         text: SIGNED_TEXT.into(),
         signature: Some(SIGNATURE_A.into()),
+        icons: Vec::new(),
     };
     let keys = |keys: &[&str]| keys.iter().map(|key| key.to_string()).collect::<Vec<_>>();
     // A whole `.pub` file works as a key too.
@@ -718,4 +719,132 @@ fn a_package_in_a_repository_folder_installs_alone() {
         carbon_core::extension::fetch_git_path(&url(&dir), &commit, Some("../x"), &never())
             .is_err()
     );
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+#[test]
+fn package_icons_are_files_of_an_image_type() {
+    let (temp, dirs) = setup();
+    let folder = temp.path().join("pkg");
+    package_folder(&folder, "acme.icon", "1.0.0", r#"icon = "icon.png""#);
+    write(&folder.join("icon.png"), "png bytes");
+    let package = read_package(InstallSource::Folder(folder.clone())).unwrap();
+    assert_eq!(package.icon().as_deref(), Some(&b"png bytes"[..]));
+    // From a zip too, before anything is installed.
+    let zip = temp.path().join("pkg.zip");
+    zip_file(
+        &zip,
+        &[
+            (
+                "top/extension.toml",
+                &manifest("acme.icon", "1.0.0", r#"icon = "icon.png""#),
+            ),
+            ("top/themes/pkg.json", "{}"),
+            ("top/icon.png", "zipped png"),
+        ],
+    );
+    let zipped = read_package(InstallSource::Zip(zip)).unwrap();
+    assert_eq!(zipped.icon().as_deref(), Some(&b"zipped png"[..]));
+    // Installed: the GUI shows the file.
+    let plan = plan_install(&package, &load(&dirs), &BTreeSet::new());
+    assert!(plan.problems.is_empty(), "{:?}", plan.problems);
+    dirs.install(&package).unwrap();
+    let registry = load(&dirs);
+    let loaded = registry.get(&ExtensionId::new("acme.icon")).unwrap();
+    assert!(loaded.icon_file().unwrap().ends_with("icon.png"));
+
+    // Not an image type, or not there: refused like any other named file.
+    let bad = temp.path().join("bad");
+    package_folder(&bad, "acme.bad", "1.0.0", r#"icon = "icon.exe""#);
+    write(&bad.join("icon.exe"), "x");
+    let problems = read_package(InstallSource::Folder(bad.clone())).unwrap_err();
+    assert!(
+        problems.iter().any(|p| p.contains("must be one of")),
+        "{problems:?}"
+    );
+    package_folder(&bad, "acme.bad", "1.0.0", r#"icon = "missing.svg""#);
+    let problems = read_package(InstallSource::Folder(bad)).unwrap_err();
+    assert!(
+        problems.iter().any(|p| p.contains("missing.svg")),
+        "{problems:?}"
+    );
+
+    // Too large: installs, shows the placeholder.
+    let big = temp.path().join("big");
+    package_folder(&big, "acme.big", "1.0.0", r#"icon = "icon.png""#);
+    fs::write(big.join("icon.png"), vec![0u8; 300 * 1024]).unwrap();
+    let package = read_package(InstallSource::Folder(big)).unwrap();
+    assert!(package.icon().is_none());
+}
+
+#[test]
+fn catalog_icons_are_fetched_with_the_catalog_and_checked() {
+    let temp = tempfile::tempdir().unwrap();
+    let catalog_dir = temp.path().join("catalog");
+    fs::create_dir_all(&catalog_dir).unwrap();
+    git(&catalog_dir, &["init", "-q", "-b", "main"]);
+    write(&catalog_dir.join("icons/good.png"), "good png");
+    write(&catalog_dir.join("icons/changed.svg"), "<svg/>");
+    let good = sha256_hex(b"good png");
+    let hash = format!("sha256:{}", "a".repeat(64));
+    let commit = "b".repeat(40);
+    let package = |id: &str, icon: &str| {
+        format!(
+            r#"{{ "id": "{id}", "name": "P", {icon} "versions": [
+                {{ "version": "1.0.0", "git": "x", "commit": "{commit}", "hash": "{hash}" }} ] }}"#
+        )
+    };
+    let packages = [
+        package(
+            "acme.good",
+            &format!(r#""icon": "icons/good.png", "icon_sha256": "{good}","#),
+        ),
+        // The file does not match its pin: not fetched.
+        package(
+            "acme.changed",
+            &format!(
+                r#""icon": "icons/changed.svg", "icon_sha256": "{}","#,
+                "c".repeat(64)
+            ),
+        ),
+        // Problems drop the icon, not the package.
+        package("acme.nosha", r#""icon": "icons/good.png","#),
+        package(
+            "acme.exe",
+            &format!(r#""icon": "icons/x.exe", "icon_sha256": "{good}","#),
+        ),
+        package("acme.plain", ""),
+    ];
+    write(
+        &catalog_dir.join("catalog.json"),
+        &format!(
+            r#"{{ "schema": 1, "packages": [ {} ] }}"#,
+            packages.join(", ")
+        ),
+    );
+    git(&catalog_dir, &["add", "-A"]);
+    git(&catalog_dir, &["commit", "-q", "-m", "catalog"]);
+
+    let files = fetch_catalog(&url(&catalog_dir), &never()).unwrap();
+    assert_eq!(files.icons.len(), 1);
+    assert_eq!(files.icons[0].file_name, format!("{good}.png"));
+    assert_eq!(files.icons[0].bytes, b"good png");
+    let (catalog, problems) = Catalog::load(&files, &[]).unwrap();
+    assert_eq!(catalog.packages.len(), 5);
+    assert_eq!(problems.len(), 2, "{problems:?}");
+    let get = |id: &str| catalog.get(&ExtensionId::new(id)).unwrap();
+    assert_eq!(
+        get("acme.good").icon_file_name(),
+        Some(format!("{good}.png"))
+    );
+    assert!(get("acme.nosha").icon_file_name().is_none());
+    assert!(get("acme.exe").icon.is_none());
+    assert!(get("acme.plain").icon_file_name().is_none());
 }

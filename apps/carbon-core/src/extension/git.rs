@@ -30,7 +30,7 @@ pub struct GitCheckout {
     pub rev: String,
     /// The full commit id fetched.
     pub commit: String,
-    /// The package's folder inside the repository (`extensions/rust`);
+    /// The package's folder inside the repository (`languages/rust`);
     /// `None` when it is the repository root.
     pub path: Option<String>,
     /// The package root (inside the temporary folder).
@@ -124,7 +124,8 @@ pub fn fetch_git(url: &str, rev: &str, control: &FetchControl) -> Result<Package
 }
 
 /// Like [`fetch_git`], for a package in folder `path` of the repository
-/// (Carbon's official extensions live in `extensions/<name>` of its repo).
+/// (Carbon's official extensions live in `<type>/<name>/` of the
+/// `carbon-extensions-basic` repo).
 pub fn fetch_git_path(
     url: &str,
     rev: &str,
@@ -174,30 +175,31 @@ pub fn fetch_git_path(
     }))
 }
 
-/// Files at the root of `url`'s default branch (the catalog's
-/// `catalog.json` and its signature), each at most `limit` bytes; `None` for
-/// one that is not there.
-pub(super) fn fetch_files(
+/// Reads a file of the fetched commit: its bytes, `None` when it is not
+/// there, an error when it is larger than the limit given.
+pub(super) type ReadFile<'a> = dyn Fn(&str, u64) -> Result<Option<Vec<u8>>, String> + 'a;
+
+/// Fetches the commit at the tip of `url`'s default branch and hands `read`
+/// a reader for its files (the catalog's `catalog.json`, its signature, the
+/// icons it names).
+pub(super) fn read_head<T>(
     url: &str,
-    paths: &[&str],
-    limit: u64,
     control: &FetchControl,
-) -> Result<Vec<Option<Vec<u8>>>, String> {
+    read: impl FnOnce(&ReadFile<'_>) -> Result<T, String>,
+) -> Result<T, String> {
     let (_temp, repo) = fetch(url, "", control)?;
     let commit = repo
         .head_commit()
         .map_err(|err| format!("{url}: no commit: {}", chain(&err)))?;
     let fail = |err: &dyn std::error::Error| format!("{url}: {}", chain(err));
     let tree = commit.tree().map_err(|err| fail(&err))?;
-    let mut files = Vec::new();
-    for path in paths {
+    let file = |path: &str, limit: u64| {
         let Some(entry) = tree
             .lookup_entry_by_path(path)
             .map_err(|err| fail(&err))?
             .filter(|entry| entry.mode().is_blob())
         else {
-            files.push(None);
-            continue;
+            return Ok(None);
         };
         let header = repo
             .find_header(entry.object_id())
@@ -208,9 +210,9 @@ pub(super) fn fetch_files(
         let blob = repo
             .find_blob(entry.object_id())
             .map_err(|err| fail(&err))?;
-        files.push(Some(blob.data.clone()));
-    }
-    Ok(files)
+        Ok(Some(blob.data.clone()))
+    };
+    read(&file)
 }
 
 /// A shallow bare clone of `url` holding just `rev`'s commit, in a new
