@@ -36,7 +36,7 @@ use menus::{
     AddPanel, ApplyLayout, ApplyPreset, CloseFolder, CommandPalette, CreateFolder, DeleteLayout,
     GoToLine, ManageExtensions, ManageSettings, MenuState, MoveBesideEditor, MovePanel, NewFile,
     OpenFolder, QuickOpen, ResetLayout, ResizeDock, RunExtensionCommand, SaveLayoutAs,
-    ToggleAutoHide, ToggleDock,
+    ToggleAutoHide, ToggleDock, ToggleSectionSide,
 };
 use palette::{FileIndex, Palette};
 use status_bar::CarbonStatusBar;
@@ -264,6 +264,10 @@ impl Render for CarbonApp {
             ))
             .on_action(self.on(
                 |w, _: &ResetLayout, window, cx| w.reset_layout(window, cx),
+                cx,
+            ))
+            .on_action(self.on(
+                |w, _: &ToggleSectionSide, window, cx| w.toggle_section_side(window, cx),
                 cx,
             ))
             .on_action(self.on(

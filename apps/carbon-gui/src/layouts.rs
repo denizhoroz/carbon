@@ -155,6 +155,8 @@ pub struct SavedLayout {
 pub struct LayoutStore {
     pub auto_hide: Vec<Side>,
     pub saved: Vec<SavedLayout>,
+    /// The Explorer section is the right dock (else the left).
+    pub explorer_right: bool,
 }
 
 impl LayoutStore {
@@ -197,6 +199,7 @@ mod tests {
     #[test]
     fn layout_store_round_trips() {
         let store = LayoutStore {
+            explorer_right: true,
             auto_hide: vec![Side::Bottom],
             saved: vec![SavedLayout {
                 name: "Review".into(),

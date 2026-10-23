@@ -262,7 +262,8 @@ fn decorate(spec: &mut CommandSpec) {
             &["split", "side", "editor area", "terminal", "chat"],
         ),
         "AddPanel" => (Some(IconName::Plus), &["open", "show", "tab"]),
-        "SaveLayoutAs" | "ApplyLayout" | "DeleteLayout" | "ApplyPreset" | "ResetLayout" => (
+        "SaveLayoutAs" | "ApplyLayout" | "DeleteLayout" | "ApplyPreset" | "ResetLayout"
+        | "ToggleSectionSide" => (
             Some(IconName::LayoutDashboard),
             &["workspace", "arrangement"],
         ),

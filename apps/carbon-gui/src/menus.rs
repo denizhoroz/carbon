@@ -24,6 +24,7 @@ actions!(
         Quit,
         ResetLayout,
         SaveLayoutAs,
+        ToggleSectionSide,
         ManageExtensions,
         ManageSettings
     ]
@@ -172,6 +173,10 @@ pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
         )
     }));
     layout.push(MenuItem::separator());
+    layout.push(MenuItem::action(
+        "Move Explorer Section to Other Side",
+        ToggleSectionSide,
+    ));
     layout.push(MenuItem::action("Reset Layout", ResetLayout));
 
     let mut add: Vec<MenuItem> = ADDABLE_PANELS
