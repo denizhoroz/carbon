@@ -46,7 +46,7 @@ pub fn open(target: Manage, window: &mut Window, cx: &mut App) {
     match target {
         Manage::Settings => crate::settings::open_dialog(window, cx),
         Manage::Extensions => {
-            crate::extensions::open_manage(crate::extensions::Tab::Installed, window, cx)
+            crate::extensions::open_manage(crate::extensions::Tab::Catalog, window, cx)
         }
     }
 }

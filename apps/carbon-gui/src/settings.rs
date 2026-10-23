@@ -16,7 +16,7 @@ use gpui_kit::component::WindowExt;
 use gpui_kit::*;
 use serde_json::Value;
 
-pub use view::open_dialog;
+pub use view::{dialog_size, open_dialog};
 
 /// How often the settings files are checked for edits made elsewhere (two
 /// `stat`s).

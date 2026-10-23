@@ -38,19 +38,27 @@ pub(super) fn register(cx: &mut App) {
     ]);
 }
 
+/// The size of the large dialogs (Settings, Extensions): a share of the
+/// window, within limits.
+pub fn dialog_size(window: &Window) -> gpui_kit::Size<Pixels> {
+    let viewport = window.viewport_size();
+    size(
+        (viewport.width * fixed::SETTINGS_WIDTH_SHARE)
+            .min(fixed::SETTINGS_MAX_WIDTH)
+            .max(fixed::SETTINGS_MIN_WIDTH),
+        (viewport.height * fixed::SETTINGS_HEIGHT_SHARE)
+            .min(fixed::SETTINGS_MAX_HEIGHT)
+            .max(fixed::SETTINGS_MIN_HEIGHT),
+    )
+}
+
 /// Opens the Settings dialog (Settings in the app menu, File > Preferences,
 /// the palette), with the search box focused.
 pub fn open_dialog(window: &mut Window, cx: &mut App) {
     let view = cx.new(|cx| SettingsView::new(window, cx));
     let search = view.read(cx).search.clone();
     window.open_dialog(cx, move |dialog, window, _| {
-        let viewport = window.viewport_size();
-        let width = (viewport.width * fixed::SETTINGS_WIDTH_SHARE)
-            .min(fixed::SETTINGS_MAX_WIDTH)
-            .max(fixed::SETTINGS_MIN_WIDTH);
-        let height = (viewport.height * fixed::SETTINGS_HEIGHT_SHARE)
-            .min(fixed::SETTINGS_MAX_HEIGHT)
-            .max(fixed::SETTINGS_MIN_HEIGHT);
+        let gpui_kit::Size { width, height } = dialog_size(window);
         let view = view.clone();
         dialog
             .title("Settings")

@@ -1,4 +1,4 @@
-# Extension system
+﻿# Extension system
 
 Built 2026-10-23. User request: separate workflow tools, language servers and other features from base Carbon; users download what they need. Research and decisions: `../../documents/extensions.md` (WASM code, views drawn by Carbon + webview pages, install code from the shelved workflow branch, tools PATH first else download, WASM grammars, official extensions downloaded on demand from `extensions/`, Open VSX deferred).
 
@@ -15,10 +15,10 @@ Built 2026-10-23. User request: separate workflow tools, language servers and ot
 
 | Input | Result |
 |---|---|
-| App menu (three lines) > Extensions, File > Preferences > Extensions, palette | Manage Extensions: Installed (n) / Catalog tabs, search, footer Install ▾ (From Folder… / From Zip… / From Git… / Link Development Folder…), Catalog Source…, Open Folder, Refresh, Close |
-| Installed row | Icon, name, origin (Installed / Development), state (On / Off / Needs more / Turned off after a failure / Files changed), Signed / Pinned, id · version · permissions allowed, description, what it adds, source + commit + hash or the linked folder; missing requirements with Install when the catalog has them; buttons Turn Off/On, Permissions (installed ones), Remove (installed) / Unlink (linked), Reinstall + Keep Changes (files changed) |
+| App menu (three lines) > Extensions, File > Preferences > Extensions, palette | Manage Extensions (as big as Settings; opens on Catalog): Catalog / Installed (n) tabs, search, footer Install â–¾ (From Folderâ€¦ / From Zipâ€¦ / From Gitâ€¦ / Link Development Folderâ€¦), Catalog Sourceâ€¦, Open Folder, Refresh, Close |
+| Installed row | Icon, name, origin (Installed / Development), state (On / Off / Needs more / Turned off after a failure / Files changed), Signed / Pinned, id Â· version Â· permissions allowed, description, what it adds, source + commit + hash or the linked folder; missing requirements with Install when the catalog has them; buttons Turn Off/On, Permissions (installed ones), Remove (installed) / Unlink (linked), Reinstall + Keep Changes (files changed) |
 | Install from folder / zip / git (tag, branch or commit, optional folder in the repo) / catalog | Fetching dialog with Cancel; install dialog: new / update / reinstall / downgrade, file count and size, source, pin level and short hash, permissions (new ones tagged), requirements, problems; "Allow and Install" grants what it lists; a notification when done |
-| Catalog tab | The catalog repository (`catalog.toml`, Catalog Source…; `CARBON_EXTENSION_CATALOG` overrides), Signed / Not checked, its extensions with Install / Update / Installed n |
+| Catalog tab | The catalog repository (`catalog.toml`, Catalog Sourceâ€¦; `CARBON_EXTENSION_CATALOG` overrides), Signed / Not checked, its extensions with Install / Update / Installed n |
 | Open a file whose type no extension covers but the (cached) catalog lists | Notification "Install <name>?" with Install (once per extension per session) |
 | First start with no extensions | Notification "Carbon starts light" with Open Extensions (once) |
 | A language server whose program is not on PATH and whose extension has a download for this computer | Status bar "<server>: not installed" (tooltip: version, host); click: "Download <server> <version>?" dialog (what, from where, SHA-256 check, folder); Download: a job "Downloading <server>: x / y MB", then the server starts |
@@ -51,7 +51,7 @@ Locations: preferences in `<config>/extensions/` (`state.json`, `catalog.toml`, 
 ## Developing an extension
 
 1. A folder with `extension.toml` (schema: `../../documents/extensions.md` s4, `manifest.rs` doc comment) and the files it names.
-2. Manage Extensions > Install > Link Development Folder…: loaded in place with every permission it asks for; Refresh reloads it.
+2. Manage Extensions > Install > Link Development Folderâ€¦: loaded in place with every permission it asks for; Refresh reloads it.
 3. Code: a `cdylib` crate on `carbon-extension-api`, `cargo build --release --target wasm32-wasip2` (`rustup target add wasm32-wasip2`), `wasm = "<file>.wasm"`.
 4. Grammars: a tree-sitter `.wasm` (`tree-sitter build --wasm`, or the grammar's release asset) exporting `tree_sitter_<name>`, plus `highlights.scm`.
 
@@ -68,12 +68,12 @@ The catalog is a git repository with `catalog.json` at its root, each version pi
 | Compile the Rust grammar `.wasm` | 23 ms (release), once per start, on a background thread |
 | New parser (fresh `WasmStore`) | ~8 ms |
 | Load the example extension component | 139 ms (debug build) |
-| Release `carbon-gui.exe` size | 42.7 MB before (commit `cde51f1`, 12 grammars compiled in) → 62.1 MB after (+19.4 MB): wasmtime 36 + Cranelift (shared by grammars and extension code), wasmtime-wasi, reqwest/rustls/aws-lc for HTTPS (git installs, tool downloads), zip/tar; minus the 12 grammars. Breakdown per crate not measured. Ways down: rustls on `ring` instead of `aws-lc`, wasmtime's Pulley interpreter or Winch instead of Cranelift (slower code) |
+| Release `carbon-gui.exe` size | 42.7 MB before (commit `cde51f1`, 12 grammars compiled in) â†’ 62.1 MB after (+19.4 MB): wasmtime 36 + Cranelift (shared by grammars and extension code), wasmtime-wasi, reqwest/rustls/aws-lc for HTTPS (git installs, tool downloads), zip/tar; minus the 12 grammars. Breakdown per crate not measured. Ways down: rustls on `ring` instead of `aws-lc`, wasmtime's Pulley interpreter or Winch instead of Cranelift (slower code) |
 
 ## Verified
 
 - `cargo test --workspace`: 167 pass, 8 ignored (`-j 4`: with more parallel jobs the linker ran out of memory, LNK1102). New: `tests/extension.rs` (9: manifest rules, capabilities for servers, languages by file, global keys, flags and requires, state file), `tests/extension_install.rs` (18 + 1 network: package paths, folder/zip/git installs, zip slip, official ids need a signed catalog, updates/downgrades/capabilities, dev link wins, remove, catalog parse/pins/signatures, changed files, repo folder), `tests/extension_tools.rs` (3 + 1 network: zip/gz unpack, hash refusal, table resolution; the real rust-analyzer download and `--version`), `tests/extension_wasm.rs` (ignored: builds the example guest; grants refused/allowed, reading outside the package refused, settings, workspace, views, server command, 5 s limit, panic), `tests/lsp.rs` (server table). Ignored ones run by hand: all pass. Clippy and fmt clean (also with `--features webview` builds).
-- Click-tested (test build, scratch config, PATH without rust-analyzer): Rust, Markdown (with an injected Rust block) and TOML colours from WASM grammars; rust-analyzer starts from the Rust extension; "not installed" → Download dialog → job with MB progress → rust-analyzer running; a development extension's Explorer-section tab (Explorer stays selected), its buttons running its WASM code, a dynamic view in the right dock redrawing after each run ("Ran 1/2 times"), its View menu command with a notification showing its setting and the open folder; Manage Extensions list, Turn Off (tab removed, panel says it is off, live) / Turn On; Catalog tab from a local git catalog (Not checked), the `.foo` suggestion → Fetching → install dialog (pinned, hash) → installed with its record in `state.json`.
+- Click-tested (test build, scratch config, PATH without rust-analyzer): Rust, Markdown (with an injected Rust block) and TOML colours from WASM grammars; rust-analyzer starts from the Rust extension; "not installed" â†’ Download dialog â†’ job with MB progress â†’ rust-analyzer running; a development extension's Explorer-section tab (Explorer stays selected), its buttons running its WASM code, a dynamic view in the right dock redrawing after each run ("Ran 1/2 times"), its View menu command with a notification showing its setting and the open folder; Manage Extensions list, Turn Off (tab removed, panel says it is off, live) / Turn On; Catalog tab from a local git catalog (Not checked), the `.foo` suggestion â†’ Fetching â†’ install dialog (pinned, hash) â†’ installed with its record in `state.json`.
 - Not tested: zip / folder / git installs through the GUI dialogs (core tests cover them), Permissions dialog, Reinstall / Keep Changes, the welcome note, webview pages (feature builds only), macOS/Linux, a signed official catalog (none published).
 
 ## Limits

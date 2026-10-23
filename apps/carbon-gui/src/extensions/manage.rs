@@ -29,7 +29,7 @@ pub enum Tab {
 /// Opens the dialog on `tab`.
 pub fn open(tab: Tab, window: &mut Window, cx: &mut App) {
     let view = cx.new(|cx| ManageView::new(tab, window, cx));
-    window.open_dialog(cx, move |dialog, _, cx| {
+    window.open_dialog(cx, move |dialog, window, cx| {
         let locked = super::dirs(cx).is_none();
         let catalog = view.read(cx).catalog.clone();
         let busy = catalog.read(cx).fetching;
@@ -37,9 +37,10 @@ pub fn open(tab: Tab, window: &mut Window, cx: &mut App) {
             .effective_url()
             .is_some();
         let (source, refresh) = (catalog.clone(), catalog.clone());
+        // As big as the Settings dialog; the list takes the height left.
         dialog
             .title("Extensions")
-            .w(fixed::MANAGE_WIDTH)
+            .w(crate::settings::dialog_size(window).width)
             .child(view.clone())
             .footer(
                 h_flex()
@@ -494,7 +495,8 @@ fn report(result: Result<(), String>, window: &mut Window, cx: &mut App) {
 }
 
 impl Render for ManageView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let list_height = crate::settings::dialog_size(window).height - fixed::MANAGE_CHROME_HEIGHT;
         let registry = super::registry(cx);
         let filter = self.filter(cx);
         let theme = cx.theme();
@@ -502,8 +504,8 @@ impl Render for ManageView {
         let installed_count = registry.all().len();
         let tabs = h_flex()
             .gap_1()
-            .child(self.tab_button(Tab::Installed, format!("Installed ({installed_count})"), cx))
             .child(self.tab_button(Tab::Catalog, "Catalog".into(), cx))
+            .child(self.tab_button(Tab::Installed, format!("Installed ({installed_count})"), cx))
             .child(div().flex_1())
             .child(
                 div()
@@ -579,7 +581,7 @@ impl Render for ManageView {
             .child(
                 v_flex()
                     .id("manage-extensions")
-                    .h(fixed::MANAGE_BODY_HEIGHT)
+                    .h(list_height)
                     .overflow_y_scroll()
                     .children(body),
             )

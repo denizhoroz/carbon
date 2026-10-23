@@ -1,4 +1,4 @@
-//! Fixed styling choices: not part of any theme and not user-configurable.
+﻿//! Fixed styling choices: not part of any theme and not user-configurable.
 //! Colours, fonts and radii belong in theme JSON, not here.
 
 use std::time::Duration;
@@ -47,10 +47,9 @@ pub const STATUS_ITEM_GAP: Rems = rems(0.25);
 /// Width of small dialogs (Create Folder).
 pub const DIALOG_WIDTH: Pixels = px(480.);
 
-/// Manage dialogs (Extensions, Settings): width, body height,
-/// placeholder icon size.
-pub const MANAGE_WIDTH: Pixels = px(720.);
-pub const MANAGE_BODY_HEIGHT: Pixels = px(420.);
+/// Manage Extensions is as big as Settings (`SETTINGS_*`); this is its
+/// title, tab row, footer and spacing, the rest is the list.
+pub const MANAGE_CHROME_HEIGHT: Pixels = px(148.);
 /// Icon of an extension in Manage Extensions and the install dialog.
 pub const EXTENSION_ICON_SIZE: Pixels = px(20.);
 
