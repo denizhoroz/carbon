@@ -1,0 +1,22 @@
+id = "carbon.bash"
+name = "Shell"
+version = "0.1.0"
+schema_version = 1
+carbon_api = ">=0.1, <0.2"
+description = "Bash and other shell script colours."
+authors = ["Carbon"]
+repository = "https://github.com/denizhoroz/carbon"
+categories = ["language"]
+
+[[languages]]
+id = "bash"
+name = "Shell Script"
+suffixes = ["sh", "bash", "zsh"]
+file_names = [".bashrc", ".bash_profile", ".profile", ".zshrc"]
+grammar = "bash"
+line_comment = "#"
+
+[[grammars]]
+name = "bash"
+wasm = "grammars/bash.wasm"
+highlights = "grammars/bash/highlights.scm"

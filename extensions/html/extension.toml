@@ -1,0 +1,21 @@
+id = "carbon.html"
+name = "HTML"
+version = "0.1.0"
+schema_version = 1
+carbon_api = ">=0.1, <0.2"
+description = "HTML colours."
+authors = ["Carbon"]
+repository = "https://github.com/denizhoroz/carbon"
+categories = ["language"]
+
+[[languages]]
+id = "html"
+name = "HTML"
+suffixes = ["html", "htm"]
+grammar = "html"
+
+[[grammars]]
+name = "html"
+wasm = "grammars/html.wasm"
+highlights = "grammars/html/highlights.scm"
+injections = "grammars/html/injections.scm"

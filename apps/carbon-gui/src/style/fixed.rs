@@ -51,7 +51,8 @@ pub const DIALOG_WIDTH: Pixels = px(480.);
 /// placeholder icon size.
 pub const MANAGE_WIDTH: Pixels = px(720.);
 pub const MANAGE_BODY_HEIGHT: Pixels = px(420.);
-pub const MANAGE_EMPTY_ICON_SIZE: Pixels = px(28.);
+/// Icon of an extension in Manage Extensions and the install dialog.
+pub const EXTENSION_ICON_SIZE: Pixels = px(20.);
 
 /// Settings dialog: share of the window and limits of its size, the category
 /// tree's width, padding of the top bar and of setting rows, the gap between a

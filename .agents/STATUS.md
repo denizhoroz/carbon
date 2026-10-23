@@ -2,11 +2,11 @@
 
 Living tracker for Carbon. Update it at the end of each work session. Newest entries first in logs. Scope lives in `FEATURE.md`, decisions and open questions in `PROJECT.md`, evidence in `RESEARCH.md`.
 
-**Last updated:** 2026-10-22
+**Last updated:** 2026-10-23
 
 ## Current focus
 
-Core panels work on Windows (shell, layout, Explorer, editor with rust-analyzer, terminal, command palette, chat GUI with a demo agent). Settings dialog built (2026-10-22). Next: a real chat backend (ACP/API), Manage Extensions contents (workflows are extensions since 2026-10-22), paradigm editor research, then macOS/Linux builds and CI.
+Core panels work on Windows (shell, layout, Explorer, editor, terminal, command palette, chat GUI with a demo agent). Settings dialog built (2026-10-22). Extension system built (2026-10-23): languages, grammars, language servers and themes are extensions now. Next: publish the official signed catalog, a real chat backend (ACP/API), paradigm editor research, then macOS/Linux builds and CI.
 
 ## Progress
 
@@ -30,7 +30,7 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 | 3 Agents tab | [~] | Chat panel v1 GUI with demo agent (`project/built/chat.md`); no real backend, sessions or approvals yet |
 | 4 Multi-platform (Win/macOS/Linux) | [ ] | |
 | 5 Lightweight | [ ] | Design focus, not first priority |
-| 6 Modular extension sections | [ ] | |
+| 6 Modular extension sections | [~] | Extension system built (`project/built/extensions.md`); official catalog not published |
 
 ### Infrastructure
 - [x] Rust workspace scaffold (`apps/carbon-core` lib + `apps/carbon-gui` bin)
@@ -41,8 +41,8 @@ Legend: `[x]` done, `[~]` in progress, `[ ]` not started, `[!]` blocked.
 - [ ] CI for all three platforms
 
 ## Next steps
-1. Real backend behind `ChatBackend` (ACP or an API); `@` mentions; chat list.
-2. Language-tool install model and Manage Extensions contents (`documents/language-tools.md`).
+1. Publish the official extension catalog (user's minisign key) and make it the default; more language extensions.
+2. Real backend behind `ChatBackend` (ACP or an API); `@` mentions; chat list.
 3. Paradigm editor research pass (pillar 2).
 4. Build and test on macOS and Linux; CI for all three platforms.
 5. Answer remaining open questions in `PROJECT.md` (v1 scope, licence stance, CRDT); check unverified items in `project/ui/ui-framework.md` (IME, screen readers, multi-window docking).
@@ -53,6 +53,7 @@ Format: date | decision | reason | where recorded.
 
 | Date | Decision | Reason | Ref |
 |---|---|---|---|
+| 2026-10-23 | Extension system: WASM (wasmtime 36, shared with tree-sitter WASM grammars), versioned WIT, capability grants; UI = declarative views + webview pages; all grammars and language servers in extensions, official ones in `extensions/`, downloaded on demand; tool binaries PATH first else download; base keeps Terminal, Chat, Git markers, LSP client; own signed catalog + folder/zip/git, Open VSX deferred; install code reused from `feature/workflow` | user decisions after comparing VS Code, Zed, JetBrains, Sublime, Obsidian, Figma, Neovim, Helix, Zellij, Lapce | `documents/extensions.md`, `PROJECT.md` |
 | 2026-10-22 | Settings menu: modal dialog; search bar on top, category tree on the left, one long scroll on the right; search filters (matches highlighted, tree narrowed with counts); scopes User + Workspace in v1. Own view on a typed registry, not the kit `Settings` component | user decision (layout, dialog, filter, scopes, scroll); registry, files and phases my design | `project/built/settings.md`, `DESIGN.md` Settings |
 | 2026-10-22 | Explorer section on `main`: the left dock is fixed (Explorer unclosable, nothing out or in, rearrange/split inside, collapsible); sealed: only the Explorer until extensions add section tabs; Explorer always drawn as a tab; kit patches gpui-base 4 / gpui-component 7 taken from `feature/workflow` | user decision (rules from the branch; "sealed, extensions later") | `project/built/panel-layout.md` s8 |
 | 2026-10-22 | Appearance rework: Section Bar and sections removed (one layout; old `layout.json` migrated); command center (search box opening the palette) centered in the title bar; app menu button (three lines) at the status bar's right end (user correction: "activity bar" meant the status bar) with Extensions, Settings, Command Palette; File > Preferences; Manage Workflows removed | user decision; box text, sizes and menu contents my design | `project/built/title-bar-menu.md`, `project/archived/section-bar.md` |
@@ -92,6 +93,26 @@ Template:
 - Fix: what worked
 - Prevention: check or test added, if any
 ```
+
+### 2026-10-23 UI text shrinks after extensions change
+- Symptom: after turning an extension on or off, all interface text is smaller (14 px instead of the 16 px setting)
+- Context: `extensions::reload` -> `style::theme::reload_themes` -> `ThemeRegistry::set_custom_themes`
+- Cause (verified, logged): the kit observes `ThemeRegistry` and calls `Theme::change`, which re-applies the theme file (`"font.size": 14`); on a reload Carbon's settings observer ran first and the kit's last
+- Fix: `style::theme::init` also observes `ThemeRegistry` (registered after the kit's), so Carbon's sizes are applied last
+- Prevention: comment at the observer
+
+### 2026-10-23 Stack overflow opening a file with a WASM grammar
+- Symptom: `thread 'main' has overflowed its stack` when a `.rs` file opens (debug build)
+- Context: the kit builds highlighters and parses on the main thread; the grammar is a WASM module (tree-sitter `wasm`, wasmtime)
+- Cause (suspected, fixed by the change): Windows gives the main thread 1 MB; wasmtime's compiler and WASM execution use the caller's stack
+- Fix: `apps/carbon-gui/build.rs` links with `/STACK:8388608` (Zed does the same); grammars compile on their own 16 MB-stack thread
+- Prevention: comments in `build.rs` and `extensions/grammars.rs`
+
+### 2026-10-23 Linker out of memory in `cargo test --workspace`
+- Symptom: `LNK1102` (out of memory), rustc `STATUS_STACK_BUFFER_OVERRUN`, "crate required to be available in rlib format"
+- Context: many test binaries, each linking wasmtime, gix, reqwest, in parallel
+- Fix: `cargo test --workspace -j 4`
+- Prevention: noted in `project/built/extensions.md`
 
 ### 2026-10-17 Explorer buttons do nothing after a menu or dialog closes
 - Symptom: clicking Open/Create Folder in the Explorer has no effect; no error
@@ -144,6 +165,12 @@ Template:
 
 ## Session log
 Newest first. One short entry per session: what was done, what is next.
+
+### 2026-10-23 (extension system)
+- Done: research (VS Code, Zed, JetBrains, Sublime, Obsidian, Figma, Neovim, Helix, Zellij, Lapce; WASM / JS / process / dylib runtimes; `documents/extensions.md`) and user decisions (WASM, views + webviews, reuse the branch's install code, PATH-first downloads, WASM grammars, download on demand, Open VSX deferred, official extensions in `extensions/`). Core `extension/` (manifest, registry, install/catalog/git/package/capability/requires/state ported from `feature/workflow`, tools download, wasmtime 36 host + WIT `carbon:extension@0.1.0`), LSP table from extensions, `carbon-extension-api` SDK + example; GUI glue (grammars into the kit, themes, settings, servers, download prompt, code calls, Manage Extensions, install/catalog dialogs, suggestions, extension panels, Explorer-section tabs, menu/palette commands, webview port behind a feature); 12 grammars and Gruvbox moved to `extensions/`. Kit patches gpui-component 8, 9. 167 tests + ignored ones by hand, clippy, fmt; click-tested (`project/built/extensions.md`).
+- Spike (measured): WASM grammar full parse 1.55x native, reparse ~same, compile 23 ms.
+- Fixed while testing: stack overflow opening a `.rs` file (Windows main thread 1 MB; WASM grammar compile and parse: 8 MB main stack in `build.rs`, compile on a 16 MB thread); UI text shrank after an extension reload (the kit's registry observer re-applied the theme file's `font.size` after Carbon's: Carbon now also observes the registry, registered later); the linker ran out of memory with many test binaries in parallel (`-j 4`).
+- Next: publish the official catalog; more language extensions (Python, TypeScript servers); decide the `webview` feature default.
 
 ### 2026-10-22 (Settings dialog)
 - Done: research (VS Code, Zed, JetBrains, kit `Settings`), user decisions (modal dialog, top search that filters, category tree, one long scroll, User + Workspace). Core `settings/` (typed registry, user + workspace JSONC files with comment-keeping edits, resolution, search with `@modified` / `@id:` / `@ext:`); gui `settings.rs` (global, 1 s file poll, JSON file opening) + `settings/{view,row,tree}.rs`; 13 settings wired live (theme, UI text size, code font, tab size, wrap, line numbers, indent guides, whitespace, confirm delete); `style/settings.json` removed (theme choice moved to the user file); Ctrl+, opens it. Clippy, fmt, 36 GUI tests + core settings tests; click-tested (`project/built/settings.md` s6).

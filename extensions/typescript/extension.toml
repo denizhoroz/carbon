@@ -1,0 +1,36 @@
+id = "carbon.typescript"
+name = "TypeScript"
+version = "0.1.0"
+schema_version = 1
+carbon_api = ">=0.1, <0.2"
+description = "TypeScript and TSX colours."
+authors = ["Carbon"]
+repository = "https://github.com/denizhoroz/carbon"
+categories = ["language"]
+
+[[languages]]
+id = "typescript"
+name = "TypeScript"
+suffixes = ["ts", "mts", "cts"]
+grammar = "typescript"
+line_comment = "//"
+
+[[languages]]
+id = "tsx"
+name = "TSX"
+suffixes = ["tsx"]
+grammar = "tsx"
+line_comment = "//"
+
+[[grammars]]
+name = "typescript"
+wasm = "grammars/typescript.wasm"
+highlights = "grammars/typescript/highlights.scm"
+injections = "grammars/typescript/injections.scm"
+locals = "grammars/typescript/locals.scm"
+
+[[grammars]]
+name = "tsx"
+wasm = "grammars/tsx.wasm"
+highlights = "grammars/tsx/highlights.scm"
+locals = "grammars/tsx/locals.scm"

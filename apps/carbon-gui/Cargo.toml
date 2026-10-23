@@ -10,3 +10,13 @@ serde.workspace = true
 serde_json.workspace = true
 async-channel.workspace = true
 anyhow.workspace = true
+tree-sitter.workspace = true
+semver.workspace = true
+dunce.workspace = true
+gpui-wry = { workspace = true, optional = true }
+wry = { workspace = true, optional = true }
+
+[features]
+# Extension panels that show a web page from their package. Experimental: the page is
+# a native window above GPUI, and on Windows GPUI then draws without DirectComposition.
+webview = ["dep:gpui-wry", "dep:wry"]

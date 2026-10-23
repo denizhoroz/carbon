@@ -8,7 +8,7 @@
 //! the platform's text input instead, so IME and AltGr work.
 
 mod colors;
-mod input;
+pub(crate) mod input;
 mod view;
 
 use std::cell::Cell;

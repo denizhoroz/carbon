@@ -8,6 +8,7 @@ mod agent;
 mod buffer;
 pub mod chat;
 mod error;
+pub mod extension;
 mod file_index;
 mod file_ops;
 mod file_tree;
@@ -105,7 +106,7 @@ impl Core {
         self.git = None;
         self.marks.clear();
         self.history.clear();
-        self.lsp = lsp::LspStore::default();
+        self.lsp.reset();
         self.files_generation += 1;
         Ok(self.workspace.insert(workspace))
     }
@@ -125,7 +126,7 @@ impl Core {
         self.git = None;
         self.marks.clear();
         self.history.clear();
-        self.lsp = lsp::LspStore::default();
+        self.lsp.reset();
         self.files_generation += 1;
     }
 

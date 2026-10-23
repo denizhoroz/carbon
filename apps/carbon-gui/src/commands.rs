@@ -23,7 +23,7 @@ pub struct CommandSpec {
     /// Heading on an empty query: the top-level menu or the extras' group.
     pub group: SharedString,
     /// Extra search terms (synonyms), never shown.
-    pub keywords: &'static [&'static str],
+    pub keywords: Vec<SharedString>,
     pub icon: Option<IconName>,
     pub action: Box<dyn Action>,
     /// A menu check mark (auto-hide on).
@@ -37,7 +37,7 @@ impl Clone for CommandSpec {
             id: self.id.clone(),
             label: self.label.clone(),
             group: self.group.clone(),
-            keywords: self.keywords,
+            keywords: self.keywords.clone(),
             icon: self.icon,
             action: self.action.boxed_clone(),
             checked: self.checked,
@@ -53,7 +53,7 @@ impl CommandSpec {
             id: format!("{}|{label}", action.name()).into(),
             label,
             group: SharedString::from(group.to_string()),
-            keywords: &[],
+            keywords: Vec::new(),
             icon: None,
             action,
             checked: false,
@@ -69,6 +69,16 @@ impl CommandSpec {
 pub fn all(state: &MenuState) -> Vec<CommandSpec> {
     let mut commands = from_menus(menus::app_menus(state));
     commands.extend(extras());
+    // Extension commands no menu shows.
+    for (group, title, keywords, key) in &state.extension_commands {
+        if state.extension_items.iter().any(|item| &item.key == key) {
+            continue;
+        }
+        let action = Box::new(menus::RunExtensionCommand { key: key.clone() });
+        let mut spec = CommandSpec::new(group, format!("{group}: {title}"), action);
+        spec.keywords = keywords.clone();
+        commands.push(spec);
+    }
     commands
 }
 
@@ -272,7 +282,10 @@ fn decorate(spec: &mut CommandSpec) {
         _ => (None, &[]),
     };
     spec.icon = icon;
-    spec.keywords = keywords;
+    spec.keywords = keywords
+        .iter()
+        .map(|word| SharedString::new_static(word))
+        .collect();
 }
 
 fn side_icon(label: &str) -> IconName {
@@ -301,6 +314,7 @@ mod tests {
             has_workspace: true,
             saved: vec!["Mine".into(), "Review".into()],
             auto_hide: vec![Side::Left],
+            ..MenuState::default()
         }
     }
 

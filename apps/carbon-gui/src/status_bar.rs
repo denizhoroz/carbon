@@ -91,21 +91,47 @@ fn workspace_button(name: SharedString, has_workspace: bool, cx: &App) -> impl I
         })
 }
 
-/// One language server: its name and state; hover for details.
-fn language_server(ix: usize, entry: &ServerEntry, cx: &App) -> impl IntoElement {
-    let name = entry.config.name;
+/// One language server: its name and state; hover for details. A missing
+/// server its extension can download offers that on click.
+fn language_server(
+    ix: usize,
+    entry: &ServerEntry,
+    core: &Entity<Core>,
+    cx: &App,
+) -> impl IntoElement {
+    let name = entry.config.name.clone();
+    let download = match (&entry.status, &entry.config.download) {
+        (LspStatus::Missing(_), Some(download)) => Some(download),
+        _ => None,
+    };
     let (text, tooltip): (String, Option<String>) = match &entry.status {
         LspStatus::Starting => (format!("{name}: starting"), None),
         LspStatus::Busy(work) => (format!("{name}: {work}"), None),
         LspStatus::Ready => (name.to_string(), None),
-        LspStatus::Missing(hint) => (format!("{name}: not installed"), Some(hint.clone())),
+        LspStatus::Missing(hint) => match download {
+            Some(download) => (
+                format!("{name}: not installed"),
+                Some(format!(
+                    "{hint}
+Click to download version {} from {}.",
+                    download.version, download.host
+                )),
+            ),
+            None => (format!("{name}: not installed"), Some(hint.clone())),
+        },
         LspStatus::Failed(error) => (format!("{name}: stopped"), Some(error.clone())),
     };
-    let button =
+    let mut button =
         Button::new(("status-lsp", ix))
             .ghost()
             .xsmall()
             .child(item(IconName::Code, text, cx));
+    if download.is_some() {
+        let (core, language) = (core.clone(), entry.config.language.clone());
+        button = button.on_click(move |_, window, cx| {
+            crate::extensions::ask_download(core.clone(), language.clone(), window, cx)
+        });
+    }
     match tooltip {
         Some(tooltip) => button.tooltip(tooltip),
         None => button,
@@ -162,9 +188,9 @@ impl Render for CarbonStatusBar {
         }
         bar = bar.left(item(IconName::ListChecks, jobs, cx));
         let mut servers: Vec<_> = core.lsp.entries().collect();
-        servers.sort_by_key(|entry| entry.config.name);
+        servers.sort_by(|a, b| a.config.name.cmp(&b.config.name));
         for (ix, entry) in servers.into_iter().enumerate() {
-            bar = bar.right(language_server(ix, entry, cx));
+            bar = bar.right(language_server(ix, entry, &self.core, cx));
         }
         bar.right(app_menu_button())
     }

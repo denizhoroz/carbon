@@ -9,7 +9,31 @@ use std::task::{Context, Poll, Wake, Waker};
 use std::time::{Duration, Instant};
 
 use carbon_core::Core;
-use carbon_core::lsp::{self, LspStatus, lsp_types};
+use carbon_core::lsp::{self, LanguageRule, LspStatus, ServerConfig, ServerTable, lsp_types};
+
+/// The table the Rust extension would give: `.rs` files, rust-analyzer.
+fn rust_table() -> ServerTable {
+    ServerTable {
+        languages: vec![LanguageRule {
+            language: "rust".into(),
+            suffixes: vec!["rs".into()],
+            file_names: Vec::new(),
+        }],
+        servers: vec![Arc::new(ServerConfig {
+            language: "rust".into(),
+            name: "rust-analyzer".into(),
+            command: "rust-analyzer".into(),
+            args: Vec::new(),
+            env: Default::default(),
+            install_hint: "rustup component add rust-analyzer".into(),
+            extension: "carbon.rust".into(),
+            server_id: "rust-analyzer".into(),
+            program: None,
+            downloaded: None,
+            download: None,
+        })],
+    }
+}
 
 /// Runs a future to completion on this thread.
 fn block_on<F: Future>(future: F) -> F::Output {
@@ -47,10 +71,11 @@ fn rust_analyzer_publishes_a_type_error() {
     .unwrap();
 
     let mut core = Core::new();
+    core.lsp.set_table(rust_table());
     core.open_workspace(dir.path()).unwrap();
     let root = core.workspace().unwrap().root().to_path_buf();
     let main = root.join("src").join("main.rs");
-    let config = lsp::server_config(&main).expect("rust has a server");
+    let config = core.lsp.server_for_path(&main).expect("rust has a server");
     let server = core.lsp.start(config, &root).expect("rust-analyzer starts");
     let result = block_on(lsp::initialize(server.clone(), &root)).unwrap();
     assert!(result.capabilities.hover_provider.is_some());
@@ -100,11 +125,34 @@ fn positions_count_utf16_units() {
 }
 
 #[test]
-fn rust_files_get_rust_analyzer() {
+fn files_get_the_server_of_their_language() {
     use std::path::Path;
+    let table = rust_table();
     assert_eq!(
-        lsp::server_config(Path::new("src/MAIN.RS")).unwrap().name,
+        table.language_for_path(Path::new("src/MAIN.RS")),
+        Some("rust")
+    );
+    assert_eq!(
+        table
+            .server_for_path(Path::new("src/main.rs"))
+            .unwrap()
+            .name,
         "rust-analyzer"
     );
-    assert!(lsp::server_config(Path::new("notes.txt")).is_none());
+    assert!(table.server_for_path(Path::new("notes.txt")).is_none());
+    assert!(
+        ServerTable::default()
+            .server_for_path(Path::new("a.rs"))
+            .is_none()
+    );
+
+    // The table survives opening a folder; a changed table drops servers
+    // whose config changed.
+    let mut core = Core::new();
+    core.lsp.set_table(table.clone());
+    let dir = tempfile::tempdir().unwrap();
+    core.open_workspace(dir.path()).unwrap();
+    assert_eq!(core.lsp.table(), &table);
+    core.lsp.set_table(ServerTable::default());
+    assert!(core.lsp.server_for_path(Path::new("a.rs")).is_none());
 }

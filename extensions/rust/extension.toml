@@ -1,0 +1,69 @@
+id = "carbon.rust"
+name = "Rust"
+version = "0.1.0"
+schema_version = 1
+carbon_api = ">=0.1, <0.2"
+description = "Rust colours and the rust-analyzer language server."
+authors = ["Carbon"]
+repository = "https://github.com/denizhoroz/carbon"
+categories = ["language"]
+capabilities = ["process.exec:rust-analyzer", "net:github.com"]
+
+[[languages]]
+id = "rust"
+name = "Rust"
+suffixes = ["rs"]
+grammar = "rust"
+line_comment = "//"
+
+[[grammars]]
+name = "rust"
+wasm = "grammars/rust.wasm"
+highlights = "grammars/rust/highlights.scm"
+injections = "grammars/rust/injections.scm"
+
+[[language_servers]]
+id = "rust-analyzer"
+name = "rust-analyzer"
+languages = ["rust"]
+command = "rust-analyzer"
+install_hint = "rustup component add rust-analyzer"
+
+# Used when rust-analyzer is not on PATH (rustup's copy is), after the user agrees.
+[language_servers.download.windows-x64]
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-10-19/rust-analyzer-x86_64-pc-windows-msvc.zip"
+sha256 = "7df6e1a2595d1906e8441cb83fd58170b47d32eb09bc52c1b2184538cfd49a71"
+version = "2026-10-19"
+archive = "zip"
+bin = "rust-analyzer.exe"
+
+[language_servers.download.windows-arm64]
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-10-19/rust-analyzer-aarch64-pc-windows-msvc.zip"
+sha256 = "dc2b6c35e2be0bf13f4ae2a6c69adca5730c91d011bfac31371279a4e55bcb2b"
+version = "2026-10-19"
+archive = "zip"
+bin = "rust-analyzer.exe"
+
+[language_servers.download.macos-x64]
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-10-19/rust-analyzer-x86_64-apple-darwin.gz"
+sha256 = "bdfd46e82731a8d3502d852d28b6462c1f1c13eed0b3e76bbcf1ba839028249c"
+version = "2026-10-19"
+archive = "gz"
+
+[language_servers.download.macos-arm64]
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-10-19/rust-analyzer-aarch64-apple-darwin.gz"
+sha256 = "eedad08a96f7bf92afd0890463787337d17591ea2e3df216033c6bc3ccc9d802"
+version = "2026-10-19"
+archive = "gz"
+
+[language_servers.download.linux-x64]
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-10-19/rust-analyzer-x86_64-unknown-linux-gnu.gz"
+sha256 = "8fde1c9dae81459f98e99eedae3654846a9166abea686306c26e57773be558da"
+version = "2026-10-19"
+archive = "gz"
+
+[language_servers.download.linux-arm64]
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-10-19/rust-analyzer-aarch64-unknown-linux-gnu.gz"
+sha256 = "d31ee384ab788b9abd8e7aa8e1322f23e6cd4310471d373e9a79ce4656e21896"
+version = "2026-10-19"
+archive = "gz"

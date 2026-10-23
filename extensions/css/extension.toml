@@ -1,0 +1,20 @@
+id = "carbon.css"
+name = "CSS"
+version = "0.1.0"
+schema_version = 1
+carbon_api = ">=0.1, <0.2"
+description = "CSS colours."
+authors = ["Carbon"]
+repository = "https://github.com/denizhoroz/carbon"
+categories = ["language"]
+
+[[languages]]
+id = "css"
+name = "CSS"
+suffixes = ["css", "scss"]
+grammar = "css"
+
+[[grammars]]
+name = "css"
+wasm = "grammars/css.wasm"
+highlights = "grammars/css/highlights.scm"

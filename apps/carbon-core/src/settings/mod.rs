@@ -313,6 +313,18 @@ impl Settings {
         }
     }
 
+    /// Keeps only the declarations `keep` accepts (an extension was turned
+    /// off: its settings go). Values in the files stay untouched.
+    pub fn retain(&mut self, keep: impl Fn(&Setting) -> bool) {
+        self.definitions.retain(|setting| keep(setting));
+        self.index = self
+            .definitions
+            .iter()
+            .enumerate()
+            .map(|(ix, setting)| (setting.key.clone(), ix))
+            .collect();
+    }
+
     /// Replaces the options of a `Choice` setting (lists known only at run
     /// time, like installed themes).
     pub fn set_choices(&mut self, key: &str, choices: Vec<Choice>) {

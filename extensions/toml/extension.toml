@@ -1,0 +1,22 @@
+id = "carbon.toml"
+name = "TOML"
+version = "0.1.0"
+schema_version = 1
+carbon_api = ">=0.1, <0.2"
+description = "TOML colours."
+authors = ["Carbon"]
+repository = "https://github.com/denizhoroz/carbon"
+categories = ["language"]
+
+[[languages]]
+id = "toml"
+name = "TOML"
+suffixes = ["toml"]
+file_names = ["Cargo.lock", "uv.lock", "poetry.lock"]
+grammar = "toml"
+line_comment = "#"
+
+[[grammars]]
+name = "toml"
+wasm = "grammars/toml.wasm"
+highlights = "grammars/toml/highlights.scm"

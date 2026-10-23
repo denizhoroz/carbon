@@ -3,19 +3,58 @@
 //! executor: initializing a new server, then reading its notifications
 //! (diagnostics, progress) until it stops.
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 
 use carbon_core::Core;
-use carbon_core::lsp::{self, LanguageServer, LspStatus, ServerNotification, lsp_types};
+use carbon_core::lsp::{
+    self, LanguageServer, LspStatus, ServerConfig, ServerNotification, lsp_types,
+};
 use gpui_kit::*;
 
+/// Languages whose server command is being asked of extension code.
+#[derive(Default)]
+struct Asking(HashSet<String>);
+
+impl Global for Asking {}
+
 /// Starts the server for `path`'s language unless the workspace has one
-/// (or tried to start one) already.
+/// (or tried to start one) already. When the server's extension has code,
+/// the code may give the command first (`language-server-command`).
 pub fn ensure_started(core: &Entity<Core>, path: &Path, cx: &mut App) {
-    let Some(config) = lsp::server_config(path) else {
+    let Some(config) = core.read(cx).lsp.server_for_path(path) else {
         return;
     };
+    if core.read(cx).lsp.entry(&config.language).is_some() {
+        return;
+    }
+    if !crate::extensions::has_code(&config.extension, cx) {
+        start(core, config, cx);
+        return;
+    }
+    if !cx
+        .default_global::<Asking>()
+        .0
+        .insert(config.language.clone())
+    {
+        return;
+    }
+    let task = crate::extensions::language_server_command(&config, cx);
+    let core = core.clone();
+    cx.spawn(async move |cx| {
+        let config = task.await;
+        cx.update(|cx| {
+            cx.default_global::<Asking>().0.remove(&config.language);
+            start(&core, config, cx);
+        });
+    })
+    .detach();
+}
+
+/// Starts `config`'s server in the open folder and follows it.
+fn start(core: &Entity<Core>, config: Arc<ServerConfig>, cx: &mut App) {
+    let language = config.language.clone();
     let started = core.update(cx, |core, cx| {
         let root = core.workspace()?.root().to_path_buf();
         let server = core.lsp.start(config, &root);
@@ -25,24 +64,23 @@ pub fn ensure_started(core: &Entity<Core>, path: &Path, cx: &mut App) {
     let Some((server, root)) = started else {
         return;
     };
-    let language = config.language;
-    follow(core.downgrade(), language, &server, cx);
+    follow(core.downgrade(), language.clone(), &server, cx);
 
     let core = core.downgrade();
     let initialize = lsp::initialize(server.clone(), &root);
     cx.spawn(async move |cx| {
         let result = initialize.await;
         _ = core.update(cx, |core, cx| {
-            if !is_current(core, language, &server) {
+            if !is_current(core, &language, &server) {
                 return;
             }
             match result {
                 Ok(_) => {
-                    core.lsp.set_status(language, LspStatus::Ready);
+                    core.lsp.set_status(&language, LspStatus::Ready);
                     core.lsp_open_buffers();
                 }
                 Err(err) => core.lsp.set_status(
-                    language,
+                    &language,
                     LspStatus::Failed(failure(&err.to_string(), &server)),
                 ),
             }
@@ -70,18 +108,13 @@ fn failure(error: &str, server: &LanguageServer) -> String {
 
 /// Reads the server's notifications until it stops. Holds no strong
 /// reference, so closing the workspace stops the server and ends this.
-fn follow(
-    core: WeakEntity<Core>,
-    language: &'static str,
-    server: &Arc<LanguageServer>,
-    cx: &mut App,
-) {
+fn follow(core: WeakEntity<Core>, language: String, server: &Arc<LanguageServer>, cx: &mut App) {
     let notifications = server.notifications();
     let server = Arc::downgrade(server);
     cx.spawn(async move |cx| {
         while let Ok(message) = notifications.recv().await {
             if core
-                .update(cx, |core, cx| handle(core, language, message, cx))
+                .update(cx, |core, cx| handle(core, &language, message, cx))
                 .is_err()
             {
                 return;
@@ -92,9 +125,9 @@ fn follow(
             return;
         };
         _ = core.update(cx, |core, cx| {
-            if is_current(core, language, &server) {
+            if is_current(core, &language, &server) {
                 core.lsp
-                    .set_status(language, LspStatus::Failed(failure("stopped", &server)));
+                    .set_status(&language, LspStatus::Failed(failure("stopped", &server)));
                 cx.notify();
             }
         });

@@ -7,7 +7,6 @@
 //! editor. The panel is the only place that knows about the kit editor, so the
 //! view can be replaced without touching the core.
 
-mod language;
 mod lsp;
 
 use std::path::{Path, PathBuf};
@@ -115,6 +114,16 @@ pub struct EditorPanel {
     discard: bool,
     _core_sub: Subscription,
     _settings_sub: Subscription,
+    /// Extensions changed: colours and the language server follow.
+    _extensions_sub: Subscription,
+}
+
+/// The highlighting language for a file (plain text without a path).
+fn language_for(path: Option<&Path>, cx: &App) -> SharedString {
+    match path {
+        Some(path) => crate::extensions::highlight_language(&crate::extensions::registry(cx), path),
+        None => crate::extensions::PLAIN.into(),
+    }
 }
 
 /// The open buffer and the kit editor showing it.
@@ -145,6 +154,9 @@ impl EditorPanel {
             _core_sub: cx.observe(&core, |_, _, cx| cx.notify()),
             // Render re-applies the editor options when they changed.
             _settings_sub: cx.observe_global::<crate::settings::AppSettings>(|_, cx| cx.notify()),
+            _extensions_sub: cx.observe_global::<crate::extensions::Extensions>(
+                |this: &mut Self, cx| this.path_changed(cx),
+            ),
             core,
             focus_handle: cx.focus_handle(),
             doc: None,
@@ -207,10 +219,7 @@ impl EditorPanel {
         let text = buffer.text();
         let revision = buffer.revision();
         let path = buffer.path().map(Path::to_path_buf);
-        let language = path
-            .as_deref()
-            .map(language::for_path)
-            .unwrap_or(language::PLAIN);
+        let language = language_for(path.as_deref(), cx);
         // Files outside the folder (a library a definition led to) are for
         // reading only; the user settings file is not.
         let readonly = match (&path, core.workspace()) {
@@ -231,6 +240,9 @@ impl EditorPanel {
         });
         state.update(cx, |state, cx| state.set_value(text, window, cx));
         self.attach_language(&state, id, path.as_deref(), cx);
+        if let Some(path) = &path {
+            crate::extensions::suggest(path, window, cx);
+        }
         let _events = cx.subscribe_in(&state, window, Self::on_editor_event);
         self.doc = Some(Doc {
             buffer: id,
@@ -255,7 +267,7 @@ impl EditorPanel {
         path: Option<&Path>,
         cx: &mut App,
     ) {
-        let path = path.filter(|path| core_lsp::server_config(path).is_some());
+        let path = path.filter(|path| self.core.read(cx).lsp.server_for_path(path).is_some());
         let hooks = path.map(|_| lsp::LspHooks::new(self.core.clone(), id));
         let uri = path.map(core_lsp::path_to_uri);
         state.update(cx, |state, _| {
@@ -285,10 +297,7 @@ impl EditorPanel {
             return;
         };
         let (state, id, path) = (doc.state.clone(), doc.buffer, doc.path.clone());
-        let language = path
-            .as_deref()
-            .map(language::for_path)
-            .unwrap_or(language::PLAIN);
+        let language = language_for(path.as_deref(), cx);
         state.update(cx, |state, cx| state.set_highlighter(language, cx));
         self.attach_language(&state, id, path.as_deref(), cx);
     }
