@@ -2,3 +2,4 @@
 # Official extensions: own repo (github.com/denizhoroz/carbon-extensions-basic);
 # a local checkout here is used by tests and dev links.
 /carbon-extensions-basic
+/carbon-extensions-agents
