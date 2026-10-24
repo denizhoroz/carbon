@@ -4,27 +4,7 @@ name: New agent flow
 nodes:
   start:
     type: start
-  agent:
-    type: agent
-    title: Builder
-    config:
-      agent: claude-code
-      prompt: '{{input}}'
-      permissions: ask
-  agent-2:
-    type: agent
-    title: Reviewer
-    config:
-      agent: claude-code
-      prompt: '{{input}}'
-      permissions: ask
-edges:
-- id: e1
-  from: start.out
-  to: agent.in
-- id: e2
-  from: agent.out
-  to: agent-2.in
+edges: []
 layout:
   viewport:
     x: -510.0
@@ -32,11 +12,5 @@ layout:
     zoom: 1.0
   nodes:
     start:
-      x: -304.0
-      y: 128.0
-    agent:
-      x: -32.0
-      y: 128.0
-    agent-2:
-      x: 248.0
-      y: 144.0
+      x: -240.0
+      y: 96.0
