@@ -19,7 +19,7 @@ Built 2026-10-17. User request: build a text/code editor; compare what other edi
 | Close Folder / open another folder | Editor tabs stay open (intended, user 2026-10-17) |
 | Rename a file in the Explorer | Its tab follows; colours and language server follow the new extension |
 | Restart | Editor tabs come back (path saved in the layout). Tabs whose file is not in the open folder are dropped (layouts are not per folder yet); if none is left, the empty editor shows |
-| Syntax colours | tree-sitter for rust, toml, json, markdown, yaml, python, javascript, typescript, tsx, html, css, bash (+ c, cpp, go, sql, diff names mapped, grammars not compiled in); dark or light highlight theme follows the app mode |
+| Syntax colours | tree-sitter grammars from extensions (WASM, since 2026-10-23: `extensions.md`); the language comes from the extensions' `[[languages]]`; without one a file is plain text (JSON keeps the kit's grammar); dark or light highlight theme follows the app mode |
 | `.rs` file in a folder | rust-analyzer starts (status bar right: "rust-analyzer: starting", "rust-analyzer: <work>", "rust-analyzer"; "not installed" / "stopped" with the reason on hover) |
 | Errors and warnings | Squiggles in the editor (hover shows the message); Explorer problem markers (counts on files, dots on folders) now come from the server |
 | Hover a symbol | Server hover (signature, docs) |
@@ -42,7 +42,7 @@ Built 2026-10-17. User request: build a text/code editor; compare what other edi
 | Kit patches | `vendor/gpui-component/`, `vendor/gpui-base/` (each with `CARBON-PATCHES.md`), root `Cargo.toml` `[patch.crates-io]` | `Panel::always_tab_bar`, `Panel::request_close` (tab x and "..." Close), 30 px tabs, centered dialogs; gutter gap |
 | Status bar | `apps/carbon-gui/src/status_bar.rs` | Language server item on the right |
 | Theme | `apps/carbon-gui/src/style/theme.rs` | Kit default highlight theme for the mode when the theme file has no `highlight` section |
-| Deps | root `Cargo.toml` | gpui-kit tree-sitter grammar features (13 grammars, MIT); `lsp-types 0.97` (MIT, was in the lock); `anyhow` (MIT/Apache, was in the lock); ropey `metric_utf16` |
+| Deps | root `Cargo.toml` | gpui-kit `tree-sitter` (JSON only) + tree-sitter `wasm` (2026-10-23; the 12 grammar features removed); `lsp-types 0.97` (MIT, was in the lock); `anyhow` (MIT/Apache, was in the lock); ropey `metric_utf16` |
 
 ## Speed gate (release build, Windows, 2026-10-17)
 

@@ -143,18 +143,18 @@ Status: **Committed** (inherent to the pillar or already a decision in PROJECT.m
 
 | Sub-feature                                                                                                               | Catalog IDs                | Status                  |
 | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------- |
-| WASM extensions (WIT, versioned API) with user-granted capability grants                                                  | EX-06                      | Committed (PROJECT.md) |
+| WASM extensions (WIT, versioned API) with user-granted capability grants; wasmtime 36, WASM grammars, official extensions downloaded on demand (`documents/extensions.md`) | EX-06                      | Built 2026-10-23 (`project/built/extensions.md`); official catalog not published |
 | MCP servers / skills / hooks as native extension types                                                                    | EX-02, MS-01, MS-02, MS-04 | Committed               |
-| Custom editors/viewers and webview-like panels; MCP Apps (`ui://` sandboxed iframes)                                      | EX-05, EX-07, MS-03        | Proposed                |
+| Custom editors/viewers and webview-like panels; MCP Apps (`ui://` sandboxed iframes); extension UI = declarative views drawn by Carbon + webview pages | EX-05, EX-07, MS-03        | Committed (user 2026-10-23: views + webviews); MCP Apps proposed |
 | Viewer registry: file glob/MIME -> viewer (SVG, 3D model glTF, PDF, CSV, image) installable without rebuilding Carbon (?) | EX-05, DA-01               | Proposed (?)            |
-| Declarative VSIX tier (themes, grammars, snippets, keymaps), LSP/DAP launchers                                            | EX-01, EX-03               | Committed               |
-| Open VSX + own gallery, signed, no silent auto-update, allow-list                                                         | EX-08, EX-09               | Committed               |
+| Declarative VSIX tier (themes, grammars, snippets, keymaps), LSP/DAP launchers                                            | EX-01, EX-03               | Own manifest built (themes, grammars, LSP launchers; 2026-10-23); VSIX import, snippets, keymaps, DAP not built |
+| Open VSX + own gallery, signed, no silent auto-update, allow-list                                                         | EX-08, EX-09               | Committed; own signed catalog first, Open VSX deferred (user 2026-10-23) |
 | Optional VS Code extension host (phase 3+, no API parity)                                                                 | EX-04                      | Open                    |
 | Extension bisect / process isolation so one extension cannot stall all                                                    | PL-08                      | Proposed                |
 | Language tools (LSP, DAP, linters, formatters, compiler helpers) only via extensions; none preinstalled                   | LS-01, EX-03               | Committed (user 2026-10-19) |
-| How extensions get tool binaries: config only / download on demand, PATH first / bundled per platform (`documents/language-tools.md`) | LS-01, EX-06               | Open                    |
+| How extensions get tool binaries: PATH first, else download (per-platform asset, SHA-256, consent) (`documents/extensions.md`) | LS-01, EX-06               | Built 2026-10-23 |
 | Narrow-API escape hatch (MCP) because Zed has no custom panels                                                            | EX-07                      | Proposed                |
-| Manage Extensions dialog (status bar app menu since 2026-10-22; was Section Bar bottom): official + user-added extensions/plugins, VS Code-like (compilers, linters, appearances, ...) | EX-01, EX-03               | Committed (user 2026-10-19) |
+| Manage Extensions dialog (status bar app menu since 2026-10-22; was Section Bar bottom): official + user-added extensions/plugins, VS Code-like (compilers, linters, appearances, ...) | EX-01, EX-03               | Built 2026-10-23 (`project/built/extensions.md`) |
 | Workflows (= Section Bar sections): Code Editor now; Paradigm Editor, Agent Automation planned; users add custom-built workflows; Manage Workflows dialog adds/removes them | -                          | Dropped (user 2026-10-22): workflows are extensions; extensions contribute panels and Explorer-section tabs (`project/archived/workflow-system.md`) |
 | Manage Settings dialog (status bar app menu since 2026-10-22; was Section Bar bottom): every user option (system, appearance, agents, ...) | ST-01                      | Built 2026-10-22 (dialog, registry, User + Workspace; `project/built/settings.md`) |
 

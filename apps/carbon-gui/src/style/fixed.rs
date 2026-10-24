@@ -1,4 +1,4 @@
-//! Fixed styling choices: not part of any theme and not user-configurable.
+﻿//! Fixed styling choices: not part of any theme and not user-configurable.
 //! Colours, fonts and radii belong in theme JSON, not here.
 
 use std::time::Duration;
@@ -13,9 +13,9 @@ pub const LOGO_TEXT: &str = "C";
 pub const LOGO_SIZE: Rems = rems(1.25);
 pub const LOGO_WEIGHT: FontWeight = FontWeight::BOLD;
 
-/// Height of the title (menu) bar and the status bar: the editor tab bar's
-/// height (vendored kit tabs are 30 px), so the three bars line up.
-pub const BAR_HEIGHT: Pixels = px(30.);
+/// Height of the title (menu) bar and the status bar (user, 2026-10-23: a bit
+/// taller than the 30 px editor tab bar).
+pub const BAR_HEIGHT: Pixels = px(36.);
 
 /// Gap between items in the title bar row (logo, menu bar).
 pub const TITLE_BAR_GAP: Rems = rems(0.5);
@@ -47,11 +47,22 @@ pub const STATUS_ITEM_GAP: Rems = rems(0.25);
 /// Width of small dialogs (Create Folder).
 pub const DIALOG_WIDTH: Pixels = px(480.);
 
-/// Manage dialogs (Extensions, Settings): width, body height,
-/// placeholder icon size.
-pub const MANAGE_WIDTH: Pixels = px(720.);
-pub const MANAGE_BODY_HEIGHT: Pixels = px(420.);
-pub const MANAGE_EMPTY_ICON_SIZE: Pixels = px(28.);
+/// Manage Extensions is as big as Settings (`SETTINGS_*`); this is its
+/// title, tab row, footer and spacing, the rest is the list.
+pub const MANAGE_CHROME_HEIGHT: Pixels = px(148.);
+/// Icon of an extension in Manage Extensions and the install dialog.
+/// Top and bottom padding of an Extensions dialog row.
+pub const EXTENSION_ROW_PADDING: Pixels = px(6.);
+pub const EXTENSION_ICON_SIZE: Pixels = px(20.);
+
+/// Graph panels (`graph_panel.rs`): toolbar padding, the zoom label, the
+/// inspector beside the canvas, and port dots (graph units, scaled by zoom).
+pub const GRAPH_TOOLBAR_PADDING: Pixels = px(8.);
+pub const GRAPH_ZOOM_LABEL_WIDTH: Pixels = px(40.);
+pub const GRAPH_INSPECTOR_WIDTH: Pixels = px(300.);
+pub const GRAPH_INSPECTOR_PADDING: Pixels = px(12.);
+pub const GRAPH_INSPECTOR_GAP: Pixels = px(14.);
+pub const GRAPH_PORT_SIZE: f32 = 10.;
 
 /// Settings dialog: share of the window and limits of its size, the category
 /// tree's width, padding of the top bar and of setting rows, the gap between a

@@ -23,7 +23,7 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 - **UI: native desktop GUI with GPUI + gpui-kit (gpui-component, renamed at v0.6; decided by the user, 2026-10-16); webview excluded.** Depend on `gpui-kit` with an exact version (0.7.3 read) on crates.io `gpui-pre` `=0.3.9`, Rust 1.92+; API breaks every minor. Usage notes: `project/ui/ui-framework.md`; alternatives and risks: `documents/gui-framework.md` (API churn, accessibility, editor build cost).
 - **Protocol:** AHP-like state-first protocol (snapshot, ordered actions, replay); ACP for external agents; MCP (+ MCP Apps) for tools.
 - **Buffer:** rope + anchors, per-actor undo, agents as attributed edit peers; CRDT deferred.
-- **Extensions:** no full `vscode` API parity. Declarative VSIX and LSP/DAP launchers first, WASM (WIT, capability grants) + MCP native, Open VSX + own gallery, no Microsoft-only dependencies. **No preinstalled language tools** (servers, linters, formatters, compilers): users install them via Manage Extensions (user decision, 2026-10-19; `documents/language-tools.md`).
+- **Extensions:** no full `vscode` API parity. Declarative VSIX and LSP/DAP launchers first, WASM (WIT, capability grants) + MCP native, Open VSX + own gallery, no Microsoft-only dependencies. **No preinstalled language tools** (servers, linters, formatters, compilers): users install them via Manage Extensions (user decision, 2026-10-19; `documents/language-tools.md`). **Extension system (user decisions, 2026-10-23, `documents/extensions.md`):** WASM code extensions on wasmtime 36 (shared with tree-sitter's WASM grammars) with versioned WIT and user-granted capabilities; UI as declarative views drawn by Carbon plus webview pages; grammars as WASM in extensions (none compiled in); tool binaries PATH first, else downloaded (SHA-256, consent); official extensions in their own repo `github.com/denizhoroz/carbon-extensions-basic`, downloaded on demand (suggested on file open), nothing preinstalled; base keeps Terminal, Chat, Git markers, LSP client; sources: own signed catalog + folder/zip/git, Open VSX deferred; install code reused from branch `feature/workflow`.
 - **Safety defaults:** OS sandbox on, tiered approvals + classifier + hooks, side-effect-aware checkpoints, destructive-git guard.
 - **Defaults:** calm opt-out AI, telemetry off, live cost meter, VS Code settings/keymap/theme import, AccessKit from the first widget, write-ahead journal.
 - **Panel layout (user decision, 2026-10-16):** T1 (kit docking: drag/snap/split/resize/close/zoom/persist) + T2 (named layouts on hotkeys, task presets, keyboard move/resize, auto-hide) now; T3 (pop-out OS windows, top dock, guide diamond, float inside window) later. `project/built/panel-layout.md`.
@@ -37,7 +37,8 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 
 ## Open questions
 
-- Under the extension model (2026-10-22): whether Paradigm Editor and Agent Automation become first-party extensions and where they appear without sections (panels, editor-area tabs, app menu); how extensions add Explorer-section tabs. (Section Bar and Manage Workflows: removed.)
+- Agent Automation: decided 2026-10-24, the first-party **Agents** extension (`carbon-extensions-agents`; agent flowcharts over ACP on a native `graph` panel kind; `documents/agents.md`).
+- Under the extension model (2026-10-22): whether Paradigm Editor becomes a first-party extension and where they appear without sections (panels, editor-area tabs, app menu); how extensions add Explorer-section tabs. (Section Bar and Manage Workflows: removed.)
 
 - Paradigm editor (pillar 2) is unresearched: run a short follow-up on diagram/architecture tools (Excalidraw, tldraw, draw.io, Mermaid, PlantUML, Structurizr/C4, Lucidchart, Miro AI, Cursor/Claude canvases, VS Code Canvases): file format, AI integration, code round-trip, licences.
 - Still to verify on GPUI Kit (editor speed gate and terminal embed passed on Windows; see `project/built/`): accessibility (Narrator, VoiceOver, Orca), IME in the editor, macOS and Linux behaviour, RAM on all three OSes (published numbers conflict 2x-15x), docking across windows (panel layout T3).
@@ -45,12 +46,12 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 - How much of the PIM/agent-hub scope (email, calendar, notes, shared canvas) is in v1 vs IDE parity.
 - AHP/ACP wire-format maturity and licences; MCP Apps client support.
 - Licence stance for bundled components (AGPL: PyMuPDF, SearXNG, Firecrawl; ELv2: Phoenix).
-- How extensions get language-tool binaries: config only / download on demand, PATH first / bundled per platform; compilers detected or installed on request (`documents/language-tools.md` s3; user: decide later).
+- Compilers and toolchains: detected, or installed on request (`documents/language-tools.md` s3). (Language-tool binaries: decided 2026-10-23, PATH first else download.)
 - Full list of unverified items and benchmarks to run: RESEARCH.md section 8.
 
 ## Status
 
-Build phase (Oct 2026). Working on Windows: native shell on gpui-kit with title bar, menus, command center and app menu, docking layout, Explorer, code editor tabs with rust-analyzer, terminal, command palette, and a GUI-only chat panel (demo agent). Not built: real agent backend (ACP/MCP), paradigm editor, extension system, daemon split, debugging, whole-project search; macOS and Linux untested. What exists: `project/built/README.md`; what is left: `project/not_built/README.md`. Adoption scores, priorities and verdicts in `FEATURE.md`/`RESEARCH.md` are analyst inference, not user data. Live progress, decision log and error/solution log: `STATUS.md`.
+Build phase (Oct 2026). Working on Windows: native shell on gpui-kit with title bar, menus, command center and app menu, docking layout, Explorer, code editor tabs with rust-analyzer, terminal, command palette, and a GUI-only chat panel (demo agent). Extension system built 2026-10-23 (languages, grammars, language servers, themes and panels come from extensions; official catalog not published yet). Not built: real agent backend (ACP/MCP), paradigm editor, daemon split, debugging, whole-project search; macOS and Linux untested. What exists: `project/built/README.md`; what is left: `project/not_built/README.md`. Adoption scores, priorities and verdicts in `FEATURE.md`/`RESEARCH.md` are analyst inference, not user data. Live progress, decision log and error/solution log: `STATUS.md`.
 
 ## Docs map (`.agents/`)
 Routing for agents (which file for which task): `README.md`.
@@ -60,7 +61,7 @@ Routing for agents (which file for which task): `README.md`.
 | `PROJECT.md` | Overview, decisions, open questions | Start here |
 | `STATUS.md` | Progress tracker, decision log, error and solution log, session notes | What is done, what is next, known problems |
 | `DESIGN.md` | UI and interaction rulebook for Carbon (tokens, shell, pillar surfaces, components, agent UX, accessibility, budgets) | Before any UI build or fix |
-| `documents/` | Decision documents: `gui-framework.md` (native GUI comparison), `code-editor.md`, `terminal.md`, `language-tools.md` (how editors ship language servers, linters, compilers) | Why a technology was chosen; revisiting it |
+| `documents/` | Decision documents: `gui-framework.md` (native GUI comparison), `code-editor.md`, `terminal.md`, `language-tools.md` (how editors ship language servers, linters, compilers), `extensions.md` (extension systems compared, Carbon's choices) | Why a technology was chosen; revisiting it |
 | `project/built/` | One file per built feature + index (shell, theming, panel layout, Explorer, editor, terminal, command palette, chat, core) | What exists in code |
 | `project/not_built/` | Index of committed features not built yet (FEATURE.md IDs) | Picking the next feature |
 | `project/archived/` | Designs of dropped or removed features (`workflow-system.md`, `section-bar.md`; 2026-10-22) | Why something was dropped; what a shelved branch holds |

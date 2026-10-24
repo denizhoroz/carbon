@@ -24,6 +24,7 @@ pub struct CarbonStatusBar {
     core: Entity<Core>,
     branch: Option<Branch>,
     _core_sub: Subscription,
+    _host_sub: Subscription,
     _branch_poll: Task<()>,
 }
 
@@ -35,6 +36,9 @@ impl CarbonStatusBar {
             this.refresh_branch(cx);
             cx.notify();
         });
+        // Questions from extension runs and agents.
+        let _host_sub =
+            cx.observe_global::<crate::extensions::host::AgentsHost>(|_, cx| cx.notify());
         let _branch_poll = cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(BRANCH_POLL).await;
@@ -47,6 +51,7 @@ impl CarbonStatusBar {
             core,
             branch,
             _core_sub,
+            _host_sub,
             _branch_poll,
         }
     }
@@ -91,21 +96,47 @@ fn workspace_button(name: SharedString, has_workspace: bool, cx: &App) -> impl I
         })
 }
 
-/// One language server: its name and state; hover for details.
-fn language_server(ix: usize, entry: &ServerEntry, cx: &App) -> impl IntoElement {
-    let name = entry.config.name;
+/// One language server: its name and state; hover for details. A missing
+/// server its extension can download offers that on click.
+fn language_server(
+    ix: usize,
+    entry: &ServerEntry,
+    core: &Entity<Core>,
+    cx: &App,
+) -> impl IntoElement {
+    let name = entry.config.name.clone();
+    let download = match (&entry.status, &entry.config.download) {
+        (LspStatus::Missing(_), Some(download)) => Some(download),
+        _ => None,
+    };
     let (text, tooltip): (String, Option<String>) = match &entry.status {
         LspStatus::Starting => (format!("{name}: starting"), None),
         LspStatus::Busy(work) => (format!("{name}: {work}"), None),
         LspStatus::Ready => (name.to_string(), None),
-        LspStatus::Missing(hint) => (format!("{name}: not installed"), Some(hint.clone())),
+        LspStatus::Missing(hint) => match download {
+            Some(download) => (
+                format!("{name}: not installed"),
+                Some(format!(
+                    "{hint}
+Click to download version {} from {}.",
+                    download.version, download.host
+                )),
+            ),
+            None => (format!("{name}: not installed"), Some(hint.clone())),
+        },
         LspStatus::Failed(error) => (format!("{name}: stopped"), Some(error.clone())),
     };
-    let button =
+    let mut button =
         Button::new(("status-lsp", ix))
             .ghost()
             .xsmall()
             .child(item(IconName::Code, text, cx));
+    if download.is_some() {
+        let (core, language) = (core.clone(), entry.config.language.clone());
+        button = button.on_click(move |_, window, cx| {
+            crate::extensions::ask_download(core.clone(), language.clone(), window, cx)
+        });
+    }
     match tooltip {
         Some(tooltip) => button.tooltip(tooltip),
         None => button,
@@ -161,10 +192,52 @@ impl Render for CarbonStatusBar {
             bar = bar.left(item(IconName::GitBranch, branch.label().to_string(), cx));
         }
         bar = bar.left(item(IconName::ListChecks, jobs, cx));
+        // Stop for jobs extension code started (an agent flow's run).
+        let stoppable: Vec<(u64, String)> = core
+            .jobs
+            .running()
+            .filter_map(|job| {
+                crate::extensions::host::job_for(job.id(), cx).map(|ext| (ext, job.title.clone()))
+            })
+            .take(3)
+            .collect();
+        for (ix, (job, title)) in stoppable.into_iter().enumerate() {
+            bar = bar.left(
+                Button::new(("status-stop-job", ix))
+                    .icon(IconName::Square)
+                    .ghost()
+                    .xsmall()
+                    .tooltip(format!("Stop {title}"))
+                    .on_click(move |_, _, cx| crate::extensions::host::stop_job(job, cx)),
+            );
+        }
+        if let Some(waiting) = crate::extensions::host::waiting_summary(cx) {
+            bar = bar.left(
+                Button::new("status-waiting")
+                    .ghost()
+                    .xsmall()
+                    .child(
+                        h_flex()
+                            .gap(fixed::STATUS_ITEM_GAP)
+                            .text_color(cx.theme().warning)
+                            .child(
+                                Icon::new(IconName::TriangleAlert)
+                                    .with_size(Size::Size(fixed::STATUS_ICON_SIZE)),
+                            )
+                            .child(waiting.label.clone()),
+                    )
+                    .tooltip("An agent flow waits for your answer")
+                    .on_click(move |_, window, cx| {
+                        if let Some(path) = &waiting.path {
+                            crate::graph_panel::open_graph_file(path, window, cx);
+                        }
+                    }),
+            );
+        }
         let mut servers: Vec<_> = core.lsp.entries().collect();
-        servers.sort_by_key(|entry| entry.config.name);
+        servers.sort_by(|a, b| a.config.name.cmp(&b.config.name));
         for (ix, entry) in servers.into_iter().enumerate() {
-            bar = bar.right(language_server(ix, entry, cx));
+            bar = bar.right(language_server(ix, entry, &self.core, cx));
         }
         bar.right(app_menu_button())
     }

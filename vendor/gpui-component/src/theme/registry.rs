@@ -160,6 +160,39 @@ impl ThemeRegistry {
         Ok(())
     }
 
+    // CARBON PATCH: themes from several sources (Carbon's own, extensions,
+    // the user's folder) replace the custom set at once, so a removed source's
+    // themes go away; `reload` only knew one folder.
+    /// Replaces every theme but the kit defaults with the theme sets in
+    /// `contents` (source name, JSON). The first theme of a name wins. Returns
+    /// a message per source that did not parse.
+    pub fn set_custom_themes<'a>(
+        &mut self,
+        contents: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Vec<String> {
+        self.themes = self
+            .default_themes
+            .values()
+            .map(|theme| (theme.name.clone(), Rc::clone(theme)))
+            .collect();
+        self.has_custom_themes = false;
+        let mut errors = Vec::new();
+        for (source, content) in contents {
+            match serde_json::from_str::<ThemeSet>(content) {
+                Ok(set) => {
+                    for theme in set.themes {
+                        if !self.themes.contains_key(&theme.name) {
+                            self.has_custom_themes = true;
+                            self.themes.insert(theme.name.clone(), Rc::new(theme));
+                        }
+                    }
+                }
+                Err(err) => errors.push(format!("{source}: {err}")),
+            }
+        }
+        errors
+    }
+
     fn init_default_themes(&mut self) {
         let default_themes: Vec<ThemeConfig> = serde_json::from_str::<ThemeSet>(DEFAULT_THEME)
             .expect("failed to parse default theme.")

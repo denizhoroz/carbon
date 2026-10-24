@@ -270,12 +270,18 @@ impl Palette {
             return sections;
         }
 
+        let keywords: Vec<Vec<&str>> = self
+            .commands
+            .iter()
+            .map(|spec| spec.keywords.iter().map(|word| word.as_ref()).collect())
+            .collect();
         let candidates: Vec<rank::Candidate> = self
             .commands
             .iter()
-            .map(|spec| rank::Candidate {
+            .zip(&keywords)
+            .map(|(spec, keywords)| rank::Candidate {
                 label: &spec.label,
-                keywords: spec.keywords,
+                keywords,
                 usage: usage.count(&spec.id),
             })
             .collect();

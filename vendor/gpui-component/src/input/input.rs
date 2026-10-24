@@ -237,7 +237,8 @@ impl Input {
             disabled: false,
             readonly: false,
             bordered: true,
-            focus_bordered: true,
+            // CARBON PATCH 10: no focus border/ring on entry boxes by default (user).
+            focus_bordered: false,
             tab_index: 0,
             selected: false,
             content_type: None,

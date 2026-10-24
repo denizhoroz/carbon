@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["apps/carbon-core", "apps/carbon-gui"]
+members = ["apps/carbon-core", "apps/carbon-gui", "apps/carbon-extension-api"]
 # Patched third-party crates: not ours to lint or format.
-exclude = ["vendor"]
+exclude = ["vendor", "apps/carbon-extension-api/examples"]
 
 [workspace.package]
 version = "0.1.0"
@@ -10,23 +10,16 @@ edition = "2024"
 
 [workspace.dependencies]
 # API breaks almost every minor: pin exact, upgrade deliberately (STATUS.md R-4).
-gpui-kit = { version = "=0.7.3", features = [
-    # Editor syntax colours (one tree-sitter grammar per language, compiled as C).
-    "tree-sitter-rust",
-    "tree-sitter-toml",
-    "tree-sitter-markdown",
-    "tree-sitter-markdown-inline",
-    "tree-sitter-yaml",
-    "tree-sitter-python",
-    "tree-sitter-javascript",
-    "tree-sitter-typescript",
-    "tree-sitter-tsx",
-    "tree-sitter-html",
-    "tree-sitter-css",
-    "tree-sitter-bash",
-] }
+gpui-kit = { version = "=0.7.3", features = ["tree-sitter"] }
+# Syntax colours come from extensions as tree-sitter grammars compiled to WebAssembly
+# (documents/extensions.md); `wasm` runs them on tree-sitter's own wasmtime (36). The kit
+# itself keeps only its JSON grammar. Same version as the kit's tree-sitter.
+tree-sitter = { version = "=0.26.13", features = ["wasm"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+# Graph files (`.flow.yaml`): exact pin, used only behind carbon-core `graph/yaml.rs`.
+serde_yaml_ng = "=0.10.0"
+indexmap = { version = "2.14.2", features = ["serde"] }
 # carbon-core. ropey: same beta the kit uses, so core and editor share one rope type.
 ropey = { version = "=2.0.0-beta.1", features = ["metric_utf16"] }
 ignore = "0.4.33"
@@ -41,12 +34,50 @@ dunce = "1.0.5"
 tempfile = "3.27.0"
 notify = "8.2.0"
 trash = "5.2.9"
-# Git status for explorer markers (FEATURE SC-06: gitoxide reads). No network, merge, blame.
 # Language server protocol types (already in the lock through the kit's editor).
 lsp-types = "0.97.0"
 # Fuzzy matching for the command palette and Quick Open (fzf scoring; Helix and Zed use it).
 nucleo-matcher = "0.3.1"
-gix = { version = "0.89.0", default-features = false, features = ["status", "sha1", "parallel"] }
+# Git status for explorer markers (FEATURE SC-06: gitoxide reads; no merge, blame).
+# Network: fetching extension packages and the catalog from git (documents/extensions.md;
+# gix over the user's git CLI, from the shelved workflow branch); HTTPS through reqwest + rustls.
+gix = { version = "0.89.0", default-features = false, features = [
+    "status",
+    "sha1",
+    "parallel",
+    "blocking-http-transport-reqwest-rust-tls",
+    # Byte counts for the install progress line.
+    "progress-tree",
+    "progress-unit-bytes",
+] }
+# Extension manifests (`extension.toml`) and their version ranges.
+toml = "1.1.8"
+semver = "1.0.28"
+# Installing extension packages from .zip files; deflate through flate2 (pure-Rust zlib-rs).
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# Content hash of installed extension packages (hash pins).
+sha2 = "0.10.9"
+# Catalog signatures: verifies `minisign -S` signatures, no signing.
+minisign-verify = "0.3.0"
+# Downloading language server programs (extension tools): the same reqwest gix fetches with.
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "rustls", "http2"] }
+# Unpacking those downloads (.gz, .tar.gz; .zip through `zip`).
+flate2 = { version = "1.1.10", default-features = false, features = ["zlib-rs"] }
+tar = { version = "0.4.44", default-features = false }
+# Extension code: WebAssembly components (documents/extensions.md). The same wasmtime major as
+# tree-sitter's WASM grammars (36), so one wasmtime ships; WASI 0.2 for `wasm32-wasip2` guests.
+wasmtime = { version = "=36.0.19", default-features = false, features = [
+    "component-model",
+    "cranelift",
+    "runtime",
+    "std",
+    "parallel-compilation",
+] }
+wasmtime-wasi = { version = "=36.0.19", default-features = false }
+# Extension webview pages (`webview` feature of carbon-gui, off by default): the kit's
+# WebView2 / WKWebView panel, same version line as gpui-kit.
+gpui-wry = "=0.7.3"
+wry = { package = "lb-wry", version = "=0.53.3" }
 
 # Optimise GPUI, layout and text in dev builds so the window is usable.
 [profile.dev.package]

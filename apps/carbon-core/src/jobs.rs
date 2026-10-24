@@ -60,6 +60,13 @@ impl JobStore {
         id
     }
 
+    /// Changes a job's title (progress: "Downloading x: 4 / 17 MB").
+    pub fn set_title(&mut self, id: JobId, title: impl Into<String>) {
+        if let Some(job) = self.jobs.get_mut(&id) {
+            job.title = title.into();
+        }
+    }
+
     /// Marks a job done; `Err(message)` for a failure. Unknown ids are ignored.
     pub fn finish(&mut self, id: JobId, result: Result<(), String>) {
         if let Some(job) = self.jobs.get_mut(&id) {

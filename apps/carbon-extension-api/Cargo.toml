@@ -1,0 +1,11 @@
+[package]
+name = "carbon-extension-api"
+version = "0.2.0"
+edition.workspace = true
+description = "Write Carbon extensions in Rust: bindings for the carbon:extension WIT world."
+license = "MIT OR Apache-2.0"
+
+# Extensions build for `wasm32-wasip2` (a WebAssembly component); see
+# examples/hello and .agents/documents/extensions.md.
+[dependencies]
+wit-bindgen = "0.57.1"

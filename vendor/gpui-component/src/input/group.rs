@@ -57,7 +57,8 @@ impl InputGroup {
             disabled: false,
             readonly: false,
             invalid: false,
-            focus_ring: true,
+            // CARBON PATCH 10: no focus border/ring on entry boxes by default (user).
+            focus_ring: false,
             aria_label: None,
         }
     }

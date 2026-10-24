@@ -252,6 +252,38 @@ impl DockArea {
     pub fn is_dock_fixed(&self, placement: DockPlacement) -> bool {
         self.fixed.contains(&placement)
     }
+
+    /// CARBON PATCH 5: swap two side docks with everything in them (panels,
+    /// splits, size, open state, fixed flag). The panels stay the same
+    /// entities: none is removed, so none is told it was.
+    pub fn swap_docks(
+        &mut self,
+        a: DockPlacement,
+        b: DockPlacement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if a == b || a == DockPlacement::Center || b == DockPlacement::Center {
+            return;
+        }
+        let (region_a, region_b) = (self.docks.remove(&a), self.docks.remove(&b));
+        if let Some(region) = region_a {
+            self.docks.insert(b, region);
+        }
+        if let Some(region) = region_b {
+            self.docks.insert(a, region);
+        }
+        let (fixed_a, fixed_b) = (self.fixed.remove(&a), self.fixed.remove(&b));
+        if fixed_a {
+            self.fixed.insert(b);
+        }
+        if fixed_b {
+            self.fixed.insert(a);
+        }
+        self.reconcile(window, cx);
+        cx.emit(DockEvent::LayoutChanged);
+        cx.notify();
+    }
 }
 
 /// Installing layouts: the center region and the three docks.
@@ -3678,6 +3710,50 @@ mod tests {
             !cx.read(|cx| group.read(cx).is_closable(cx)),
             "the lock reaches every group through the constraints push"
         );
+    }
+
+    /// CARBON PATCH 5: swapping two docks moves their panels, sizes, open
+    /// state and fixed flag; no panel is told it was removed.
+    #[gpui::test]
+    fn swapping_docks_keeps_their_panels(cx: &mut TestAppContext) {
+        let (area, cx) = setup(cx);
+        let log = log_of();
+        let (left, right) = cx.update(|window, cx| {
+            let left = TestPanel::logging("Left", &log, cx);
+            let right = TestPanel::logging("Right", &log, cx);
+            area.update(cx, |area, cx| {
+                area.set_dock(DockPlacement::Left, DockLayout::tabs().panel(left.clone()), window, cx);
+                area.set_dock(DockPlacement::Right, DockLayout::tabs().panel(right.clone()), window, cx);
+                area.set_dock_size(DockPlacement::Left, px(300.), window, cx);
+                area.set_dock_size(DockPlacement::Right, px(200.), window, cx);
+                area.set_dock_fixed(DockPlacement::Left, true, window, cx);
+            });
+            (left, right)
+        });
+        cx.run_until_parked();
+        drain(&log);
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.swap_docks(DockPlacement::Left, DockPlacement::Right, window, cx)
+            })
+        });
+        cx.run_until_parked();
+        let id = |panel: &Entity<TestPanel>| PanelId::from(panel.entity_id());
+        cx.read(|cx| {
+            let area = area.read(cx);
+            let panels = |placement| area.layout(placement).unwrap().panels().collect::<Vec<_>>();
+            assert_eq!(panels(DockPlacement::Right), [id(&left)]);
+            assert_eq!(panels(DockPlacement::Left), [id(&right)]);
+            assert_eq!(area.dock_size(DockPlacement::Right), Some(px(300.)));
+            assert_eq!(area.dock_size(DockPlacement::Left), Some(px(200.)));
+            assert!(area.is_dock_fixed(DockPlacement::Right));
+            assert!(!area.is_dock_fixed(DockPlacement::Left));
+        });
+        let removed: Vec<_> = drain(&log)
+            .into_iter()
+            .filter(|(_, signal)| *signal == PanelSignal::Removed)
+            .collect();
+        assert!(removed.is_empty(), "{removed:?}");
     }
 
     /// CARBON PATCH 4: a fixed dock's panels rearrange inside it, but none

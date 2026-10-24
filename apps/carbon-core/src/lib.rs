@@ -4,15 +4,18 @@
 //! behind a daemon later. Long-running work (terminal output) is reported through
 //! `async_channel` receivers, which work from both threads and async executors.
 
+pub mod acp;
 mod agent;
 mod buffer;
 pub mod chat;
 mod error;
+pub mod extension;
 mod file_index;
 mod file_ops;
 mod file_tree;
 pub mod fuzzy;
 mod git_status;
+pub mod graph;
 mod history;
 mod id;
 mod jobs;
@@ -105,7 +108,7 @@ impl Core {
         self.git = None;
         self.marks.clear();
         self.history.clear();
-        self.lsp = lsp::LspStore::default();
+        self.lsp.reset();
         self.files_generation += 1;
         Ok(self.workspace.insert(workspace))
     }
@@ -125,7 +128,7 @@ impl Core {
         self.git = None;
         self.marks.clear();
         self.history.clear();
-        self.lsp = lsp::LspStore::default();
+        self.lsp.reset();
         self.files_generation += 1;
     }
 

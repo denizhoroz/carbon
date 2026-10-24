@@ -1,0 +1,16 @@
+carbon_graph: 1
+kind: carbon.agents/flow
+name: New agent flow
+nodes:
+  start:
+    type: start
+edges: []
+layout:
+  viewport:
+    x: -510.0
+    y: -158.5
+    zoom: 1.0
+  nodes:
+    start:
+      x: -240.0
+      y: 96.0

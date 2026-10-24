@@ -24,6 +24,7 @@ actions!(
         Quit,
         ResetLayout,
         SaveLayoutAs,
+        ToggleSectionSide,
         ManageExtensions,
         ManageSettings
     ]
@@ -38,6 +39,23 @@ pub const ADDABLE_PANELS: [&str; 3] = ["Explorer", "Chat", "Terminal"];
 #[action(namespace = carbon, no_json)]
 pub struct AddPanel {
     pub name: SharedString,
+}
+
+/// Run an extension's command (`key`: `<extension id>/<command id>`).
+#[derive(Clone, PartialEq, Action)]
+#[action(namespace = carbon, no_json)]
+pub struct RunExtensionCommand {
+    pub key: SharedString,
+}
+
+/// A menu item or panel an extension adds.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ExtensionItem {
+    /// Top-level menu (`File`, `Edit`, `View`, `Help`).
+    pub menu: SharedString,
+    pub title: SharedString,
+    /// Command key, or the `AddPanel` name of a panel.
+    pub key: SharedString,
 }
 
 /// Show or hide a dock.
@@ -109,6 +127,13 @@ pub struct MenuState {
     pub has_workspace: bool,
     pub saved: Vec<String>,
     pub auto_hide: Vec<Side>,
+    /// Commands extensions place in the menus.
+    pub extension_items: Vec<ExtensionItem>,
+    /// Panels extensions add (View > Add Panel).
+    pub extension_panels: Vec<ExtensionItem>,
+    /// Every extension command for the palette: group (the extension's
+    /// name), title, keywords, key.
+    pub extension_commands: Vec<(SharedString, SharedString, Vec<SharedString>, SharedString)>,
 }
 
 pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
@@ -148,9 +173,49 @@ pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
         )
     }));
     layout.push(MenuItem::separator());
+    layout.push(MenuItem::action(
+        "Move Explorer Section to Other Side",
+        ToggleSectionSide,
+    ));
     layout.push(MenuItem::action("Reset Layout", ResetLayout));
 
-    let add = ADDABLE_PANELS.map(|name| MenuItem::action(name, AddPanel { name: name.into() }));
+    let mut add: Vec<MenuItem> = ADDABLE_PANELS
+        .map(|name| MenuItem::action(name, AddPanel { name: name.into() }))
+        .into();
+    if !state.extension_panels.is_empty() {
+        add.push(MenuItem::separator());
+        add.extend(state.extension_panels.iter().map(|panel| {
+            MenuItem::action(
+                panel.title.clone(),
+                AddPanel {
+                    name: panel.key.clone(),
+                },
+            )
+        }));
+    }
+    // Extension commands go at the end of their menu, after a separator.
+    let extension_items = |menu: &str| -> Vec<MenuItem> {
+        let items: Vec<MenuItem> = state
+            .extension_items
+            .iter()
+            .filter(|item| item.menu == menu)
+            .map(|item| {
+                MenuItem::action(
+                    item.title.clone(),
+                    RunExtensionCommand {
+                        key: item.key.clone(),
+                    },
+                )
+            })
+            .collect();
+        if items.is_empty() {
+            items
+        } else {
+            std::iter::once(MenuItem::separator())
+                .chain(items)
+                .collect()
+        }
+    };
 
     let panel = [
         MenuItem::action(
@@ -200,30 +265,37 @@ pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
     ];
 
     vec![
-        Menu::new("File").items([
-            MenuItem::action("Open Folder...", OpenFolder),
-            MenuItem::action("Create Folder...", CreateFolder),
-            MenuItem::action("Close Folder", CloseFolder).disabled(!state.has_workspace),
-            MenuItem::separator(),
-            MenuItem::action("New File", NewFile),
-            MenuItem::action("Save", SaveFile),
-            MenuItem::separator(),
-            // Also under the title bar's three-line button (VS Code: File > Preferences).
-            MenuItem::submenu(Menu::new("Preferences").items([
-                MenuItem::action("Extensions", ManageExtensions),
-                MenuItem::action("Settings", ManageSettings),
-            ])),
-            MenuItem::separator(),
-            MenuItem::action("Exit", Quit),
-        ]),
-        Menu::new("Edit").items([
-            MenuItem::action("Undo", Undo),
-            MenuItem::action("Redo", Redo),
-            MenuItem::separator(),
-            MenuItem::action("Cut", Cut),
-            MenuItem::action("Copy", Copy),
-            MenuItem::action("Paste", Paste),
-        ]),
+        Menu::new("File").items(
+            [
+                MenuItem::action("Open Folder...", OpenFolder),
+                MenuItem::action("Create Folder...", CreateFolder),
+                MenuItem::action("Close Folder", CloseFolder).disabled(!state.has_workspace),
+                MenuItem::separator(),
+                MenuItem::action("New File", NewFile),
+                MenuItem::action("Save", SaveFile),
+                MenuItem::separator(),
+                // Also under the title bar's three-line button (VS Code: File > Preferences).
+                MenuItem::submenu(Menu::new("Preferences").items([
+                    MenuItem::action("Extensions", ManageExtensions),
+                    MenuItem::action("Settings", ManageSettings),
+                ])),
+            ]
+            .into_iter()
+            .chain(extension_items("File"))
+            .chain([MenuItem::separator(), MenuItem::action("Exit", Quit)]),
+        ),
+        Menu::new("Edit").items(
+            [
+                MenuItem::action("Undo", Undo),
+                MenuItem::action("Redo", Redo),
+                MenuItem::separator(),
+                MenuItem::action("Cut", Cut),
+                MenuItem::action("Copy", Copy),
+                MenuItem::action("Paste", Paste),
+            ]
+            .into_iter()
+            .chain(extension_items("Edit")),
+        ),
         Menu::new("View").items(
             [
                 MenuItem::action("Command Palette", CommandPalette),
@@ -240,9 +312,14 @@ pub(crate) fn app_menus(state: &MenuState) -> Vec<Menu> {
                 MenuItem::submenu(Menu::new("Layout").items(layout)),
                 MenuItem::submenu(Menu::new("Add Panel").items(add)),
                 MenuItem::submenu(Menu::new("Panel").items(panel)),
-            ]),
+            ])
+            .chain(extension_items("View")),
         ),
-        Menu::new("Help").items([MenuItem::action("About", About)]),
+        Menu::new("Help").items(
+            [MenuItem::action("About", About)]
+                .into_iter()
+                .chain(extension_items("Help")),
+        ),
     ]
 }
 

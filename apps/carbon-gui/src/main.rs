@@ -1,8 +1,15 @@
+// tree-sitter's C code declares the wasmtime C API it links as imported from a DLL;
+// MSVC notes each one (LNK4217) though they link statically. Harmless.
+#![allow(linker_messages)]
+
 mod app_assets;
 mod chat_panel;
 mod commands;
 mod editor_panel;
 mod explorer_panel;
+mod extension_panel;
+mod extensions;
+mod graph_panel;
 mod layouts;
 mod lsp_ops;
 mod manage;
@@ -15,6 +22,8 @@ mod style;
 mod terminal_panel;
 mod test_panel;
 mod title_bar;
+#[cfg(feature = "webview")]
+mod webview_panel;
 mod workbench;
 mod workspace_ops;
 
@@ -27,7 +36,8 @@ use gpui_kit::*;
 use menus::{
     AddPanel, ApplyLayout, ApplyPreset, CloseFolder, CommandPalette, CreateFolder, DeleteLayout,
     GoToLine, ManageExtensions, ManageSettings, MenuState, MoveBesideEditor, MovePanel, NewFile,
-    OpenFolder, QuickOpen, ResetLayout, ResizeDock, SaveLayoutAs, ToggleAutoHide, ToggleDock,
+    OpenFolder, QuickOpen, ResetLayout, ResizeDock, RunExtensionCommand, SaveLayoutAs,
+    ToggleAutoHide, ToggleDock, ToggleSectionSide,
 };
 use palette::{FileIndex, Palette};
 use status_bar::CarbonStatusBar;
@@ -47,6 +57,8 @@ struct CarbonApp {
     _menus_sub: Subscription,
     _core_sub: Subscription,
     _focus_lost_sub: Subscription,
+    /// Extensions changed: the core's language server table follows.
+    _extensions_sub: Subscription,
     /// The watcher channel being applied, and the task applying it.
     watch: Option<(async_channel::Receiver<FsChanges>, Task<()>)>,
     /// The open command palette, drawn over everything under the title bar.
@@ -58,8 +70,9 @@ struct CarbonApp {
 impl CarbonApp {
     /// `folder`: workspace to open (from the command line), if any.
     fn new(folder: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let core = cx.new(|_| {
+        let core = cx.new(|cx| {
             let mut core = Core::new();
+            extensions::sync_core(&mut core, cx);
             core.chats.set_dir(chat_panel::CHAT_DIR);
             if let Some(folder) = folder
                 && let Err(err) = core.open_workspace(&folder)
@@ -95,6 +108,14 @@ impl CarbonApp {
         });
         // Alt+F4, the taskbar: unsaved changes are asked about first.
         window.on_window_should_close(cx, save_ops::can_close);
+        let _extensions_sub =
+            cx.observe_global_in::<extensions::Extensions>(window, |this, window, cx| {
+                this.core
+                    .update(cx, |core, cx| extensions::sync_core(core, cx));
+                this.refresh_menus(cx);
+                this.workbench
+                    .update(cx, |workbench, cx| workbench.extensions_changed(window, cx));
+            });
         let mut this = Self {
             title_bar,
             status_bar,
@@ -104,6 +125,7 @@ impl CarbonApp {
             focus_handle,
             _menus_sub,
             _focus_lost_sub,
+            _extensions_sub,
             watch: None,
             palette: None,
             files: cx.new(|_| FileIndex::new()),
@@ -111,6 +133,7 @@ impl CarbonApp {
         this.refresh_menus(cx);
         this.sync_watch(cx);
         this.sync_settings(cx);
+        extensions::welcome(window, cx);
         this
     }
 
@@ -122,11 +145,14 @@ impl CarbonApp {
             .workspace()
             .map(|workspace| workspace.root().to_path_buf());
         settings::sync_workspace(root.as_deref(), cx);
+        extensions::set_code_workspace(root, cx);
     }
 
     fn menu_state(&self, cx: &App) -> MenuState {
         let mut state = self.workbench.read(cx).menu_state();
         state.has_workspace = self.core.read(cx).workspace().is_some();
+        (state.extension_items, state.extension_panels) = extensions::menu_items(cx);
+        state.extension_commands = extensions::palette_commands(cx);
         state
     }
 
@@ -242,6 +268,10 @@ impl Render for CarbonApp {
                 cx,
             ))
             .on_action(self.on(
+                |w, _: &ToggleSectionSide, window, cx| w.toggle_section_side(window, cx),
+                cx,
+            ))
+            .on_action(self.on(
                 |w, _: &SaveLayoutAs, window, cx| w.open_save_dialog(window, cx),
                 cx,
             ))
@@ -263,6 +293,9 @@ impl Render for CarbonApp {
                 |w, a: &DeleteLayout, _, cx| w.delete_layout(a.index, cx),
                 cx,
             ))
+            .on_action(cx.listener(|_, action: &RunExtensionCommand, window, cx| {
+                extensions::run_command(&action.key, window, cx)
+            }))
             .on_action(cx.listener(|this, _: &OpenFolder, window, cx| {
                 workspace_ops::open_folder(this.core.clone(), window, cx)
             }))
@@ -332,14 +365,21 @@ impl Render for CarbonApp {
 
 /// Usage: `carbon-gui [folder]` opens `folder` as the workspace.
 fn main() {
+    #[cfg(feature = "webview")]
+    webview_panel::prepare();
     let folder = std::env::args_os().nth(1).map(PathBuf::from);
     application().with_assets(app_assets::AppAssets).run(|cx| {
         init(cx);
         settings::init(cx);
+        extensions::init(cx);
         style::theme::init(cx);
         menus::init(cx);
         test_panel::register(cx);
         explorer_panel::register(cx);
+        extension_panel::register(cx);
+        graph_panel::register(cx);
+        #[cfg(feature = "webview")]
+        webview_panel::register(cx);
         editor_panel::register(cx);
         terminal_panel::register(cx);
         chat_panel::register(cx);

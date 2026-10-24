@@ -548,6 +548,16 @@ impl LanguageRegistry {
         self.generation.fetch_add(1, Ordering::Relaxed);
     }
 
+    // CARBON PATCH: extensions remove their grammars when they are turned
+    // off or uninstalled; the registry could only add.
+    /// Removes a language and its parser factory. Highlighters already built
+    /// keep working until their editor picks a language again.
+    pub fn unregister(&self, lang: &str) {
+        self.languages.lock().unwrap().remove(lang);
+        self.parser_factories.lock().unwrap().remove(lang);
+        self.generation.fetch_add(1, Ordering::Relaxed);
+    }
+
     /// A counter that changes whenever a language or parser factory is
     /// registered, so caches of highlighted output can tell when a language
     /// they could not resolve before may now resolve.

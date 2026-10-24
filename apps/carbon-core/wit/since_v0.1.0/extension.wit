@@ -1,0 +1,56 @@
+package carbon:extension@0.1.0;
+
+/// What Carbon offers an extension's code. Calls that reach outside the
+/// extension need a capability the user granted (`extension.toml`
+/// `capabilities`); without it they return an error.
+interface host {
+    /// The output of a finished program.
+    record process-output {
+        /// Exit code; none when the program was killed.
+        status: option<s32>,
+        stdout: string,
+        stderr: string,
+    }
+
+    /// The program and arguments that start a language server.
+    record server-command {
+        program: string,
+        args: list<string>,
+        env: list<tuple<string, string>>,
+    }
+
+    /// Writes a line to Carbon's log.
+    log: func(message: string);
+    /// Shows a short message in the window.
+    notify: func(message: string);
+    /// The value of one of this extension's settings (`<id>.<key>`) as JSON
+    /// text; none when the key is not one of its settings.
+    setting: func(key: string) -> option<string>;
+    /// The open folder, if any.
+    workspace-root: func() -> option<string>;
+    /// Reads a UTF-8 file: in the open folder (`fs.read:workspace`) or in the
+    /// extension's own package (`fs.read:package`, paths relative to it).
+    read-file: func(path: string) -> result<string, string>;
+    /// Runs a program in the open folder and waits for it
+    /// (`process.exec:<program>`).
+    run-process: func(program: string, args: list<string>) -> result<process-output, string>;
+    /// Fetches an `https://` URL (`net:<host>`).
+    http-get: func(url: string) -> result<list<u8>, string>;
+}
+
+world extension {
+    import host;
+    use host.{server-command};
+
+    /// Called once after loading.
+    export init: func() -> result<_, string>;
+    /// Runs one of the extension's `[[commands]]` that has neither `action`
+    /// nor `panel`.
+    export run-command: func(id: string) -> result<_, string>;
+    /// The command for one of its `[[language_servers]]`; none uses the
+    /// manifest's `command` (looked up on PATH).
+    export language-server-command: func(server-id: string) -> result<option<server-command>, string>;
+    /// The widgets of a view whose `[[panels]]` entry sets `dynamic = true`,
+    /// as JSON in the manifest's view format (a list of widgets).
+    export render-view: func(view: string) -> result<string, string>;
+}

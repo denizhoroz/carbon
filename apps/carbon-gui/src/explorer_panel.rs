@@ -24,7 +24,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::*;
 
-use crate::menus::{CreateFolder, OpenFolder};
+use crate::menus::{CreateFolder, OpenFolder, ToggleSectionSide};
 use crate::style::fixed;
 use crate::workspace_ops::current_core;
 pub(crate) use file_ops::REVEAL_LABEL;
@@ -277,6 +277,9 @@ impl ExplorerPanel {
     }
 
     fn open_file(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) {
+        if crate::graph_panel::open_graph_file(path, window, cx) {
+            return;
+        }
         let result = self.core.update(cx, |core, cx| {
             let result = core.open_file(path);
             cx.notify();
@@ -694,6 +697,20 @@ impl Panel for ExplorerPanel {
     fn request_close(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         crate::workbench::close_panel(cx.entity(), window, cx);
         true
+    }
+
+    /// The section's side (user, 2026-10-23): checked when it is on the right.
+    fn dropdown_menu(
+        &mut self,
+        menu: PopupMenu,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> PopupMenu {
+        menu.menu_with_check(
+            "Section on Right",
+            crate::workbench::section_on_right(cx),
+            Box::new(ToggleSectionSide),
+        )
     }
 }
 

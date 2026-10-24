@@ -1,13 +1,11 @@
 //! Manage dialogs, opened from the status bar's app menu (the three lines),
-//! File > Preferences and the command palette: Extensions (a placeholder for
-//! now) and Settings (`settings.rs`).
+//! File > Preferences and the command palette: Extensions (`extensions/manage.rs`)
+//! and Settings (`settings.rs`).
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{ActiveTheme, Icon, Sizable, Size, WindowExt, v_flex};
 use gpui_kit::*;
 
 use crate::menus::{ManageExtensions, ManageSettings};
-use crate::style::fixed;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Manage {
@@ -43,26 +41,12 @@ impl Manage {
     }
 }
 
-/// Opens `target`'s dialog; Extensions is a title and an empty placeholder
-/// body for now.
+/// Opens `target`'s dialog.
 pub fn open(target: Manage, window: &mut Window, cx: &mut App) {
-    if target == Manage::Settings {
-        crate::settings::open_dialog(window, cx);
-        return;
+    match target {
+        Manage::Settings => crate::settings::open_dialog(window, cx),
+        Manage::Extensions => {
+            crate::extensions::open_manage(crate::extensions::Tab::Catalog, window, cx)
+        }
     }
-    window.open_dialog(cx, move |dialog, _, cx| {
-        let muted = cx.theme().muted_foreground;
-        dialog.title(target.label()).w(fixed::MANAGE_WIDTH).child(
-            v_flex()
-                .h(fixed::MANAGE_BODY_HEIGHT)
-                .items_center()
-                .justify_center()
-                .gap(fixed::PANEL_GAP)
-                .text_color(muted)
-                .child(
-                    Icon::new(target.icon()).with_size(Size::Size(fixed::MANAGE_EMPTY_ICON_SIZE)),
-                )
-                .child(div().text_sm().child("Nothing here yet.")),
-        )
-    });
 }

@@ -38,10 +38,17 @@ pub struct LanguageServer {
 
 impl LanguageServer {
     /// Starts `program` in `cwd`. The server is not initialized yet.
-    pub fn spawn(name: &str, program: &Path, args: &[&str], cwd: &Path) -> Result<Arc<Self>> {
+    pub fn spawn(
+        name: &str,
+        program: &Path,
+        args: &[&str],
+        env: &std::collections::BTreeMap<String, String>,
+        cwd: &Path,
+    ) -> Result<Arc<Self>> {
         let mut command = Command::new(program);
         command
             .args(args)
+            .envs(env)
             .current_dir(cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

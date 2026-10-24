@@ -3,13 +3,13 @@
 //!
 //! The core holds the state and sends document notifications; the UI drives
 //! the async parts (initializing a server, reading its notifications) and
-//! calls back in here. Servers come from a fixed table for now; installable
-//! language packages will add to it later.
+//! calls back in here. Which servers exist comes from extensions
+//! ([`ServerTable`], built from the extension registry); none are built in.
 
 mod transport;
 mod uri;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -29,35 +29,101 @@ use ropey::{LineType, Rope};
 
 use crate::{Buffer, BufferId, Result};
 
-/// A language server Carbon knows how to start.
-#[derive(Debug)]
+/// A language server Carbon knows how to start (from an extension).
+#[derive(Clone, Debug, PartialEq)]
 pub struct ServerConfig {
     /// LSP language id, also the key of the running server.
-    pub language: &'static str,
+    pub language: String,
     /// Shown in the status bar.
-    pub name: &'static str,
+    pub name: String,
     /// Program name, looked up on `PATH`.
-    pub command: &'static str,
-    /// File extensions (lowercase, no dot) the server handles.
-    pub extensions: &'static [&'static str],
+    pub command: String,
+    pub args: Vec<String>,
+    pub env: BTreeMap<String, String>,
     /// How to get the server, shown when it is missing.
-    pub install_hint: &'static str,
+    pub install_hint: String,
+    /// The extension that declared it, and the server's id there.
+    pub extension: String,
+    pub server_id: String,
+    /// A program path the user set; wins over `PATH`.
+    pub program: Option<PathBuf>,
+    /// A copy downloaded earlier; used when the others are not found.
+    pub downloaded: Option<PathBuf>,
+    /// The build the extension offers for this computer, if any.
+    pub download: Option<ServerDownload>,
 }
 
-pub const SERVERS: &[ServerConfig] = &[ServerConfig {
-    language: "rust",
-    name: "rust-analyzer",
-    command: "rust-analyzer",
-    extensions: &["rs"],
-    install_hint: "rustup component add rust-analyzer",
-}];
+/// What a download of a server would fetch (for the prompt).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ServerDownload {
+    pub version: String,
+    pub host: String,
+}
 
-/// The server for a file, by extension.
-pub fn server_config(path: &Path) -> Option<&'static ServerConfig> {
-    let extension = path.extension()?.to_string_lossy().to_lowercase();
-    SERVERS
-        .iter()
-        .find(|config| config.extensions.contains(&extension.as_str()))
+impl ServerConfig {
+    /// The program to start: the user's path, else `command` on `PATH`,
+    /// else the downloaded copy.
+    pub fn resolve(&self) -> Option<PathBuf> {
+        let file = |path: &Option<PathBuf>| path.clone().filter(|path| path.is_file());
+        file(&self.program)
+            .or_else(|| find_program(&self.command))
+            .or_else(|| file(&self.downloaded))
+    }
+}
+
+/// Which language a file is, by exact name or suffix.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LanguageRule {
+    pub language: String,
+    /// Lowercase endings without the dot (`rs`, `d.ts`).
+    pub suffixes: Vec<String>,
+    pub file_names: Vec<String>,
+}
+
+/// The languages and servers extensions declare. One server per language:
+/// the first declared wins.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ServerTable {
+    pub languages: Vec<LanguageRule>,
+    pub servers: Vec<Arc<ServerConfig>>,
+}
+
+impl ServerTable {
+    /// The language of a file: an exact file name first, then the longest
+    /// matching suffix (case-insensitive).
+    pub fn language_for_path(&self, path: &Path) -> Option<&str> {
+        let name = path.file_name()?.to_str()?;
+        if let Some(rule) = self
+            .languages
+            .iter()
+            .find(|rule| rule.file_names.iter().any(|file| file == name))
+        {
+            return Some(&rule.language);
+        }
+        let lower = name.to_ascii_lowercase();
+        self.languages
+            .iter()
+            .flat_map(|rule| rule.suffixes.iter().map(move |suffix| (rule, suffix)))
+            .filter(|(_, suffix)| {
+                lower
+                    .strip_suffix(suffix.to_ascii_lowercase().as_str())
+                    .is_some_and(|rest| rest.ends_with('.'))
+            })
+            .max_by_key(|(_, suffix)| suffix.len())
+            .map(|(rule, _)| rule.language.as_str())
+    }
+
+    /// The server for a language.
+    pub fn server(&self, language: &str) -> Option<&Arc<ServerConfig>> {
+        self.servers
+            .iter()
+            .find(|config| config.language == language)
+    }
+
+    /// The server for a file, by its language.
+    pub fn server_for_path(&self, path: &Path) -> Option<&Arc<ServerConfig>> {
+        self.server(self.language_for_path(path)?)
+    }
 }
 
 /// Byte offset → LSP position (columns in UTF-16 units, the LSP default).
@@ -163,7 +229,7 @@ pub enum LspStatus {
 }
 
 pub struct ServerEntry {
-    pub config: &'static ServerConfig,
+    pub config: Arc<ServerConfig>,
     pub status: LspStatus,
     server: Option<Arc<LanguageServer>>,
     /// Progress tokens the server reported as begun and not yet ended.
@@ -177,7 +243,7 @@ impl ServerEntry {
 }
 
 struct Document {
-    language: &'static str,
+    language: String,
     uri: lsp_types::Uri,
     version: i32,
     /// Buffer revision the server last got.
@@ -194,13 +260,50 @@ pub struct FileDiagnostics {
 
 #[derive(Default)]
 pub struct LspStore {
-    servers: HashMap<&'static str, ServerEntry>,
+    table: ServerTable,
+    servers: HashMap<String, ServerEntry>,
     documents: HashMap<BufferId, Document>,
     diagnostics: HashMap<PathBuf, FileDiagnostics>,
     generation: u64,
 }
 
 impl LspStore {
+    /// Forgets running servers, documents and diagnostics (another folder
+    /// opened); the table stays.
+    pub fn reset(&mut self) {
+        *self = Self {
+            table: std::mem::take(&mut self.table),
+            ..Self::default()
+        };
+    }
+
+    pub fn table(&self) -> &ServerTable {
+        &self.table
+    }
+
+    /// Replaces the table (extensions changed). Servers whose config is gone
+    /// or changed stop (dropping the last handle ends the process), with their
+    /// documents; the UI starts new ones as files need them.
+    pub fn set_table(&mut self, table: ServerTable) {
+        let stale: Vec<String> = self
+            .servers
+            .iter()
+            .filter(|(language, entry)| table.server(language) != Some(&entry.config))
+            .map(|(language, _)| language.clone())
+            .collect();
+        for language in &stale {
+            self.servers.remove(language);
+        }
+        self.documents
+            .retain(|_, document| !stale.contains(&document.language));
+        self.table = table;
+    }
+
+    /// The server for a file, if an extension declares one.
+    pub fn server_for_path(&self, path: &Path) -> Option<Arc<ServerConfig>> {
+        self.table.server_for_path(path).cloned()
+    }
+
     pub fn entry(&self, language: &str) -> Option<&ServerEntry> {
         self.servers.get(language)
     }
@@ -209,31 +312,42 @@ impl LspStore {
         self.servers.values()
     }
 
+    /// Forgets a language's server (stopping it), so the next file of that
+    /// language starts it again (after a download).
+    pub fn forget(&mut self, language: &str) {
+        self.servers.remove(language);
+        self.documents
+            .retain(|_, document| document.language != language);
+    }
+
     /// Starts the server for `config` in `root` unless one was tried
     /// already. Returns the new server, which the caller must initialize.
-    pub fn start(
-        &mut self,
-        config: &'static ServerConfig,
-        root: &Path,
-    ) -> Option<Arc<LanguageServer>> {
-        if self.servers.contains_key(config.language) {
+    pub fn start(&mut self, config: Arc<ServerConfig>, root: &Path) -> Option<Arc<LanguageServer>> {
+        if self.servers.contains_key(&config.language) {
             return None;
         }
-        let (status, server) = match find_program(config.command) {
+        let (status, server) = match config.resolve() {
             None => (
-                LspStatus::Missing(format!(
-                    "{} is not installed (install: {})",
-                    config.name, config.install_hint
-                )),
+                LspStatus::Missing(if config.install_hint.is_empty() {
+                    format!("{} is not installed", config.name)
+                } else {
+                    format!(
+                        "{} is not installed (install: {})",
+                        config.name, config.install_hint
+                    )
+                }),
                 None,
             ),
-            Some(program) => match LanguageServer::spawn(config.name, &program, &[], root) {
-                Ok(server) => (LspStatus::Starting, Some(server)),
-                Err(err) => (LspStatus::Failed(err.to_string()), None),
-            },
+            Some(program) => {
+                let args: Vec<&str> = config.args.iter().map(String::as_str).collect();
+                match LanguageServer::spawn(&config.name, &program, &args, &config.env, root) {
+                    Ok(server) => (LspStatus::Starting, Some(server)),
+                    Err(err) => (LspStatus::Failed(err.to_string()), None),
+                }
+            }
         };
         self.servers.insert(
-            config.language,
+            config.language.clone(),
             ServerEntry {
                 config,
                 status,
@@ -269,7 +383,7 @@ impl LspStore {
     /// The server and document uri for a buffer the server has open.
     pub fn document(&self, id: BufferId) -> Option<(Arc<LanguageServer>, lsp_types::Uri)> {
         let document = self.documents.get(&id)?;
-        Some((self.ready_server(document.language)?, document.uri.clone()))
+        Some((self.ready_server(&document.language)?, document.uri.clone()))
     }
 
     /// Opens `buffer` in its ready server, if it has one and is not open yet.
@@ -280,17 +394,17 @@ impl LspStore {
         let Some(path) = buffer.path() else {
             return Ok(());
         };
-        let Some(config) = server_config(path) else {
+        let Some(config) = self.server_for_path(path) else {
             return Ok(());
         };
-        let Some(server) = self.ready_server(config.language) else {
+        let Some(server) = self.ready_server(&config.language) else {
             return Ok(());
         };
         let uri = path_to_uri(path);
         server.notify::<DidOpenTextDocument>(DidOpenTextDocumentParams {
             text_document: TextDocumentItem {
                 uri: uri.clone(),
-                language_id: config.language.to_string(),
+                language_id: config.language.clone(),
                 version: 1,
                 text: buffer.text(),
             },
@@ -298,7 +412,7 @@ impl LspStore {
         self.documents.insert(
             buffer.id(),
             Document {
-                language: config.language,
+                language: config.language.clone(),
                 uri,
                 version: 1,
                 sent_revision: buffer.revision(),
@@ -315,7 +429,7 @@ impl LspStore {
         if document.sent_revision == buffer.revision() {
             return Ok(());
         }
-        let Some(entry) = self.servers.get(document.language) else {
+        let Some(entry) = self.servers.get(&document.language) else {
             return Ok(());
         };
         let Some(server) = entry.server.as_ref() else {
@@ -353,7 +467,7 @@ impl LspStore {
         };
         if let Some(server) = self
             .servers
-            .get(document.language)
+            .get(&document.language)
             .and_then(|e| e.server.as_ref())
         {
             _ = server.notify::<DidCloseTextDocument>(DidCloseTextDocumentParams {

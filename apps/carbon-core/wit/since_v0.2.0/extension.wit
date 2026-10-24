@@ -1,0 +1,239 @@
+package carbon:extension@0.2.0;
+
+/// What Carbon offers an extension's code. Calls that reach outside the
+/// extension need a capability the user granted (`extension.toml`
+/// `capabilities`); without it they return an error. Every call returns at
+/// once: long work (agents, timers, approvals) answers later through
+/// `on-event`.
+interface host {
+    /// The output of a finished program.
+    record process-output {
+        /// Exit code; none when the program was killed.
+        status: option<s32>,
+        stdout: string,
+        stderr: string,
+    }
+
+    /// The program and arguments that start a language server.
+    record server-command {
+        program: string,
+        args: list<string>,
+        env: list<tuple<string, string>>,
+    }
+
+    /// Writes a line to Carbon's log.
+    log: func(message: string);
+    /// Shows a short message in the window.
+    notify: func(message: string);
+    /// The value of one of this extension's settings (`<id>.<key>`) as JSON
+    /// text; none when the key is not one of its settings.
+    setting: func(key: string) -> option<string>;
+    /// The open folder, if any.
+    workspace-root: func() -> option<string>;
+    /// Reads a UTF-8 file: in the open folder (`fs.read:workspace`) or in the
+    /// extension's own package (`fs.read:package`, paths relative to it).
+    read-file: func(path: string) -> result<string, string>;
+    /// Writes a UTF-8 file in the open folder (`fs.write:workspace`); folders
+    /// are made; the write is atomic.
+    write-file: func(path: string, contents: string) -> result<_, string>;
+    /// Runs a program in the open folder and waits for it
+    /// (`process.exec:<program>`). Counts toward the call's time limit.
+    run-process: func(program: string, args: list<string>) -> result<process-output, string>;
+    /// Fetches an `https://` URL (`net:<host>`).
+    http-get: func(url: string) -> result<list<u8>, string>;
+
+    /// This extension's key/value storage for the open folder: survives
+    /// restarts. A value is at most 1 MiB, all of them 16 MiB.
+    storage-get: func(key: string) -> option<string>;
+    storage-set: func(key: string, value: string) -> result<_, string>;
+    storage-delete: func(key: string);
+    /// Keys starting with `prefix`.
+    storage-keys: func(prefix: string) -> list<string>;
+    /// Milliseconds since the Unix epoch.
+    now-ms: func() -> u64;
+    /// Sends `timer-fired(tag)` after `after-ms`.
+    set-timer: func(after-ms: u32, tag: string);
+}
+
+/// Background work shown in the status bar with a Stop button. Stop sends
+/// `job-cancel-requested`; Carbon also cancels the job's agent sessions.
+interface jobs {
+    start-job: func(title: string) -> u64;
+    set-job-progress: func(job: u64, text: string);
+    /// none: it succeeded; some: why it failed.
+    finish-job: func(job: u64, error: option<string>);
+}
+
+/// Agent programs over ACP (`[[agents]]` of any extension). Needs
+/// `agent.invoke`. Carbon answers the agent's permission requests itself.
+interface acp {
+    record agent-info {
+        /// `<extension>/<agent>`.
+        id: string,
+        name: string,
+        /// Found on PATH, or can be installed.
+        available: bool,
+        hint: option<string>,
+    }
+    record session-options {
+        /// An agent id: `<extension>/<agent>`, or a bare `<agent>` (this
+        /// extension's first, then any).
+        agent: string,
+        /// A folder in the open folder; none: its root.
+        cwd: option<string>,
+        /// `ask`, `allow-edits` or `allow-all` (capped by the user's setting).
+        permission-mode: string,
+        /// The job it belongs to: Stop cancels it.
+        job: option<u64>,
+        /// Send `agent-text` events while it answers.
+        stream-text: bool,
+        /// The graph run and node it works for: its transcript shows there.
+        run: option<u64>,
+        node: option<string>,
+    }
+    list-agents: func() -> list<agent-info>;
+    /// Starts a session; `session-ready` or `session-failed` follows.
+    start-session: func(options: session-options) -> result<u64, string>;
+    /// Sends a prompt; `prompt-finished` follows.
+    prompt: func(session: u64, text: string) -> result<_, string>;
+    cancel: func(session: u64);
+    close-session: func(session: u64);
+}
+
+/// Graph files of the extension's own graph kinds (`[[graphs]]`), and the
+/// run state their panels show.
+interface graphs {
+    record node {
+        id: string,
+        kind: string,
+        title: option<string>,
+        disabled: bool,
+        /// The node's `config` as JSON.
+        config: string,
+    }
+    record edge {
+        id: string,
+        from-node: string,
+        from-port: string,
+        to-node: string,
+        to-port: string,
+    }
+    record graph-doc {
+        /// Relative to the open folder.
+        path: string,
+        kind: string,
+        name: string,
+        /// Every top-level key besides the nodes, edges and layout, as JSON.
+        meta: string,
+        nodes: list<node>,
+        edges: list<edge>,
+    }
+    /// Files of graph kind `graph` (a `[[graphs]]` id), relative paths.
+    list-graphs: func(graph: string) -> list<string>;
+    read-graph: func(path: string) -> result<graph-doc, string>;
+    /// A run of the file at `path`; its panel shows the states set below.
+    begin-run: func(path: string, job: option<u64>) -> u64;
+    /// `idle`, `queued`, `running`, `waiting`, `done`, `failed`, `skipped`,
+    /// `cancelled`; the badge is a few characters (`$0.12`, `2/3`).
+    set-node-state: func(run: u64, node: string, state: string, badge: option<string>);
+    /// Markdown shown with the node.
+    set-node-output: func(run: u64, node: string, markdown: string);
+    run-log: func(run: u64, node: option<string>, line: string);
+    end-run: func(run: u64, error: option<string>);
+}
+
+/// Questions for the user (an approval block): a card with buttons; the
+/// answer arrives as `approval-answered`.
+interface approvals {
+    record approval-option {
+        id: string,
+        label: string,
+        /// `allow`, `reject` or `other`.
+        kind: string,
+    }
+    record approval-request {
+        title: string,
+        /// Markdown.
+        body: string,
+        options: list<approval-option>,
+        run: option<u64>,
+        node: option<string>,
+    }
+    request: func(request: approval-request) -> u64;
+    withdraw: func(id: u64);
+}
+
+/// What happened, for `on-event`.
+interface events {
+    record usage {
+        input-tokens: u64,
+        output-tokens: u64,
+        cached-tokens: u64,
+        cost-usd: option<f64>,
+    }
+    record prompt-finished {
+        session: u64,
+        /// `end_turn`, `max_tokens`, `refusal`, `cancelled`, `error`, ...
+        stop-reason: string,
+        text: string,
+        truncated: bool,
+        usage: option<usage>,
+    }
+    record session-failed {
+        session: u64,
+        /// `auth-required`, `missing-program`, `crashed`, `protocol`.
+        kind: string,
+        message: string,
+    }
+    record graph-action {
+        path: string,
+        action: string,
+        /// Selected node ids.
+        selection: list<string>,
+    }
+    record approval-answered {
+        id: u64,
+        choice: string,
+    }
+    variant event {
+        session-ready(u64),
+        session-failed(session-failed),
+        agent-text(tuple<u64, string>),
+        tool-call(tuple<u64, string, string>),
+        usage-update(tuple<u64, usage>),
+        prompt-finished(prompt-finished),
+        approval-answered(approval-answered),
+        job-cancel-requested(u64),
+        graph-action(graph-action),
+        timer-fired(string),
+    }
+}
+
+world extension {
+    import host;
+    import jobs;
+    import acp;
+    import graphs;
+    import approvals;
+    use host.{server-command};
+    use events.{event};
+    use graphs.{graph-doc};
+
+    /// Called once after loading.
+    export init: func() -> result<_, string>;
+    /// Runs one of the extension's `[[commands]]` that has neither `action`
+    /// nor `panel`.
+    export run-command: func(id: string) -> result<_, string>;
+    /// The command for one of its `[[language_servers]]`; none uses the
+    /// manifest's `command` (looked up on PATH).
+    export language-server-command: func(server-id: string) -> result<option<server-command>, string>;
+    /// The widgets of a view whose `[[panels]]` entry sets `dynamic = true`,
+    /// as JSON in the manifest's view format (a list of widgets).
+    export render-view: func(view: string) -> result<string, string>;
+    /// Something it asked for happened. Each call is short (5 s); keep state
+    /// in storage, as code can be reloaded between events.
+    export on-event: func(event: event) -> result<_, string>;
+    /// Problems in a graph of its kinds, as JSON
+    /// `[{ "node": id?, "edge": id?, "severity": "error"|"warning"|"info", "message": text }]`.
+    export check-graph: func(doc: graph-doc) -> result<string, string>;
+}

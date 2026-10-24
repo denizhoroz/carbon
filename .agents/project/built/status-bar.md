@@ -10,7 +10,7 @@ Built 2026-10-16. User request: compact bottom bar; left to right: workspace nam
 | Branch | `git-branch` | Branch name; short commit id when detached; hidden outside a git repo | `Core::branch()` reads `.git/HEAD` (worktrees and subfolders supported), re-read every 2 s |
 | Jobs | `list-checks` | "No jobs", the job title when one runs, or "N jobs" | `Core::jobs.running()` |
 
-Bar: kit `StatusBar` (theme `status_bar` colours, top border, `text_xs`), height = `fixed::BAR_HEIGHT` (30 px since 2026-10-17: same as the title/menu bar and the tab bar; user request), full window width under the workbench; at the right end, after the language servers, the **app menu** button (Lucide `menu`, three lines; 2026-10-22, user): an upward dropdown with Extensions (placeholder dialog, `manage.rs`), Settings (the Settings dialog, `settings.md`), separator, Command Palette. Click-tested with real mouse input; 12 px side padding, 14 px icons, 4 px icon-text gap, 8 px between items.
+Bar: kit `StatusBar` (theme `status_bar` colours, top border, `text_xs`), height = `fixed::BAR_HEIGHT` (36 px since 2026-10-23, user: a bit taller; was 30 px = the tab bar), full window width under the workbench; at the right end, after the language servers, the **app menu** button (Lucide `menu`, three lines; 2026-10-22, user): an upward dropdown with Extensions (placeholder dialog, `manage.rs`), Settings (the Settings dialog, `settings.md`), separator, Command Palette. Click-tested with real mouse input; 12 px side padding, 14 px icons, 4 px icon-text gap, 8 px between items.
 
 Opening a folder: File menu, this button, the Explorer, or `carbon-gui <folder>` (`workspace-folders.md`).
 

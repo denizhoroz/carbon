@@ -11,8 +11,9 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Recent folders list; reopen last folder on start; layout per folder | WB-03, WB-09 | Open/create/close built (`../built/workspace-folders.md`) |
 | Explorer leftovers: file nesting, redo, compact-folders setting, OS clipboard for files; agent markers fed by agent sessions (problem markers now come from language servers); whole-project search (go-to-file built: `../built/command-palette.md`) | WB-03, SC-01, AG-01 | T1-T3 built (`../built/file-tree.md`) |
 | Code Editor section contents: problems/output | WB-03, WB-04 | Editor, Terminal and Chat built (`../built/code-editor.md`, `../built/terminal.md`, `../built/chat.md`) |
-| Paradigm Editor, Agent Automation and other modes as extensions (contributed panels and Explorer-section tabs); no workflow system (user 2026-10-22, `../archived/workflow-system.md`) | `DESIGN.md` s4, `PROJECT.md` open questions | Presets Paradigm/Agents exist as layouts only |
-| Manage Extensions contents (list/add/remove official + user plugins: compilers, linters, appearances, panels); opened from the status bar app menu (2026-10-22) | EX-03, `DESIGN.md` s4 | Menu entry + empty dialog built (`../built/title-bar-menu.md`); Settings built (`../built/settings.md`) |
+| Paradigm Editor as an extension (the graph panel kind can carry it); no workflow system (user 2026-10-22, `../archived/workflow-system.md`) | `DESIGN.md` s4, `PROJECT.md` open questions | Agent Automation built as the Agents extension (`../built/agents.md`) |
+| Agents leftovers: runs that survive a restart (`session/load`), ACP `fs/*` through Carbon buffers with reviewable edits, `terminal/*`, MCP servers for agents, more agents (Codex, Gemini CLI) and user-defined ones in Settings, Chat panel on ACP (`ChatBackend`), streamed text on the canvas, minimap, copy/paste YAML fragments, subflows/groups, flow text as chat context, publish `carbon.agents` in the catalog | `../../documents/agents.md`, plan P8 | Built 2026-10-24 (`../built/agents.md`) |
+| Extension leftovers: publish the official signed catalog (user's minisign key) and set it as the default; views tier 2 (inputs, tables, forms); an editor/file API for extension code; webview page API and the `webview` feature on by default (decision); extension bisect; auto-update notice; workspace trust for extensions found in a project; compilers/toolchain helpers; DAP launchers; MCP servers / skills as extension types | EX-02, EX-05..09, LS-01, PL-08 | System built 2026-10-23 (`../built/extensions.md`) |
 | Per-workspace layout (now one global file; editor tabs of another folder are dropped on start) | WB-09 | Needs workspace concept |
 | Settings leftovers: more settings as features read them (terminal font/scrollback/cursor, auto save, telemetry), "Show advanced", `@lang:` per-language values, list/object settings in the dialog, workspace trust; keymap editor; VS Code settings/keymap/theme import | ST-01, ST-04, ST-06 | Settings dialog + registry built (`../built/settings.md`) |
 | Palette leftovers: `@` / `#` symbol search, live Go to Line preview, query history (Up), settings in the palette | WB-01 | Commands, files, line, help built (`../built/command-palette.md`) |
@@ -23,7 +24,7 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Feature | Refs |
 |---|---|
 | Editor leftovers: code folding (kit folding delays every keystroke ~25 ms and can crash on big broken files: fix or fork the kit), find/replace UI check, format, Save As, auto save (with settings, user 2026-10-17) / hot exit, diff editor, preview tabs, signature help, references, rename, code actions, anchors + agent range edits, incremental LSP sync | ED-01..04, ED-11, LS-02 | Tier 1 built (`../built/code-editor.md`) |
-| Installable language packages: each language (rust-analyzer, Python server, ...) installed on demand instead of a fixed table; more servers and grammars | LS-01, LS-03, EX-06 | User request 2026-10-17; table is `SERVERS` in core `lsp.rs`. 2026-10-19: no preinstalled language tools, all via Manage Extensions; binary source model open (`../../documents/language-tools.md`) |
+| More language extensions: servers for Python, TypeScript, ... (with pinned downloads), linters, formatters; grammars for c, cpp, go, sql, diff, ... | LS-01, LS-03 | Install model built 2026-10-23 (`../built/extensions.md`); official ones so far: 12 languages' grammars + rust-analyzer |
 | Tabs/splits for explorer, problems; Problems panel | WB-02, WB-03, WB-04 | Editor tabs built |
 | Language intelligence rest: navigation/refactor, semantic tokens | LS-02..04, LS-06 | Diagnostics, hover, completion, definition built |
 | Debugging: DAP, launch.json, logpoints | DB-01, DB-02 |
@@ -57,7 +58,5 @@ Committed features (decided by the user or in `PROJECT.md`) with no code yet. De
 | Agent backend for sessions (ACP / direct APIs) on the core session model; a real `ChatBackend` for the chat panel (now demo only, `../built/chat.md`); chat leftovers: `@` mentions, chat list/search, queued follow-ups, accessible linear view | AG-06, SE-04, AG-01 |
 | macOS and Linux builds + CI on all three | PL-12, `STATUS.md` |
 | Startup/RAM budgets and benchmarks | PL-11 |
-| WASM extensions with capability grants | EX-06 |
 | MCP servers / skills / hooks as extension types | EX-02, MS-01, MS-02, MS-04 |
-| Declarative VSIX tier, LSP/DAP launchers | EX-01, EX-03 |
-| Open VSX + own gallery, signed, allow-list | EX-08, EX-09 |
+| VS Code extension import (VSIX themes, snippets), Open VSX (deferred by user 2026-10-23: its grammars are TextMate) | EX-01, EX-04, EX-08 |

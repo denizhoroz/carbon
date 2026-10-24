@@ -25,6 +25,7 @@ use gpui_kit::component::dock::panel_handle;
 use crate::chat_panel::ChatPanel;
 use crate::editor_panel::EditorPanel;
 use crate::explorer_panel::ExplorerPanel;
+use crate::extension_panel::{ADD_PREFIX, ExtensionPanel};
 use crate::layouts::{LayoutStore, MAX_SAVED, Preset, SavedLayout, Side};
 use crate::menus::{Direction, MenuState};
 use crate::style::fixed;
@@ -48,12 +49,25 @@ const CENTER_AND_DOCKS: [DockPlacement; 4] = [
     DockPlacement::Bottom,
 ];
 
-/// The Explorer section: the left dock, holding the Explorer. Fixed
+/// The Explorer section: the left dock (or the right one, from the
+/// Explorer's "..." menu: `Workbench::toggle_section_side`), holding the Explorer. Fixed
 /// (`DockArea::set_dock_fixed`, kit patches): its tabs rearrange and split
 /// inside it, but none closes or leaves and no other panel comes in. It still
 /// collapses (Ctrl+B, View > Toggle Left Dock, dragging its edge shut). Tabs
-/// beside the Explorer will come from extensions (user, 2026-10-22).
-const EXPLORER_SECTION: DockPlacement = DockPlacement::Left;
+/// beside the Explorer come from extensions (`explorer_section` panels):
+/// added when the extension is active, removed when it is not.
+fn section_placement(right: bool) -> DockPlacement {
+    if right {
+        DockPlacement::Right
+    } else {
+        DockPlacement::Left
+    }
+}
+
+/// Whether the Explorer section is on the right (the Explorer's "..." menu).
+pub fn section_on_right(cx: &App) -> bool {
+    current(cx).is_some_and(|workbench| workbench.read(cx).store.explorer_right)
+}
 
 /// A shared callback run with the window (dialog buttons and Enter share one).
 pub type WindowCallback = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -77,8 +91,12 @@ pub fn open_buffer(id: BufferId, window: &mut Window, cx: &mut App) {
 }
 
 /// Opens the file at `path` in an editor tab, like a click in the Explorer.
-/// Reports a failure as a notification.
+/// Reports a failure as a notification. A graph file (`*.flow.yaml` of an
+/// active extension) opens in a graph panel instead.
 pub fn open_file_at(path: &Path, window: &mut Window, cx: &mut App) {
+    if crate::graph_panel::open_graph_file(path, window, cx) {
+        return;
+    }
     let core = crate::workspace_ops::current_core(cx);
     let result = core.update(cx, |core, cx| {
         let result = core.open_file(path);
@@ -89,6 +107,55 @@ pub fn open_file_at(path: &Path, window: &mut Window, cx: &mut App) {
         Ok(id) => open_buffer(id, window, cx),
         Err(err) => window.push_notification(format!("Cannot open file: {err}"), cx),
     }
+}
+
+/// Shows the graph file `path` in its graph panel: the tab that has it, else
+/// a new tab in the editor area (extension panel `key`).
+pub fn open_graph(path: &Path, key: String, title: String, window: &mut Window, cx: &mut App) {
+    let Some(workbench) = current(cx) else {
+        return;
+    };
+    let area = workbench.read(cx).area.clone();
+    let wanted = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let mut found = None;
+    for placement in CENTER_AND_DOCKS {
+        let Some(tree) = area.read(cx).layout(placement) else {
+            continue;
+        };
+        for panel in tree.panels() {
+            let graph = area.read(cx).panel(panel).and_then(|view| {
+                view.view()
+                    .downcast::<crate::graph_panel::GraphPanel>()
+                    .ok()
+            });
+            let same = graph.is_some_and(|graph| {
+                graph.read(cx).path().is_some_and(|p| {
+                    dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()) == wanted
+                })
+            });
+            if same {
+                found = Some(panel);
+            }
+        }
+    }
+    let panel = match found {
+        Some(panel) => panel,
+        None => {
+            let handle = panel_handle(crate::graph_panel::GraphPanel::new(
+                key,
+                title,
+                Some(wanted),
+                cx,
+            ));
+            let panel = handle.panel_id(cx);
+            area.update(cx, |area, cx| {
+                area.add_panel_view(handle, DockPlacement::Center, None, window, cx)
+            });
+            panel
+        }
+    };
+    area.update(cx, |area, cx| area.select_panel(panel, window, cx));
+    workbench.update(cx, |workbench, cx| workbench.schedule_save(cx));
 }
 
 /// The editor tab of the core's active buffer, for actions that reach the
@@ -152,7 +219,7 @@ pub fn close_panel<P: BasePanel>(panel: Entity<P>, window: &mut Window, cx: &mut
                 .layout(placement)
                 .is_some_and(|tree| tree.panels().eq([id]))
         });
-        if placement == Some(EXPLORER_SECTION) {
+        if placement == Some(workbench.read(cx).section()) {
             return;
         }
         area.update(cx, |area, cx| {
@@ -208,12 +275,14 @@ impl EventEmitter<MenusChanged> for Workbench {}
 impl Workbench {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (area, skin) = DockSkin::dock_area("carbon-main", Some(LAYOUT_VERSION), window, cx);
+        let store = LayoutStore::load();
+        let section = section_placement(store.explorer_right);
         skin.set_close_button_visible(true, cx);
         // No dock collapse buttons in tab bars (user): docks open and close by
         // dragging their edge, the View menu and Ctrl+B / Ctrl+Alt+B / Ctrl+J.
         skin.set_toggle_button_visible(false, cx);
         area.update(cx, |area, cx| {
-            area.set_dock_fixed(EXPLORER_SECTION, true, window, cx)
+            area.set_dock_fixed(section, true, window, cx)
         });
 
         let _layout_sub = cx.subscribe_in(&area, window, |this, _, event, window, cx| {
@@ -225,7 +294,7 @@ impl Workbench {
 
         let mut this = Self {
             area,
-            store: LayoutStore::load(),
+            store,
             _layout_sub,
             _save_task: Task::ready(()),
         };
@@ -310,6 +379,7 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let section = self.section();
         // Every panel with its place; placeholders also with their kind.
         let mut panels: Vec<(PanelId, DockPlacement, Option<SharedString>, bool)> = Vec::new();
         {
@@ -338,65 +408,95 @@ impl Workbench {
                                 .downcast::<ChatPanel>()
                                 .is_ok()
                                 .then(|| "Chat".into())
+                        })
+                        .or_else(|| {
+                            let panel = view.clone().downcast::<ExtensionPanel>().ok()?;
+                            Some(format!("{ADD_PREFIX}{}", panel.read(cx).key()).into())
                         });
                     let explorer = view.downcast::<ExplorerPanel>().is_ok();
                     panels.push((id, placement, kind, explorer));
                 }
             }
         }
-        let (id, placement, handle) = if name == "Explorer" {
-            match panels.iter().find(|(.., explorer)| *explorer) {
-                // There is one Explorer: show it.
-                Some(&(id, placement, ..)) => (id, placement, None),
-                None => {
-                    let handle = panel_handle(ExplorerPanel::new(cx));
-                    (handle.panel_id(cx), DockPlacement::Left, Some(handle))
+        // An extension panel that may be open once: show the open one.
+        let single_extension = name
+            .strip_prefix(ADD_PREFIX)
+            .and_then(|key| {
+                crate::extensions::registry(cx)
+                    .panel(key)
+                    .map(|(_, p)| !p.multi)
+            })
+            .unwrap_or(false);
+        let open_extension = panels
+            .iter()
+            .find(|(_, _, kind, _)| kind.as_deref() == Some(name))
+            .map(|&(id, placement, ..)| (id, placement));
+        let (id, placement, handle) =
+            if single_extension && let Some((id, placement)) = open_extension {
+                (id, placement, None)
+            } else if name == "Explorer" {
+                match panels.iter().find(|(.., explorer)| *explorer) {
+                    // There is one Explorer: show it.
+                    Some(&(id, placement, ..)) => (id, placement, None),
+                    None => {
+                        let handle = panel_handle(ExplorerPanel::new(cx));
+                        (handle.panel_id(cx), section, Some(handle))
+                    }
                 }
-            }
-        } else {
-            // Never into the Explorer section, even beside one of its kind.
-            let same: Vec<_> = panels
-                .iter()
-                .filter(|(_, placement, kind, _)| {
-                    kind.as_deref() == Some(name) && *placement != EXPLORER_SECTION
-                })
-                .collect();
-            let placement = same
-                .first()
-                .map(|(_, placement, ..)| *placement)
-                .unwrap_or_else(|| default_placement(name));
-            let titles: Vec<SharedString> = same
-                .iter()
-                .filter_map(|(id, ..)| {
-                    let view = self.area.read(cx).panel(*id)?.view();
-                    if let Ok(panel) = view.clone().downcast::<TestPanel>() {
-                        return Some(panel.read(cx).title());
-                    }
-                    if let Ok(panel) = view.clone().downcast::<ChatPanel>() {
-                        return Some(panel.read(cx).label());
-                    }
-                    Some(view.downcast::<TerminalPanel>().ok()?.read(cx).label())
-                })
-                .collect();
-            let handle = if name == "Terminal" {
-                let profile = profile
-                    .filter(|name| !name.is_empty())
-                    .and_then(shells::profile_named)
-                    .or_else(shells::default_profile);
-                let base = profile
-                    .as_ref()
-                    .map_or_else(|| "Terminal".to_string(), |profile| profile.name.clone());
-                let label = next_title(&base, &titles).into();
-                // New terminals start where the last one was.
-                let cwd = crate::terminal_panel::active_terminal_cwd(cx);
-                panel_handle(TerminalPanel::new(profile, Some(label), cwd, cx))
-            } else if name == "Chat" {
-                panel_handle(ChatPanel::new(next_title(name, &titles), cx))
             } else {
-                panel_handle(TestPanel::new(next_title(name, &titles), cx))
+                // Never into the Explorer section, even beside one of its kind.
+                let same: Vec<_> = panels
+                    .iter()
+                    .filter(|(_, placement, kind, _)| {
+                        kind.as_deref() == Some(name) && *placement != section
+                    })
+                    .collect();
+                let placement = same
+                    .first()
+                    .map(|(_, placement, ..)| *placement)
+                    .unwrap_or_else(|| default_placement(name, cx));
+                let titles: Vec<SharedString> = same
+                    .iter()
+                    .filter_map(|(id, ..)| {
+                        let view = self.area.read(cx).panel(*id)?.view();
+                        if let Ok(panel) = view.clone().downcast::<TestPanel>() {
+                            return Some(panel.read(cx).title());
+                        }
+                        if let Ok(panel) = view.clone().downcast::<ChatPanel>() {
+                            return Some(panel.read(cx).label());
+                        }
+                        if let Ok(panel) = view.clone().downcast::<ExtensionPanel>() {
+                            return Some(panel.read(cx).title());
+                        }
+                        Some(view.downcast::<TerminalPanel>().ok()?.read(cx).label())
+                    })
+                    .collect();
+                let handle = if name == "Terminal" {
+                    let profile = profile
+                        .filter(|name| !name.is_empty())
+                        .and_then(shells::profile_named)
+                        .or_else(shells::default_profile);
+                    let base = profile
+                        .as_ref()
+                        .map_or_else(|| "Terminal".to_string(), |profile| profile.name.clone());
+                    let label = next_title(&base, &titles).into();
+                    // New terminals start where the last one was.
+                    let cwd = crate::terminal_panel::active_terminal_cwd(cx);
+                    panel_handle(TerminalPanel::new(profile, Some(label), cwd, cx))
+                } else if name == "Chat" {
+                    panel_handle(ChatPanel::new(next_title(name, &titles), cx))
+                } else if let Some(key) = name.strip_prefix(ADD_PREFIX) {
+                    let title = crate::extensions::registry(cx)
+                        .panel(key)
+                        .map(|(_, panel)| panel.title.clone())
+                        .unwrap_or_else(|| key.to_string());
+                    let title = next_title(&title, &titles);
+                    extension_panel_handle(key, title, cx)
+                } else {
+                    panel_handle(TestPanel::new(next_title(name, &titles), cx))
+                };
+                (handle.panel_id(cx), placement, Some(handle))
             };
-            (handle.panel_id(cx), placement, Some(handle))
-        };
         self.area.update(cx, |area, cx| {
             if let Some(handle) = handle {
                 let size = Side::of(placement).map(Side::default_size);
@@ -421,6 +521,7 @@ impl Workbench {
             has_workspace: false,
             saved: self.store.names(),
             auto_hide: self.store.auto_hide.clone(),
+            ..MenuState::default()
         }
     }
 
@@ -463,13 +564,32 @@ impl Workbench {
         self.close_empty_docks(window, cx);
     }
 
-    /// The Explorer section holds the Explorer, first, and nothing else for
-    /// now. A layout saved before the section was fixed is put right: a
-    /// missing Explorer comes back, one elsewhere moves in (extra ones go),
-    /// and other panels in the section move to where their kind goes.
+    /// Extensions changed: their Explorer-section tabs come and go.
+    pub fn extensions_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.keep_explorer_section(window, cx);
+        self.schedule_save(cx);
+        cx.notify();
+    }
+
+    /// The Explorer section holds the Explorer, first, and the tabs active
+    /// extensions put beside it. A layout saved before the section was fixed
+    /// is put right: a missing Explorer comes back, one elsewhere moves in
+    /// (extra ones go), and other panels in the section move to where their
+    /// kind goes.
     fn keep_explorer_section(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let section = self.section();
         let mut explorers = Vec::new();
         let mut strays = Vec::new();
+        // Extension tabs that belong in the section, and those present.
+        let registry = crate::extensions::registry(cx);
+        let wanted: Vec<String> = registry
+            .panels()
+            .into_iter()
+            .filter(|(_, panel)| panel.explorer_section)
+            .map(|(loaded, panel)| format!("{}/{}", loaded.def.id, panel.id))
+            .collect();
+        let mut present: Vec<String> = Vec::new();
+        let mut unwanted: Vec<Entity<ExtensionPanel>> = Vec::new();
         {
             let area = self.area.read(cx);
             for placement in CENTER_AND_DOCKS {
@@ -481,18 +601,43 @@ impl Workbench {
                         continue;
                     };
                     let name = view.panel_name(cx);
+                    let extension = view.view().downcast::<ExtensionPanel>().ok();
+                    let key = extension
+                        .as_ref()
+                        .map(|panel| panel.read(cx).key().to_string());
                     if name == crate::explorer_panel::PANEL_NAME {
                         explorers.push((id, placement, view.view()));
-                    } else if placement == EXPLORER_SECTION {
-                        strays.push((id, default_placement(name)));
+                    } else if let (Some(panel), Some(key)) = (extension, key.as_ref())
+                        && (wanted.contains(key) || placement == section)
+                    {
+                        // A section tab elsewhere, or a tab whose extension
+                        // no longer puts it here: it goes (and comes back
+                        // where it belongs).
+                        if wanted.contains(key) && placement == section {
+                            present.push(key.clone());
+                        } else {
+                            unwanted.push(panel);
+                        }
+                    } else if placement == section {
+                        strays.push((id, default_placement(name, cx)));
                     }
                 }
             }
         }
         let explorer_in_place = explorers
             .first()
-            .is_some_and(|(_, placement, _)| *placement == EXPLORER_SECTION);
-        if explorers.len() == 1 && explorer_in_place && strays.is_empty() {
+            .is_some_and(|(_, placement, _)| *placement == section);
+        let missing: Vec<String> = wanted
+            .iter()
+            .filter(|key| !present.contains(key))
+            .cloned()
+            .collect();
+        if explorers.len() == 1
+            && explorer_in_place
+            && strays.is_empty()
+            && unwanted.is_empty()
+            && missing.is_empty()
+        {
             return;
         }
 
@@ -503,28 +648,42 @@ impl Workbench {
                     area.remove_panel(extra, window, cx);
                 }
             }
-            if area.layout(EXPLORER_SECTION).is_none() {
-                area.set_dock(EXPLORER_SECTION, DockLayout::tabs(), window, cx);
-                area.set_dock_size(EXPLORER_SECTION, Side::Left.default_size(), window, cx);
+            if area.layout(section).is_none() {
+                area.set_dock(section, DockLayout::tabs(), window, cx);
+                area.set_dock_size(section, Side::Left.default_size(), window, cx);
             }
             let explorer = match explorers.first() {
                 Some((id, ..)) => *id,
                 None => {
                     let handle = panel_handle(ExplorerPanel::new(cx));
                     let id = handle.panel_id(cx);
-                    area.add_panel_view(handle, EXPLORER_SECTION, None, window, cx);
+                    area.add_panel_view(handle, section, None, window, cx);
                     id
                 }
             };
-            if !explorer_in_place
-                && let Some(node) = area.layout(EXPLORER_SECTION).and_then(first_group)
-            {
+            if !explorer_in_place && let Some(node) = area.layout(section).and_then(first_group) {
                 let target = InsertTarget::Tabs {
                     node,
                     ix: Some(0),
                     activate: true,
                 };
                 area.move_panel(explorer, target, window, cx);
+            }
+            for panel in unwanted {
+                area.remove_panel(panel, window, cx);
+            }
+            let added = !missing.is_empty();
+            for key in missing {
+                let title = registry
+                    .panel(&key)
+                    .map(|(_, panel)| panel.title.clone())
+                    .unwrap_or_default();
+                let handle = panel_handle(ExtensionPanel::new(key, title, cx));
+                area.add_panel_view(handle, section, None, window, cx);
+            }
+            // A tab an extension adds does not take the Explorer's place.
+            if added {
+                area.select_panel(explorer, window, cx);
             }
             for (id, to) in strays {
                 if let Some(target) = area.layout(to).map(insert_target) {
@@ -630,9 +789,10 @@ impl Workbench {
         let Some((panel, from)) = self.focused_panel(window, cx) else {
             return;
         };
+        let section = self.section();
         let to = side.map_or(DockPlacement::Center, Side::placement);
         // The Explorer section keeps its panels and takes no others.
-        if from == to || from == EXPLORER_SECTION || to == EXPLORER_SECTION {
+        if from == to || from == section || to == section {
             return;
         }
         let Some(target) = self.area.read(cx).layout(to).map(insert_target) else {
@@ -660,14 +820,13 @@ impl Workbench {
         let Some((panel, from)) = self.focused_panel(window, cx) else {
             return;
         };
+        let section = self.section();
         let Some(center) = self.area.read(cx).layout(DockPlacement::Center) else {
             return;
         };
         // Alone in the editor area there is nothing to sit beside; the
         // Explorer section keeps its panels.
-        if from == EXPLORER_SECTION
-            || (from == DockPlacement::Center && center.panels().eq([panel]))
-        {
+        if from == section || (from == DockPlacement::Center && center.panels().eq([panel])) {
             return;
         }
         let target = InsertTarget::Split {
@@ -732,6 +891,40 @@ impl Workbench {
                 }
             }
         });
+        // Presets put the Explorer on the left: mirror them for a section on
+        // the right (the fixed flag stays with the section).
+        if self.store.explorer_right {
+            self.area.update(cx, |area, cx| {
+                area.swap_docks(DockPlacement::Left, DockPlacement::Right, window, cx);
+                area.set_dock_fixed(DockPlacement::Left, false, window, cx);
+                area.set_dock_fixed(DockPlacement::Right, true, window, cx);
+            });
+        }
+    }
+
+    /// Where the Explorer section is.
+    fn section(&self) -> DockPlacement {
+        section_placement(self.store.explorer_right)
+    }
+
+    /// Moves the Explorer section to the other side: the left and right docks
+    /// trade places with everything in them (no panel is closed), and an
+    /// auto-hide setting goes with its dock.
+    pub fn toggle_section_side(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.area.update(cx, |area, cx| {
+            area.swap_docks(DockPlacement::Left, DockPlacement::Right, window, cx)
+        });
+        self.store.explorer_right = !self.store.explorer_right;
+        for side in &mut self.store.auto_hide {
+            *side = match side {
+                Side::Left => Side::Right,
+                Side::Right => Side::Left,
+                Side::Bottom => Side::Bottom,
+            };
+        }
+        self.store.save();
+        self.schedule_save(cx);
+        cx.notify();
     }
 
     pub fn save_layout_as(&mut self, name: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -906,8 +1099,22 @@ impl Workbench {
     }
 }
 
-/// Where a panel kind goes when none of its kind is open.
-fn default_placement(name: &str) -> DockPlacement {
+/// Where a panel kind goes when none of its kind is open; an extension
+/// panel (`extension:<key>`) where its manifest says (never the Explorer
+/// section unless it is one of its tabs).
+fn default_placement(name: &str, cx: &App) -> DockPlacement {
+    if let Some(key) = name.strip_prefix(ADD_PREFIX) {
+        let registry = crate::extensions::registry(cx);
+        return match registry
+            .panel(key)
+            .map(|(_, panel)| panel.placement().to_string())
+        {
+            Some(place) if place == "right" => DockPlacement::Right,
+            Some(place) if place == "bottom" => DockPlacement::Bottom,
+            Some(place) if place == "left" => DockPlacement::Right,
+            _ => DockPlacement::Center,
+        };
+    }
     match name {
         "Explorer" => DockPlacement::Left,
         "Chat" => DockPlacement::Right,
@@ -958,8 +1165,93 @@ fn insert_target(tree: &PaneTree) -> InsertTarget {
     }
 }
 
+/// A new panel for extension panel `key`: a graph panel, a web page (with
+/// the `webview` feature) or an extension panel.
+fn extension_panel_handle(key: &str, title: String, cx: &mut App) -> Arc<dyn BasePanelView> {
+    let graph = crate::extensions::registry(cx)
+        .panel(key)
+        .is_some_and(|(_, panel)| panel.kind == carbon_core::extension::PanelKind::Graph);
+    if graph {
+        return panel_handle(crate::graph_panel::GraphPanel::new(
+            key.to_string(),
+            title,
+            None,
+            cx,
+        ));
+    }
+    #[cfg(feature = "webview")]
+    {
+        use carbon_core::extension::{ExtensionId, PanelKind};
+        let registry = crate::extensions::registry(cx);
+        if let Some((loaded, panel)) = registry.panel(key)
+            && panel.kind == PanelKind::Webview
+            && let Some(page) = panel.page.clone()
+        {
+            let source = crate::webview_panel::PageSource {
+                extension: ExtensionId::new(loaded.def.id.as_str()),
+                page,
+            };
+            return panel_handle(crate::webview_panel::WebviewPanel::new(
+                title,
+                Some(source),
+                cx,
+            ));
+        }
+    }
+    panel_handle(ExtensionPanel::new(key.to_string(), title, cx))
+}
+
+#[cfg(feature = "webview")]
+impl Workbench {
+    /// Shows each webview panel only where nothing GPUI draws must cover it
+    /// (a native page sits above GPUI): its dock is open, no other group is
+    /// zoomed, and no overlay holds focus. An overlay is a dialog, or focus
+    /// outside every panel and not at the window root: the palette, a
+    /// title-bar or tab menu. Background tabs hide themselves (`set_active`).
+    /// Runs every frame.
+    fn sync_webviews(&self, window: &mut Window, cx: &mut Context<Self>) {
+        use crate::webview_panel::WebviewPanel;
+        let mut panels = Vec::new();
+        {
+            let area = self.area.read(cx);
+            // A zoomed group fills the area: only its own pages stay.
+            let zoomed = area.zoomed_group();
+            for placement in CENTER_AND_DOCKS {
+                let Some(tree) = area.layout(placement) else {
+                    continue;
+                };
+                let open = placement == DockPlacement::Center || area.is_dock_open(placement);
+                for id in tree.panels() {
+                    if let Some(panel) = area
+                        .panel(id)
+                        .and_then(|view| view.view().downcast::<WebviewPanel>().ok())
+                    {
+                        let shown =
+                            zoomed.is_none_or(|group| tree.find_panel_node(id) == Some(group));
+                        panels.push((panel, open && shown));
+                    }
+                }
+            }
+        }
+        if panels.is_empty() {
+            return;
+        }
+        let overlay = window.has_active_dialog(cx)
+            || window.has_active_sheet(cx)
+            || window.focused(cx).is_some_and(|focused| {
+                let area = self.area.read(cx).focus_handle(cx);
+                !focused.contains(&area, window) && self.focused_panel(window, cx).is_none()
+            });
+        for (panel, open) in panels {
+            panel.update(cx, |panel, cx| panel.sync(open && !overlay, cx));
+        }
+    }
+}
+
 impl Render for Workbench {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(feature = "webview")]
+        self.sync_webviews(_window, _cx);
         div().size_full().child(self.area.clone())
     }
 }
