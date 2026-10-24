@@ -4,6 +4,7 @@
 //! behind a daemon later. Long-running work (terminal output) is reported through
 //! `async_channel` receivers, which work from both threads and async executors.
 
+pub mod acp;
 mod agent;
 mod buffer;
 pub mod chat;
@@ -14,6 +15,7 @@ mod file_ops;
 mod file_tree;
 pub mod fuzzy;
 mod git_status;
+pub mod graph;
 mod history;
 mod id;
 mod jobs;

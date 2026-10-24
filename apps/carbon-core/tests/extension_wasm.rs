@@ -11,7 +11,8 @@ use std::process::Command;
 use std::sync::Arc;
 
 use carbon_core::extension::{
-    CallError, ExtensionId, HostContext, HostEvent, Registry, StateFile, WasmRuntime, Widget,
+    CallError, ExtensionEvent, ExtensionId, HostContext, HostEvent, Registry, StateFile,
+    WasmRuntime, Widget,
 };
 
 /// Builds the example guest; returns its `.wasm`.
@@ -40,9 +41,9 @@ id = "acme.hello"
 name = "Hello"
 version = "1.0.0"
 schema_version = 1
-carbon_api = ">=0.1, <0.2"
+carbon_api = ">=0.2, <0.3"
 wasm = "hello.wasm"
-capabilities = ["fs.read:package", "process.exec:git", "net:example.com"]
+capabilities = ["fs.read:package", "fs.write:workspace", "process.exec:git", "net:example.com"]
 
 [[commands]]
 id = "count"
@@ -161,6 +162,53 @@ fn the_example_runs_inside_its_grants() {
     assert_eq!(
         hello.run_command("nope").unwrap_err(),
         CallError::Returned("unknown command nope".into())
+    );
+
+    // API 0.2: storage survives reloading the code; writing needs its grant;
+    // a timer comes back as an event.
+    *context.storage.lock().unwrap() = Some(temp.path().join("storage"));
+    hello.run_command("remember").unwrap();
+    let again = runtime
+        .load(
+            loaded,
+            ["fs.write:workspace".to_string()].into(),
+            context.clone(),
+        )
+        .unwrap();
+    events(&context);
+    again.run_command("remember").unwrap();
+    assert!(
+        matches!(&events(&context)[..], [HostEvent::Notify { message, .. }] if message == "seen 2")
+    );
+    assert!(
+        hello
+            .run_command("write")
+            .unwrap_err()
+            .to_string()
+            .contains("fs.write:workspace")
+    );
+    again.run_command("write").unwrap();
+    assert_eq!(
+        fs::read_to_string(temp.path().join("out/hello.txt")).unwrap(),
+        "hello"
+    );
+    again.run_command("timer").unwrap();
+    assert!(matches!(
+        &events(&context)[..],
+        [HostEvent::Timer { tag, after_ms: 10, .. }] if tag == "tick"
+    ));
+    again
+        .on_event(&ExtensionEvent::TimerFired("tick".into()))
+        .unwrap();
+    assert!(
+        matches!(&events(&context)[..], [HostEvent::Notify { message, .. }] if message == "timer tick")
+    );
+    let doc = carbon_core::graph::GraphDoc::new("acme.hello/x", "X");
+    assert!(
+        again
+            .check_graph("x.yaml", &doc)
+            .unwrap()
+            .contains("0 nodes")
     );
 
     // A runaway call stops at the limit; a panic is an error, not a crash.

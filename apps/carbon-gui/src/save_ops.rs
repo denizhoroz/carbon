@@ -124,8 +124,46 @@ pub fn quit(cx: &mut App) {
     }
 }
 
-/// Quits now, or after the unsaved-changes dialog.
+/// Quits now, or after the unsaved-changes dialog. Running agent flows are
+/// stopped, after asking.
 pub fn request_quit(window: &mut Window, cx: &mut App) {
+    let running = crate::extensions::host::running_runs(cx);
+    if running > 0 {
+        let text = if running == 1 {
+            "An agent flow is running. Quitting stops it.".to_string()
+        } else {
+            format!("{running} agent flows are running. Quitting stops them.")
+        };
+        window.open_dialog(cx, move |dialog, _, _| {
+            dialog
+                .title("Stop and Quit?")
+                .w(crate::style::fixed::DIALOG_WIDTH)
+                .child(text.clone())
+                .footer(
+                    gpui_kit::component::h_flex()
+                        .w_full()
+                        .justify_end()
+                        .gap_2()
+                        .child(
+                            gpui_kit::component::button::Button::new("quit-cancel")
+                                .label("Cancel")
+                                .on_click(|_, window, cx| window.close_dialog(cx)),
+                        )
+                        .child(
+                            gpui_kit::component::button::Button::new("quit-stop")
+                                .label("Stop and Quit")
+                                .on_click(|_, window, cx| {
+                                    window.close_dialog(cx);
+                                    crate::extensions::host::stop_all(cx);
+                                    if can_close(window, cx) {
+                                        cx.quit();
+                                    }
+                                }),
+                        ),
+                )
+        });
+        return;
+    }
     if can_close(window, cx) {
         cx.quit();
     }

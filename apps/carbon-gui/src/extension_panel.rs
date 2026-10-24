@@ -104,7 +104,7 @@ impl ExtensionPanel {
 }
 
 /// An icon from Carbon's icon set by its file name (`code`, `bot`).
-fn named_icon(name: Option<&str>) -> Option<Icon> {
+pub(crate) fn named_icon(name: Option<&str>) -> Option<Icon> {
     let path = format!("icons/{}.svg", name?);
     matches!(AssetSource::load(&AppAssets, &path), Ok(Some(_))).then(|| Icon::empty().path(path))
 }

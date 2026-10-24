@@ -9,6 +9,7 @@ mod editor_panel;
 mod explorer_panel;
 mod extension_panel;
 mod extensions;
+mod graph_panel;
 mod layouts;
 mod lsp_ops;
 mod manage;
@@ -376,6 +377,7 @@ fn main() {
         test_panel::register(cx);
         explorer_panel::register(cx);
         extension_panel::register(cx);
+        graph_panel::register(cx);
         #[cfg(feature = "webview")]
         webview_panel::register(cx);
         editor_panel::register(cx);

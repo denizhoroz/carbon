@@ -7,7 +7,7 @@ Carbon ships small: no languages, colour themes or language servers are built in
 1. [What an extension is](#1-what-an-extension-is)
 2. [Your first extension in five minutes](#2-your-first-extension-in-five-minutes)
 3. [The manifest: `extension.toml`](#3-the-manifest-extensiontoml)
-4. [Recipes](#4-recipes): [theme](#41-a-colour-theme) · [language](#42-a-language-colours) · [language server](#43-a-language-server) · [settings](#44-settings) · [commands and menus](#45-commands-and-menus) · [panels and views](#46-panels-and-views) · [code](#47-code-webassembly)
+4. [Recipes](#4-recipes): [theme](#41-a-colour-theme) · [language](#42-a-language-colours) · [language server](#43-a-language-server) · [settings](#44-settings) · [commands and menus](#45-commands-and-menus) · [panels and views](#46-panels-and-views) · [code](#47-code-webassembly) · [graphs and agents](#48-graphs-and-agents-api-02)
 5. [Permissions (capabilities)](#5-permissions-capabilities)
 6. [Rules and limits](#6-rules-and-limits)
 7. [Testing and troubleshooting](#7-testing-and-troubleshooting)
@@ -54,7 +54,7 @@ id = "yourname.midnight"          # publisher.name, lowercase
 name = "Midnight"
 version = "0.1.0"
 schema_version = 1                # always 1 for now
-carbon_api = ">=0.1, <0.2"        # the Carbon versions you support
+carbon_api = ">=0.2, <0.3"        # the Carbon extension API you support
 description = "A dark blue theme."
 categories = ["theme"]
 
@@ -82,7 +82,7 @@ A linked folder is loaded straight from where it is, with no copying, so it's th
 | `name` | yes | Shown to people (`"Sketch"`). |
 | `version` | yes | [Semantic version](https://semver.org) (`"1.2.0"`). |
 | `schema_version` | yes | Manifest format. Always `1` today. |
-| `carbon_api` | yes | Version range of Carbon's extension API you support. Today: `">=0.1, <0.2"`. |
+| `carbon_api` | yes | Version range of Carbon's extension API you support. Today Carbon offers `0.1` and `0.2`; use `">=0.2, <0.3"` (the SDK builds code for 0.2, and graphs, agents and events need it). |
 | `description` | no | One sentence, shown in the Extensions list. |
 | `authors` | no | `["Ada <ada@example.com>"]` |
 | `repository` | no | Source URL. |
@@ -327,7 +327,9 @@ carbon-extension-api = { git = "https://github.com/denizhoroz/carbon", package =
 **`src/lib.rs`**
 
 ```rust
-use carbon_extension_api::{Extension, ServerCommand, notify, register_extension, setting, workspace_root};
+use carbon_extension_api::{
+    Event, Extension, ServerCommand, graphs, notify, register_extension, workspace_root,
+};
 
 struct Sketch;
 
@@ -358,6 +360,16 @@ impl Extension for Sketch {
     fn render_view(_view: String) -> Result<String, String> {
         Ok(r#"[{"type":"text","text":"Hello"}]"#.into())
     }
+
+    // Something you started finished (an agent answered, a timer fired, ...).
+    fn on_event(_event: Event) -> Result<(), String> {
+        Ok(())
+    }
+
+    // Your own checks of a graph file of your kinds (section 4.8): a JSON list.
+    fn check_graph(_doc: graphs::GraphDoc) -> Result<String, String> {
+        Ok("[]".into())
+    }
 }
 
 register_extension!(Sketch);
@@ -380,8 +392,15 @@ wasm = "sketch.wasm"
 | `read_file(path)` | Reads a UTF-8 file | `fs.read:workspace` (open folder) or `fs.read:package` (your package, relative paths) |
 | `run_process(program, args)` | Runs a program in the open folder and waits | `process.exec:<program>` |
 | `http_get(url)` | Fetches an `https://` URL | `net:<host>` |
+| `write_file(path, text)` | Writes a UTF-8 file in the open folder (folders made, atomic) | `fs.write:workspace` |
+| `storage_get/set/delete/keys` | Your key/value storage for the open folder; survives restarts (1 MiB a value, 16 MiB in all) | none |
+| `set_timer(ms, tag)`, `now_ms()` | `on_event(TimerFired(tag))` after `ms`; the time | none |
+| `jobs::start_job/set_job_progress/finish_job` | A job in the status bar, with Stop (`JobCancelRequested`) | none |
+| `acp::*`, `graphs::*`, `approvals::*` | Agents, graph runs, questions for the user (section 4.8) | `agent.invoke` for agents |
 
 A call without the needed permission returns an error, so handle `Err`.
+
+**Every call returns at once.** Work that takes longer (an agent answering, a timer, the user deciding) comes back later through `on_event`. Carbon may reload your code between events, so keep what you need in storage, not in memory.
 
 **Limits:**
 - each call may run at most **5 seconds**, including waiting on `run_process` or `http_get`;
@@ -390,6 +409,74 @@ A call without the needed permission returns an error, so handle `Err`.
 An extension that crashes, panics or runs too long is **turned off** and the user is told. They can turn it back on in the Extensions dialog.
 
 A complete example with commands, a dynamic view and permission checks: [`apps/carbon-extension-api/examples/hello`](../apps/carbon-extension-api/examples/hello/src/lib.rs).
+
+### 4.8 Graphs and agents (API 0.2)
+
+An extension can add a **graph panel**: a canvas of blocks joined by arrows that Carbon draws and edits (pan, zoom, connect, undo, autosave). The graph is a YAML file in the project. You declare the kind of graph and its block types; your code decides what running one means. The [Agents extension](https://github.com/denizhoroz/carbon-extensions-agents) is a complete example.
+
+```toml
+carbon_api = ">=0.2, <0.3"
+wasm = "flows.wasm"
+
+[[graphs]]
+id = "flow"
+name = "Agent flow"
+dir = ".carbon/flows"              # where new files go
+suffix = "flow.yaml"               # files ending like this open in the panel
+check = true                       # also ask your code's check_graph
+actions = [
+  { id = "run", title = "Run", icon = "play", primary = true, when = "idle" },
+  { id = "stop", title = "Stop", icon = "square", when = "running" },
+]
+fields = [ { key = "task", label = "Task", kind = "text", multiline = true } ]
+
+[[node_types]]
+graph = "flow"
+id = "agent"
+title = "Agent"
+icon = "bot"
+category = "Agents"
+inputs = [ { id = "in", label = "In", multi = true } ]
+outputs = [ { id = "out", label = "Out", multi = true } ]
+fields = [
+  { key = "prompt", label = "Prompt", kind = "text", multiline = true, required = true },
+  { key = "agent", label = "Agent", kind = "agent", default = "claude-code" },
+]
+
+[[panels]]
+id = "flows"
+title = "Flows"
+kind = "graph"
+graph = "flow"
+placement = "center"
+```
+
+- **Ports:** `multi = true` lets several arrows use one port. An input with `loop_back = true` is the only place arrows may go round in a circle. `outputs_from = "<list field>"` makes one output per list item (by its `id`), plus Else: that's how a router gets its routes.
+- **Field kinds:** `bool`, `text` (`multiline`), `integer`, `number` (`min`, `max`), `choice` (`choices`), `list` (`item_fields`), `agent` (picks from every extension's `[[agents]]`), `file`. There is no secret kind: keys never go in a graph file.
+- **Carbon checks** types, ports, arrows, `max_count` and `required` fields itself. `check_graph` adds yours: a JSON list of `{ "node", "edge", "severity": "error"|"warning"|"info", "message" }`.
+- **Actions** send `on_event(GraphAction { path, action, selection })`; the file is saved first.
+
+**Agents** are programs that speak ACP (the Agent Client Protocol). Declare them like language servers:
+
+```toml
+capabilities = ["agent.invoke", "process.exec:claude-agent-acp", "process.exec:node",
+                "process.exec:npm", "process.exec:npx", "net:registry.npmjs.org"]
+
+[[agents]]
+id = "claude-code"
+name = "Claude Code"
+command = "claude-agent-acp"       # on PATH first
+install_hint = "Needs Node.js 22 or newer."
+[agents.npm]                       # else installed into Carbon's tools folder
+package = "@agentclientprotocol/claude-agent-acp"
+version = "0.95.0"                 # exact
+bin = "claude-agent-acp"
+npx_fallback = true                # else `npx -y package@version`
+```
+
+From code: `acp::start_session(&SessionOptions { agent, permission_mode, job, run, node, .. })` returns a session id at once; `SessionReady` (or `SessionFailed`) follows, then `acp::prompt(session, text)` and later `PromptFinished { text, usage }`. `permission_mode` is `ask`, `allow-edits` or `allow-all`, and the user's setting caps it. When the agent asks permission for something, **Carbon asks the user**; your code is never asked and cannot answer for them.
+
+**Runs:** `graphs::begin_run(path, job)` gives a run id; `set_node_state(run, node, "running"|"waiting"|"done"|"failed"|..., badge)`, `set_node_output`, `run_log` and `end_run` are what the panel shows (borders, state words, the Run tab). `approvals::request(...)` puts a question card in front of the user; the answer arrives as `ApprovalAnswered { id, choice }`.
 
 ---
 
@@ -402,8 +489,10 @@ An extension asks for permissions in `capabilities`. The user sees them in plain
 | `fs.read:workspace` / `fs.read:package` / `fs.read:home` | Read files in the open folder / its own package / the home folder |
 | `net:<host>` | Reach a host: `api.github.com`, `*.example.com`, or `*` for any |
 | `process.exec:<program>` | Run a program (`git`), or `*` for any |
+| `fs.write:workspace` | Write files in the open folder |
+| `agent.invoke` | Start agent sessions (API 0.2) |
 
-Also accepted, but reserved: no function uses them yet. They are `fs.write:<scope>`, `agent.invoke`, `gpu`, `audio.output`, `audio.input` and `midi`.
+Also accepted, but reserved: no function uses them yet. They are `fs.write:package` / `fs.write:home`, `gpu`, `audio.output`, `audio.input` and `midi`.
 
 Ask for as little as possible: a specific program and host, not `*`. Extensions with broad permissions get less trust from users.
 

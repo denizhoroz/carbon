@@ -19,6 +19,7 @@ mod manifest;
 mod package;
 mod requires;
 mod state;
+mod storage;
 mod tools;
 mod view;
 mod wasm;
@@ -43,10 +44,10 @@ pub use install::{
     verify_installed,
 };
 pub use manifest::{
-    API_VERSION, Archive, CATEGORIES, CommandDef, Download, ExtensionDef, GrammarDef, ICON_TYPES,
-    LanguageDef, LanguageServerDef, MANIFEST, MAX_ICON_BYTES, MENUS, MenuDef, PLACEMENTS, PanelDef,
-    PanelKind, SCHEMA_VERSION, SettingDef, SettingKind, TARGETS, ThemeDef, check_icon_type,
-    current_target,
+    API_VERSION, AgentDef, Archive, CATEGORIES, CommandDef, Download, ExtensionDef, GrammarDef,
+    ICON_TYPES, LanguageDef, LanguageServerDef, MANIFEST, MAX_ICON_BYTES, MENUS, MenuDef, NpmDef,
+    PLACEMENTS, PanelDef, PanelKind, SCHEMA_VERSION, SUPPORTED_APIS, SettingDef, SettingKind,
+    TARGETS, ThemeDef, check_icon_type, current_target,
 };
 pub use package::{MAX_PACKAGE_PATH, check_package_path, resolve_package_file};
 pub use requires::{Missing, RequireKind, Requires};
@@ -57,8 +58,8 @@ pub use tools::{
 };
 pub use view::{Align, ButtonStyle, ListItem, MAX_VIEW_DEPTH, MAX_VIEW_WIDGETS, Widget};
 pub use wasm::{
-    CALL_LIMIT, CallError, HostContext, HostEvent, MEMORY_LIMIT, ServerCommand, WasmExtension,
-    WasmRuntime,
+    AgentEntry, CALL_LIMIT, CallError, ExtensionEvent, HostContext, HostEvent, MEMORY_LIMIT,
+    ServerCommand, WasmExtension, WasmRuntime,
 };
 
 /// Ids under this prefix are Carbon's official extensions: installed only
@@ -147,6 +148,30 @@ impl Loaded {
         let file = self.file(self.def.icon.as_deref()?).ok()?;
         let size = std::fs::metadata(&file).ok()?.len();
         (size <= MAX_ICON_BYTES).then_some(file)
+    }
+}
+
+/// A graph kind of an active extension, with its node types.
+#[derive(Clone)]
+pub struct GraphKind<'a> {
+    pub loaded: &'a Loaded,
+    pub spec: &'a crate::graph::GraphSpec,
+    pub node_types: Vec<&'a crate::graph::NodeTypeSpec>,
+}
+
+impl GraphKind<'_> {
+    /// The `kind` its files carry: `<extension id>/<graph id>`.
+    pub fn kind(&self) -> String {
+        format!("{}/{}", self.loaded.def.id, self.spec.id)
+    }
+
+    pub fn node_type(&self, id: &str) -> Option<&crate::graph::NodeTypeSpec> {
+        self.node_types.iter().copied().find(|t| t.id == id)
+    }
+
+    /// The node types, owned (for `graph::validate`).
+    pub fn owned_types(&self) -> Vec<crate::graph::NodeTypeSpec> {
+        self.node_types.iter().map(|t| (*t).clone()).collect()
     }
 }
 
@@ -498,6 +523,39 @@ impl Registry {
         self.active()
             .flat_map(|loaded| loaded.def.panels.iter().map(move |p| (loaded, p)))
             .collect()
+    }
+
+    /// A graph kind by its global key `<extension id>/<graph id>` (a graph
+    /// file's `kind`), with its node types; only active extensions.
+    pub fn graph(&self, kind: &str) -> Option<GraphKind<'_>> {
+        let (id, graph) = kind.split_once('/')?;
+        let id = ExtensionId::new(id);
+        if !self.is_active(&id) {
+            return None;
+        }
+        let loaded = self.get(&id)?;
+        let spec = loaded.def.graphs.iter().find(|g| g.id == graph)?;
+        Some(GraphKind {
+            loaded,
+            spec,
+            node_types: loaded
+                .def
+                .node_types
+                .iter()
+                .filter(|t| t.graph == graph)
+                .collect(),
+        })
+    }
+
+    /// The graph kind whose files end like `path` (`*.flow.yaml`), the
+    /// longest suffix winning.
+    pub fn graph_for_path(&self, path: &Path) -> Option<GraphKind<'_>> {
+        let name = path.file_name()?.to_str()?.to_ascii_lowercase();
+        self.active()
+            .flat_map(|loaded| loaded.def.graphs.iter().map(move |g| (loaded, g)))
+            .filter(|(_, g)| name.ends_with(&format!(".{}", g.suffix.to_ascii_lowercase())))
+            .max_by_key(|(_, g)| g.suffix.len())
+            .and_then(|(loaded, g)| self.graph(&format!("{}/{}", loaded.def.id, g.id)))
     }
 
     /// A panel by its global key `<extension id>/<panel id>`.

@@ -40,6 +40,7 @@ pub fn init(cx: &mut App) {
         .into_iter()
         .chain(crate::editor_panel::settings())
         .chain(crate::explorer_panel::settings())
+        .chain(crate::extensions::host::settings())
     {
         store.register(setting);
     }

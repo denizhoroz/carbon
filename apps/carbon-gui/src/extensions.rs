@@ -6,6 +6,7 @@
 
 mod code;
 mod grammars;
+pub mod host;
 mod install;
 mod manage;
 mod tools;
@@ -27,7 +28,8 @@ use crate::extension_panel::ADD_PREFIX;
 use crate::menus::AddPanel;
 
 pub use code::{
-    ExtensionCode, render_view, runs as code_runs, set_workspace as set_code_workspace,
+    ExtensionCode, check_graph, context as host_context, render_view, runs as code_runs,
+    set_workspace as set_code_workspace,
 };
 pub use grammars::{PLAIN, highlight_language};
 pub use manage::{Tab, open as open_manage};
@@ -66,6 +68,7 @@ pub fn init(cx: &mut App) {
         suggested: HashSet::new(),
     });
     apply(&registry, cx);
+    host::init(cx);
     check_installed(cx);
 }
 
@@ -255,6 +258,9 @@ fn report(registry: &Registry) {
 
 fn apply(registry: &Registry, cx: &mut App) {
     grammars::sync(registry);
+    if cx.has_global::<host::AgentsHost>() {
+        host::sync_agents(cx);
+    }
     let active: BTreeSet<String> = registry
         .active()
         .map(|loaded| loaded.def.id.to_string())

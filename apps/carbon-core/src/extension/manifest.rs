@@ -48,14 +48,20 @@ use super::{
     ExtensionId, Requires, Widget, check_capability, check_id, check_package_path, is_word,
     resolve_package_file, strip_bom, view,
 };
+use crate::graph::{FieldKind, FieldSpec, GraphSpec, NodeTypeSpec, check_graph_id};
 use crate::settings::{Choice, Kind, Setting};
 
 /// The manifest's file name, at the package root.
 pub const MANIFEST: &str = "extension.toml";
 /// Manifest format version this build reads.
 pub const SCHEMA_VERSION: u32 = 1;
-/// Host contract a manifest's `carbon_api` range is checked against.
-pub const API_VERSION: Version = Version::new(0, 1, 0);
+/// Host contracts this build offers; a manifest's `carbon_api` range must
+/// match one (`since_v0.1.0`, `since_v0.2.0` in `wit/`).
+pub const SUPPORTED_APIS: [Version; 2] = [Version::new(0, 1, 0), Version::new(0, 2, 0)];
+/// The newest host contract.
+pub const API_VERSION: Version = Version::new(0, 2, 0);
+/// The first contract with agents, graphs and node types.
+const GRAPHS_API: Version = Version::new(0, 2, 0);
 /// Values of `categories` (Manage Extensions filters by them).
 pub const CATEGORIES: [&str; 6] = ["language", "theme", "tool", "panel", "agent", "other"];
 /// Top-level menus an extension may add items to.
@@ -159,6 +165,15 @@ pub struct ExtensionDef {
     pub menus: Vec<MenuDef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub panels: Vec<PanelDef>,
+    /// Agent programs spoken to over ACP (API 0.2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agents: Vec<AgentDef>,
+    /// Graph kinds for `graph` panels (API 0.2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub graphs: Vec<GraphSpec>,
+    /// Node types of those graphs (API 0.2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub node_types: Vec<NodeTypeSpec>,
     /// Declarative views by name, for `view` panels (`view.rs`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub views: BTreeMap<String, Vec<Widget>>,
@@ -347,6 +362,8 @@ pub enum PanelKind {
     View,
     /// A web page from the package (`page`).
     Webview,
+    /// A node-and-arrow graph drawn by Carbon (`graph`, API 0.2).
+    Graph,
 }
 
 /// A panel the extension adds (View > Add Panel, its commands, layouts).
@@ -363,6 +380,9 @@ pub struct PanelDef {
     /// `webview` panels: the page (package path).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page: Option<String>,
+    /// `graph` panels: a `[[graphs]]` id of this extension.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph: Option<String>,
     /// One of `PLACEMENTS`; default `right`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub placement: Option<String>,
@@ -384,6 +404,83 @@ impl PanelDef {
             return "left";
         }
         self.placement.as_deref().unwrap_or("right")
+    }
+}
+
+/// An agent program Carbon talks to over ACP (Agent Client Protocol).
+/// Found like a language server: on PATH, else installed from npm into
+/// Carbon's tools folder, else run with `npx` (when allowed).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentDef {
+    /// Unique within the extension.
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+    /// Program name, looked up on PATH.
+    pub command: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+    /// No secrets: the user's own environment passes through.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, String>,
+    /// Shown when the program cannot be found or started.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub npm: Option<NpmDef>,
+}
+
+/// An npm package that provides an agent program.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NpmDef {
+    pub package: String,
+    /// Exact version.
+    pub version: String,
+    /// The package's `bin` entry name.
+    pub bin: String,
+    /// Run `npx -y <package>@<version>` when installing is not possible.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub npx_fallback: bool,
+}
+
+/// Problems with inspector fields: keys unique and well formed, choices for
+/// `choice`, item fields only for `list`.
+fn check_fields(who: &str, fields: &[FieldSpec], problems: &mut Vec<String>) {
+    let mut keys = HashSet::new();
+    for field in fields {
+        let key_ok = !field.key.is_empty()
+            && field.key.split('.').all(|part| {
+                !part.is_empty()
+                    && part.chars().all(|c| {
+                        c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-'
+                    })
+            });
+        if !key_ok {
+            problems.push(format!(
+                "{who}: field key `{}` must be lowercase words separated by `.`",
+                field.key
+            ));
+        }
+        if !keys.insert(field.key.as_str()) {
+            problems.push(format!("{who}: field `{}` is declared twice", field.key));
+        }
+        if field.kind == FieldKind::Choice && field.choices.is_empty() {
+            problems.push(format!("{who}: field `{}` needs choices", field.key));
+        }
+        if field.kind != FieldKind::List && !field.item_fields.is_empty() {
+            problems.push(format!(
+                "{who}: field `{}`: item_fields are for list fields",
+                field.key
+            ));
+        }
+        check_fields(
+            &format!("{who} field `{}`", field.key),
+            &field.item_fields,
+            problems,
+        );
     }
 }
 
@@ -467,6 +564,11 @@ impl ExtensionDef {
         }
         files.extend(self.themes.iter().map(|theme| theme.file.as_str()));
         files.extend(self.panels.iter().filter_map(|panel| panel.page.as_deref()));
+        files.extend(
+            self.graphs
+                .iter()
+                .filter_map(|graph| graph.template.as_deref()),
+        );
         files
     }
 
@@ -498,9 +600,10 @@ impl ExtensionDef {
             problems.push(format!("version `{}` is not semver", self.version));
         }
         match VersionReq::parse(&self.carbon_api) {
-            Ok(req) if !req.matches(&API_VERSION) => problems.push(format!(
-                "needs Carbon API {}, this Carbon has {API_VERSION}",
-                self.carbon_api
+            Ok(_) if self.api().is_none() => problems.push(format!(
+                "needs Carbon API {}, this Carbon has {}",
+                self.carbon_api,
+                SUPPORTED_APIS.map(|api| api.to_string()).join(", ")
             )),
             Ok(_) => {}
             Err(_) => problems.push(format!(
@@ -534,8 +637,196 @@ impl ExtensionDef {
         self.validate_settings(&mut problems);
         let command_ids = self.validate_commands(&mut problems);
         self.validate_panels(&command_ids, &mut problems);
+        self.validate_agents(&mut problems);
+        self.validate_graphs(&mut problems);
         problems.extend(self.requires.check(self.id.as_str()));
         problems
+    }
+
+    /// The host contract this extension gets: the newest supported one its
+    /// `carbon_api` range matches.
+    pub fn api(&self) -> Option<Version> {
+        let req = VersionReq::parse(&self.carbon_api).ok()?;
+        SUPPORTED_APIS
+            .iter()
+            .rev()
+            .find(|api| req.matches(api))
+            .cloned()
+    }
+
+    /// Whether it uses what API 0.2 brought (it then needs that contract).
+    fn uses_graphs_api(&self) -> bool {
+        !self.agents.is_empty()
+            || !self.graphs.is_empty()
+            || !self.node_types.is_empty()
+            || self
+                .panels
+                .iter()
+                .any(|panel| panel.kind == PanelKind::Graph)
+    }
+
+    fn validate_agents(&self, problems: &mut Vec<String>) {
+        let mut ids = HashSet::new();
+        for agent in &self.agents {
+            let who = format!("agent `{}`", agent.id);
+            if !is_word(&agent.id) {
+                problems.push(format!("{who}: id must use lowercase letters, digits, `-`"));
+            }
+            if !ids.insert(agent.id.as_str()) {
+                problems.push(format!("{who} is declared twice"));
+            }
+            if agent.name.trim().is_empty() {
+                problems.push(format!("{who} needs a name"));
+            }
+            if agent.command.trim().is_empty() {
+                problems.push(format!("{who} needs a command"));
+            } else if !self.may_run(&agent.command) {
+                problems.push(format!(
+                    "{who}: add `process.exec:{}` to capabilities",
+                    agent.command
+                ));
+            }
+            let Some(npm) = &agent.npm else {
+                continue;
+            };
+            if npm.package.trim().is_empty() || npm.bin.trim().is_empty() {
+                problems.push(format!("{who}: npm needs `package` and `bin`"));
+            }
+            if Version::parse(&npm.version).is_err() {
+                problems.push(format!(
+                    "{who}: npm version `{}` must be an exact version",
+                    npm.version
+                ));
+            }
+            let mut needs = vec!["node", "npm"];
+            if npm.npx_fallback {
+                needs.push("npx");
+            }
+            for program in needs {
+                if !self.may_run(program) {
+                    problems.push(format!(
+                        "{who}: add `process.exec:{program}` to capabilities"
+                    ));
+                }
+            }
+            if !self.may_reach("registry.npmjs.org") {
+                problems.push(format!(
+                    "{who}: add `net:registry.npmjs.org` to capabilities"
+                ));
+            }
+        }
+    }
+
+    fn validate_graphs(&self, problems: &mut Vec<String>) {
+        if self.uses_graphs_api() && self.api().is_some_and(|api| api < GRAPHS_API) {
+            problems.push(format!(
+                "agents, graphs, node types and graph panels need carbon_api >= {GRAPHS_API}"
+            ));
+        }
+        let mut graph_ids = HashSet::new();
+        for graph in &self.graphs {
+            let who = format!("graph `{}`", graph.id);
+            if let Err(problem) = check_graph_id(&graph.id) {
+                problems.push(format!("{who}: {problem}"));
+            }
+            if !graph_ids.insert(graph.id.as_str()) {
+                problems.push(format!("{who} is declared twice"));
+            }
+            if graph.name.trim().is_empty() {
+                problems.push(format!("{who} needs a name"));
+            }
+            if let Err(problem) = check_package_path(&graph.dir) {
+                problems.push(format!("{who}: dir {problem}"));
+            }
+            let suffix_ok = !graph.suffix.is_empty()
+                && !graph.suffix.starts_with('.')
+                && graph
+                    .suffix
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+            if !suffix_ok {
+                problems.push(format!(
+                    "{who}: suffix `{}` must be letters, digits, `.` and `-`, without a leading dot",
+                    graph.suffix
+                ));
+            }
+            if graph.check && self.wasm.is_none() {
+                problems.push(format!("{who}: `check` needs the extension's `wasm` code"));
+            }
+            let mut actions = HashSet::new();
+            for action in &graph.actions {
+                if !actions.insert(action.id.as_str()) {
+                    problems.push(format!("{who}: action `{}` is declared twice", action.id));
+                }
+                if let Some(when) = &action.when
+                    && !["idle", "running"].contains(&when.as_str())
+                {
+                    problems.push(format!(
+                        "{who}: action `{}`: when must be `idle` or `running`",
+                        action.id
+                    ));
+                }
+            }
+            if !graph.actions.is_empty() && self.wasm.is_none() {
+                problems.push(format!("{who}: actions need the extension's `wasm` code"));
+            }
+            check_fields(&who, &graph.fields, problems);
+        }
+        let mut type_ids = HashSet::new();
+        for spec in &self.node_types {
+            let who = format!("node type `{}`", spec.id);
+            if !graph_ids.contains(spec.graph.as_str()) {
+                problems.push(format!("{who}: no graph `{}` in [[graphs]]", spec.graph));
+            }
+            if let Err(problem) = check_graph_id(&spec.id) {
+                problems.push(format!("{who}: {problem}"));
+            }
+            if !type_ids.insert((spec.graph.as_str(), spec.id.as_str())) {
+                problems.push(format!("{who} is declared twice"));
+            }
+            if spec.title.trim().is_empty() {
+                problems.push(format!("{who} needs a title"));
+            }
+            let mut ports = HashSet::new();
+            for port in spec.inputs.iter().chain(&spec.outputs) {
+                if let Err(problem) = check_graph_id(&port.id) {
+                    problems.push(format!("{who}: port {problem}"));
+                }
+                if !ports.insert(port.id.as_str()) {
+                    problems.push(format!("{who}: port `{}` is declared twice", port.id));
+                }
+            }
+            if spec.outputs.iter().any(|port| port.loop_back) {
+                problems.push(format!("{who}: only inputs can be `loop_back`"));
+            }
+            if let Some(key) = &spec.outputs_from {
+                let list = spec
+                    .fields
+                    .iter()
+                    .any(|field| &field.key == key && field.kind == FieldKind::List);
+                if !list {
+                    problems.push(format!(
+                        "{who}: outputs_from `{key}` must name a `list` field"
+                    ));
+                }
+            }
+            check_fields(&who, &spec.fields, problems);
+        }
+        for panel in &self.panels {
+            let who = format!("panel `{}`", panel.id);
+            match (&panel.kind, &panel.graph) {
+                (PanelKind::Graph, None) => {
+                    problems.push(format!("{who}: a graph panel needs `graph`"))
+                }
+                (PanelKind::Graph, Some(graph)) if !graph_ids.contains(graph.as_str()) => {
+                    problems.push(format!("{who}: no graph `{graph}` in [[graphs]]"))
+                }
+                (PanelKind::View | PanelKind::Webview, Some(_)) => {
+                    problems.push(format!("{who}: `graph` is only for graph panels"))
+                }
+                _ => {}
+            }
+        }
     }
 
     fn validate_languages(&self, problems: &mut Vec<String>) {
@@ -765,11 +1056,13 @@ impl ExtensionDef {
                         problems.push(format!("{who}: a webview panel needs `page`"));
                     }
                 }
+                // Checked with the graphs (`validate_graphs`).
+                PanelKind::Graph => {}
             }
-            if panel.kind == PanelKind::View && panel.page.is_some() {
+            if panel.kind != PanelKind::Webview && panel.page.is_some() {
                 problems.push(format!("{who}: `page` is only for webview panels"));
             }
-            if panel.kind == PanelKind::Webview && panel.view.is_some() {
+            if panel.kind != PanelKind::View && panel.view.is_some() {
                 problems.push(format!("{who}: `view` is only for view panels"));
             }
         }

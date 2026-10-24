@@ -1,12 +1,13 @@
 //! A small example extension: a command that counts the files in the open
 //! folder's top level and a view that shows how often it ran. It also tries
-//! things it was not granted, so the host's checks can be seen.
+//! things it was not granted, so the host's checks can be seen, and (API
+//! 0.2) keeps a value in storage, writes a file, and answers a timer.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use carbon_extension_api::{
-    Extension, ServerCommand, http_get, log, notify, read_file, register_extension, run_process,
-    setting, workspace_root,
+    Event, Extension, ServerCommand, graphs, http_get, log, notify, read_file, register_extension,
+    run_process, set_timer, setting, storage_get, storage_set, workspace_root, write_file,
 };
 
 static RUNS: AtomicU32 = AtomicU32::new(0);
@@ -32,6 +33,17 @@ impl Extension for Hello {
             "read-outside" => read_file("../secret.txt").map(|_| ()),
             "run-git" => run_process("git", &["--version".to_string()]).map(|out| log(&out.stdout)),
             "fetch" => http_get("https://example.com/").map(|_| ()),
+            "remember" => {
+                let seen: u32 = storage_get("seen").and_then(|v| v.parse().ok()).unwrap_or(0);
+                storage_set("seen", &(seen + 1).to_string())?;
+                notify(&format!("seen {}", seen + 1));
+                Ok(())
+            }
+            "write" => write_file("out/hello.txt", "hello"),
+            "timer" => {
+                set_timer(10, "tick");
+                Ok(())
+            }
             "spin" => loop {
                 std::hint::spin_loop();
             },
@@ -52,6 +64,23 @@ impl Extension for Hello {
         let runs = RUNS.load(Ordering::Relaxed);
         Ok(format!(
             r#"[{{"type":"heading","text":"{view}"}},{{"type":"text","text":"Ran {runs} times"}},{{"type":"button","label":"Count","command":"count"}}]"#
+        ))
+    }
+
+    fn on_event(event: Event) -> Result<(), String> {
+        match event {
+            Event::TimerFired(tag) => {
+                notify(&format!("timer {tag}"));
+                Ok(())
+            }
+            other => Err(format!("unexpected {other:?}")),
+        }
+    }
+
+    fn check_graph(doc: graphs::GraphDoc) -> Result<String, String> {
+        Ok(format!(
+            r#"[{{"severity":"info","message":"{} nodes"}}]"#,
+            doc.nodes.len()
         ))
     }
 }

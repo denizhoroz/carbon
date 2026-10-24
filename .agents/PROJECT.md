@@ -37,7 +37,8 @@ Positioning: fast and calm by default (beats VS Code); agent-native (beats Zed a
 
 ## Open questions
 
-- Under the extension model (2026-10-22): whether Paradigm Editor and Agent Automation become first-party extensions and where they appear without sections (panels, editor-area tabs, app menu); how extensions add Explorer-section tabs. (Section Bar and Manage Workflows: removed.)
+- Agent Automation: decided 2026-10-24, the first-party **Agents** extension (`carbon-extensions-agents`; agent flowcharts over ACP on a native `graph` panel kind; `documents/agents.md`).
+- Under the extension model (2026-10-22): whether Paradigm Editor becomes a first-party extension and where they appear without sections (panels, editor-area tabs, app menu); how extensions add Explorer-section tabs. (Section Bar and Manage Workflows: removed.)
 
 - Paradigm editor (pillar 2) is unresearched: run a short follow-up on diagram/architecture tools (Excalidraw, tldraw, draw.io, Mermaid, PlantUML, Structurizr/C4, Lucidchart, Miro AI, Cursor/Claude canvases, VS Code Canvases): file format, AI integration, code round-trip, licences.
 - Still to verify on GPUI Kit (editor speed gate and terminal embed passed on Windows; see `project/built/`): accessibility (Narrator, VoiceOver, Orca), IME in the editor, macOS and Linux behaviour, RAM on all three OSes (published numbers conflict 2x-15x), docking across windows (panel layout T3).

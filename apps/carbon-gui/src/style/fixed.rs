@@ -55,6 +55,15 @@ pub const MANAGE_CHROME_HEIGHT: Pixels = px(148.);
 pub const EXTENSION_ROW_PADDING: Pixels = px(6.);
 pub const EXTENSION_ICON_SIZE: Pixels = px(20.);
 
+/// Graph panels (`graph_panel.rs`): toolbar padding, the zoom label, the
+/// inspector beside the canvas, and port dots (graph units, scaled by zoom).
+pub const GRAPH_TOOLBAR_PADDING: Pixels = px(8.);
+pub const GRAPH_ZOOM_LABEL_WIDTH: Pixels = px(40.);
+pub const GRAPH_INSPECTOR_WIDTH: Pixels = px(300.);
+pub const GRAPH_INSPECTOR_PADDING: Pixels = px(12.);
+pub const GRAPH_INSPECTOR_GAP: Pixels = px(14.);
+pub const GRAPH_PORT_SIZE: f32 = 10.;
+
 /// Settings dialog: share of the window and limits of its size, the category
 /// tree's width, padding of the top bar and of setting rows, the gap between a
 /// row's text and its control, control widths (text, number, choice), and the

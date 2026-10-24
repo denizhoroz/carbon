@@ -17,6 +17,9 @@ gpui-kit = { version = "=0.7.3", features = ["tree-sitter"] }
 tree-sitter = { version = "=0.26.13", features = ["wasm"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+# Graph files (`.flow.yaml`): exact pin, used only behind carbon-core `graph/yaml.rs`.
+serde_yaml_ng = "=0.10.0"
+indexmap = { version = "2.14.2", features = ["serde"] }
 # carbon-core. ropey: same beta the kit uses, so core and editor share one rope type.
 ropey = { version = "=2.0.0-beta.1", features = ["metric_utf16"] }
 ignore = "0.4.33"

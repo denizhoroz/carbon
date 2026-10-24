@@ -8,6 +8,7 @@ carbon-core = { path = "../carbon-core" }
 gpui-kit.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+indexmap.workspace = true
 async-channel.workspace = true
 anyhow.workspace = true
 tree-sitter.workspace = true

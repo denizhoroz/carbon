@@ -1,6 +1,6 @@
 [package]
 name = "carbon-extension-api"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 description = "Write Carbon extensions in Rust: bindings for the carbon:extension WIT world."
 license = "MIT OR Apache-2.0"

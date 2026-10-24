@@ -277,6 +277,9 @@ impl ExplorerPanel {
     }
 
     fn open_file(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) {
+        if crate::graph_panel::open_graph_file(path, window, cx) {
+            return;
+        }
         let result = self.core.update(cx, |core, cx| {
             let result = core.open_file(path);
             cx.notify();

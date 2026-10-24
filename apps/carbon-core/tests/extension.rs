@@ -380,3 +380,159 @@ fn this_build_has_a_download_target() {
         assert!(current_target().is_some());
     }
 }
+
+/// The Agents extension's kind of manifest (API 0.2): an ACP agent from npm,
+/// a graph kind with node types, and a graph panel.
+const FLOWS: &str = r#"
+schema_version = 1
+version = "1.0.0"
+carbon_api = ">=0.2, <0.3"
+wasm = "agents.wasm"
+capabilities = ["agent.invoke", "process.exec:claude-agent-acp", "process.exec:node",
+                "process.exec:npm", "process.exec:npx", "net:registry.npmjs.org"]
+
+[[agents]]
+id = "claude-code"
+name = "Claude Code"
+command = "claude-agent-acp"
+[agents.npm]
+package = "@agentclientprotocol/claude-agent-acp"
+version = "0.95.0"
+bin = "claude-agent-acp"
+npx_fallback = true
+
+[[graphs]]
+id = "flow"
+name = "Agent flow"
+dir = ".carbon/flows"
+suffix = "flow.yaml"
+actions = [ { id = "run", title = "Run", when = "idle" } ]
+
+[[node_types]]
+graph = "flow"
+id = "agent"
+title = "Agent"
+inputs = [ { id = "in", multi = true } ]
+outputs = [ { id = "out", multi = true } ]
+fields = [ { key = "prompt", label = "Prompt", kind = "text", required = true } ]
+
+[[node_types]]
+graph = "flow"
+id = "router"
+title = "Router"
+inputs = [ { id = "in" } ]
+outputs_from = "routes"
+fields = [ { key = "routes", label = "Routes", kind = "list", item_fields = [ { key = "match", label = "Match", kind = "text" } ] } ]
+
+[[panels]]
+id = "flows"
+title = "Flows"
+kind = "graph"
+graph = "flow"
+placement = "center"
+"#;
+
+fn flows(id: &str, edit: impl Fn(String) -> String) -> Vec<String> {
+    let text = edit(format!("id = \"{id}\"\nname = \"Agents\"\n{FLOWS}"));
+    let (def, warnings) = ExtensionDef::parse(&text).expect("parses");
+    assert!(warnings.is_empty(), "{warnings:?}");
+    def.validate()
+}
+
+#[test]
+fn agents_graphs_and_node_types_are_api_0_2() {
+    assert!(
+        flows("acme.flows", |t| t).is_empty(),
+        "{:?}",
+        flows("acme.flows", |t| t)
+    );
+    let (def, _) = ExtensionDef::parse(&format!("id = \"a.b\"\nname = \"A\"\n{FLOWS}")).unwrap();
+    assert_eq!(def.api(), Some(semver::Version::new(0, 2, 0)));
+    assert_eq!(def.panels[0].kind, PanelKind::Graph);
+    assert_eq!(def.node_types[1].outputs_from.as_deref(), Some("routes"));
+
+    // An API 0.1 extension cannot use them.
+    let old = flows("acme.flows", |t| t.replace(">=0.2, <0.3", ">=0.1, <0.3"));
+    assert!(old.is_empty(), "the 0.2 contract is picked: {old:?}");
+    let old = flows("acme.flows", |t| t.replace(">=0.2, <0.3", ">=0.1, <0.2"));
+    assert!(
+        old.iter().any(|p| p.contains("need carbon_api >= 0.2")),
+        "{old:?}"
+    );
+    // Nothing matches a future API.
+    let future = flows("acme.flows", |t| t.replace(">=0.2, <0.3", ">=0.9"));
+    assert!(
+        future.iter().any(|p| p.contains("needs Carbon API")),
+        "{future:?}"
+    );
+}
+
+#[test]
+fn agents_need_their_capabilities() {
+    let p = flows("acme.flows", |t| t.replace(", \"process.exec:npx\"", ""));
+    assert!(p.iter().any(|p| p.contains("process.exec:npx")), "{p:?}");
+    let p = flows("acme.flows", |t| {
+        t.replace("\"process.exec:claude-agent-acp\", ", "")
+    });
+    assert!(
+        p.iter()
+            .any(|p| p.contains("process.exec:claude-agent-acp")),
+        "{p:?}"
+    );
+    let p = flows("acme.flows", |t| t.replace("\"0.95.0\"", "\"^0.95\""));
+    assert!(p.iter().any(|p| p.contains("exact version")), "{p:?}");
+}
+
+#[test]
+fn bad_graph_declarations_say_why() {
+    let cases: [(&str, &str, &str); 6] = [
+        (
+            "graph = \"flow\"\nplacement",
+            "graph = \"nope\"\nplacement",
+            "no graph `nope`",
+        ),
+        (
+            "suffix = \"flow.yaml\"",
+            "suffix = \".flow.yaml\"",
+            "without a leading dot",
+        ),
+        (
+            "outputs_from = \"routes\"",
+            "outputs_from = \"prompt\"",
+            "must name a `list` field",
+        ),
+        (
+            "id = \"agent\"",
+            "id = \"Agent\"",
+            "must start with a lowercase letter",
+        ),
+        ("when = \"idle\"", "when = \"later\"", "when must be"),
+        (
+            "inputs = [ { id = \"in\", multi = true } ]",
+            "inputs = [ { id = \"in\" }, { id = \"in\" } ]",
+            "declared twice",
+        ),
+    ];
+    for (from, to, expected) in cases {
+        let p = flows("acme.flows", |t| t.replacen(from, to, 1));
+        assert!(p.iter().any(|p| p.contains(expected)), "{to}: {p:?}");
+    }
+    let p = flows("acme.flows", |t| t.replace("wasm = \"agents.wasm\"\n", ""));
+    assert!(p.iter().any(|p| p.contains("actions need")), "{p:?}");
+}
+
+/// The Agents extension's manifest, when its repo is checked out in the root
+/// (`carbon-extensions-agents/`, ignored by git): valid, nothing unknown.
+#[test]
+fn the_agents_manifest_is_valid() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../carbon-extensions-agents/agents/extension.toml");
+    let Ok(text) = fs::read_to_string(&path) else {
+        return;
+    };
+    let (def, warnings) = ExtensionDef::parse(&text).expect("parses");
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let problems = def.validate();
+    assert!(problems.is_empty(), "{problems:?}");
+    assert_eq!(def.node_types.len(), 8);
+}

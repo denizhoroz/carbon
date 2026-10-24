@@ -9,7 +9,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
 use carbon_core::extension::{
-    CallError, ExtensionId, HostContext, HostEvent, Origin, WasmExtension, WasmRuntime, Widget,
+    CallError, ExtensionEvent, ExtensionId, HostContext, HostEvent, Origin, WasmExtension,
+    WasmRuntime, Widget,
 };
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::*;
@@ -63,6 +64,11 @@ pub fn set_workspace(root: Option<std::path::PathBuf>, cx: &App) {
         .workspace
         .lock()
         .unwrap() = root;
+}
+
+/// What the host shares with extension code.
+pub fn context(cx: &App) -> Arc<HostContext> {
+    cx.global::<ExtensionCode>().context.clone()
 }
 
 /// Forgets loaded code (extensions changed: removed ones stop, changed
@@ -159,8 +165,45 @@ fn report_events(cx: &mut App) {
                     _ = window.update(cx, |_, window, cx| window.push_notification(message, cx));
                 }
             }
+            other => super::host::apply(other, cx),
         }
     }
+}
+
+/// The extension's own problems with a graph (`check-graph`, API 0.2).
+pub fn check_graph(
+    id: ExtensionId,
+    path: String,
+    doc: carbon_core::graph::GraphDoc,
+    cx: &mut App,
+) -> Task<Result<Vec<carbon_core::graph::Diagnostic>, String>> {
+    let task = with_code(id, Box::new(move |code| code.check_graph(&path, &doc)), cx);
+    cx.background_spawn(async move {
+        let json = task.await?;
+        let items: Vec<serde_json::Value> =
+            serde_json::from_str(&json).map_err(|err| format!("check-graph: {err}"))?;
+        Ok(items
+            .into_iter()
+            .map(|item| {
+                let text = |key: &str| item.get(key).and_then(|v| v.as_str()).map(str::to_string);
+                carbon_core::graph::Diagnostic {
+                    node: text("node"),
+                    edge: text("edge"),
+                    severity: match text("severity").as_deref() {
+                        Some("error") => carbon_core::graph::Severity::Error,
+                        Some("warning") => carbon_core::graph::Severity::Warning,
+                        _ => carbon_core::graph::Severity::Info,
+                    },
+                    message: text("message").unwrap_or_default(),
+                }
+            })
+            .collect())
+    })
+}
+
+/// Tells extension `id`'s code what happened (`on-event`, API 0.2).
+pub fn on_event(id: ExtensionId, event: ExtensionEvent, cx: &mut App) -> Task<Result<(), String>> {
+    with_code(id, Box::new(move |code| code.on_event(&event)), cx)
 }
 
 /// Runs a command of extension `id` that its code handles.

@@ -91,8 +91,12 @@ pub fn open_buffer(id: BufferId, window: &mut Window, cx: &mut App) {
 }
 
 /// Opens the file at `path` in an editor tab, like a click in the Explorer.
-/// Reports a failure as a notification.
+/// Reports a failure as a notification. A graph file (`*.flow.yaml` of an
+/// active extension) opens in a graph panel instead.
 pub fn open_file_at(path: &Path, window: &mut Window, cx: &mut App) {
+    if crate::graph_panel::open_graph_file(path, window, cx) {
+        return;
+    }
     let core = crate::workspace_ops::current_core(cx);
     let result = core.update(cx, |core, cx| {
         let result = core.open_file(path);
@@ -103,6 +107,55 @@ pub fn open_file_at(path: &Path, window: &mut Window, cx: &mut App) {
         Ok(id) => open_buffer(id, window, cx),
         Err(err) => window.push_notification(format!("Cannot open file: {err}"), cx),
     }
+}
+
+/// Shows the graph file `path` in its graph panel: the tab that has it, else
+/// a new tab in the editor area (extension panel `key`).
+pub fn open_graph(path: &Path, key: String, title: String, window: &mut Window, cx: &mut App) {
+    let Some(workbench) = current(cx) else {
+        return;
+    };
+    let area = workbench.read(cx).area.clone();
+    let wanted = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let mut found = None;
+    for placement in CENTER_AND_DOCKS {
+        let Some(tree) = area.read(cx).layout(placement) else {
+            continue;
+        };
+        for panel in tree.panels() {
+            let graph = area.read(cx).panel(panel).and_then(|view| {
+                view.view()
+                    .downcast::<crate::graph_panel::GraphPanel>()
+                    .ok()
+            });
+            let same = graph.is_some_and(|graph| {
+                graph.read(cx).path().is_some_and(|p| {
+                    dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()) == wanted
+                })
+            });
+            if same {
+                found = Some(panel);
+            }
+        }
+    }
+    let panel = match found {
+        Some(panel) => panel,
+        None => {
+            let handle = panel_handle(crate::graph_panel::GraphPanel::new(
+                key,
+                title,
+                Some(wanted),
+                cx,
+            ));
+            let panel = handle.panel_id(cx);
+            area.update(cx, |area, cx| {
+                area.add_panel_view(handle, DockPlacement::Center, None, window, cx)
+            });
+            panel
+        }
+    };
+    area.update(cx, |area, cx| area.select_panel(panel, window, cx));
+    workbench.update(cx, |workbench, cx| workbench.schedule_save(cx));
 }
 
 /// The editor tab of the core's active buffer, for actions that reach the
@@ -1112,9 +1165,20 @@ fn insert_target(tree: &PaneTree) -> InsertTarget {
     }
 }
 
-/// A new panel for extension panel `key`: a web page (with the `webview`
-/// feature) or an extension panel.
+/// A new panel for extension panel `key`: a graph panel, a web page (with
+/// the `webview` feature) or an extension panel.
 fn extension_panel_handle(key: &str, title: String, cx: &mut App) -> Arc<dyn BasePanelView> {
+    let graph = crate::extensions::registry(cx)
+        .panel(key)
+        .is_some_and(|(_, panel)| panel.kind == carbon_core::extension::PanelKind::Graph);
+    if graph {
+        return panel_handle(crate::graph_panel::GraphPanel::new(
+            key.to_string(),
+            title,
+            None,
+            cx,
+        ));
+    }
     #[cfg(feature = "webview")]
     {
         use carbon_core::extension::{ExtensionId, PanelKind};
